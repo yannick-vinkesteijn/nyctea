@@ -1,0 +1,165 @@
+lazy: true
+# Coerce is set to false because parsers (to_int, to_float) already handle type conversions
+# Using coerce: true with parsers causes dtype conflicts (parsers produce i64/f64, schema expects Int64/Float64)
+coerce: false
+columns:
+  passenger_id:
+    dtype: Int64  # Note: parsers produce i64, but we keep Int64 for documentation
+    synonyms:
+      - PassengerId
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      # non_null check is auto-injected from nullable: false
+      - name: unique_passenger_id
+        args: {}
+    required: true
+    nullable: false
+  survived:
+    dtype: Int64  # Note: parsers produce i64, but we keep Int64 for documentation
+    synonyms:
+      - Survived
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      - name: in_survived
+        args: {}
+    required: true
+    nullable: false
+  pclass:
+    dtype: Int64  # Note: parsers produce i64, but we keep Int64 for documentation
+    synonyms:
+      - Pclass
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      - name: in_pclass
+        args: {}
+    required: true
+    nullable: false
+  name:
+    dtype: Utf8
+    synonyms:
+      - Name
+    parsers:
+      - name: strip
+        args: {}
+    checks: []  # non_null check is auto-injected from nullable: false
+    required: true
+    nullable: false
+  sex:
+    dtype: Utf8
+    synonyms:
+      - Sex
+    parsers:
+      - name: strip
+        args: {}
+      - name: lower
+        args: {}
+    checks:
+      - name: in_sex
+        args: {}
+    required: true
+    nullable: false
+  age:
+    dtype: Float64  # Note: parsers produce f64, but we keep Float64 for documentation
+    synonyms:
+      - Age
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_float
+        args: {}
+    checks:
+      - name: between_0_100
+        args: {}
+    required: false
+    nullable: true
+  siblings_spouses:
+    dtype: Int64  # Note: parsers produce i64, but we keep Int64 for documentation
+    synonyms:
+      - SibSp
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      - name: min_zero
+        args: {}
+    required: true
+    nullable: false
+  parents_children:
+    dtype: Int64  # Note: parsers produce i64, but we keep Int64 for documentation
+    synonyms:
+      - Parch
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      - name: min_zero
+        args: {}
+    required: true
+    nullable: false
+  ticket:
+    dtype: Utf8
+    synonyms:
+      - Ticket
+    parsers:
+      - name: strip
+        args: {}
+    checks: []  # non_null check is auto-injected from nullable: false
+    required: true
+    nullable: false
+  fare:
+    dtype: Float64  # Note: parsers produce f64, but we keep Float64 for documentation
+    synonyms:
+      - Fare
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_float
+        args: {}
+    checks:
+      - name: min_zero
+        args: {}
+    required: true
+    nullable: false
+  cabin:
+    dtype: Utf8
+    synonyms:
+      - Cabin
+    parsers:
+      - name: strip
+        args: {}
+    checks: []
+    required: false
+    nullable: true
+  embarked:
+    dtype: Utf8
+    synonyms:
+      - Embarked
+    parsers:
+      - name: strip
+        args: {}
+      - name: upper
+        args: {}
+    checks:
+      - name: in_embarked
+        args: {}
+    required: false
+    nullable: true
+frame_parsers:
+  - name: strip_all_strings
+    args: {}

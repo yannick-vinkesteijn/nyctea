@@ -1,0 +1,34 @@
+lazy: true
+coerce: true
+columns:
+  patient_id:
+    dtype: Utf8
+    synonyms:
+      - pid
+    parsers:
+      - name: strip
+        args: {}
+    checks:
+      - name: non_null
+        args: {}
+      - name: unique_patient_id
+        args: {}
+    required: true
+    nullable: false
+  age_years:
+    dtype: Int64
+    synonyms:
+      - age
+    parsers:
+      - name: strip
+        args: {}
+      - name: to_int
+        args: {}
+    checks:
+      - name: positive
+        args: {}
+    required: true
+    nullable: false
+frame_parsers:
+  - name: strip_strings
+    args: {}

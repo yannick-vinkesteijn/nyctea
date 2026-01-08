@@ -1,0 +1,80 @@
+[project]
+name = "nyctea"
+version = "0.1.0"
+description = "Polars-optimized data validation library with Pydantic schemas"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "polars>=1.36.1",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[project.optional-dependencies]
+nb = [
+    "marimo>=0.18.4",
+    "pyzmq>=27.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "mkdocstrings-python>=2.0.1",
+    "mkdocstrings[python]>=1.0.0",
+    "pre-commit>=4.5.0",
+    "pyupgrade>=3.21.2",
+    "ruff>=0.14.8",
+    "ty>=0.0.5",
+    "zensical>=0.0.15",
+]
+docs = [
+    "zensical>=0.0.11",
+]
+test = [
+    "pytest>=9.0.2",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+select = ["ALL"]
+# Skip examples and other demo/notebook directories
+exclude = [
+    "examples/",
+    "docs/",
+    "scripts/",
+    "*.py",  # Skip any loose Python files in root
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# Relaxed linting for marimo notebook files
+[tool.ruff.lint.per-file-ignores]
+"*_nb.py" = [
+    "E402",  # Module level import not at top of file
+    "F401",  # Imported but unused (common in interactive notebooks)
+    "F403",  # 'from module import *' used
+    "T201",  # print() statements
+    "S101",  # Use of assert (for quick checks/demos)
+    "D100",  # Missing docstring in public module
+    "D103",  # Missing docstring in public function
+]
+
+[tool.ty]
+respect-ignore-files = true
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.rules]
+unused-ignore-comment = "warn"
+possibly-unbound-attribute = "error"
+possibly-unbound-import = "error"
+invalid-return-type = "error"
+invalid-argument-type = "error"
+division-by-zero = "error"
+redundant-cast = "warn"
