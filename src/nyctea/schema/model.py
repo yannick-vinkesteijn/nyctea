@@ -369,3 +369,70 @@ class SchemaModel(BaseModel):
                 "PyYAML is required for YAML schema loading. "
                 "Install with: pip install nyctea[yaml]"
             )
+
+    def validate(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        registry: MasterRegistry,
+        **kwargs: Any,
+    ) -> ValidationResult:
+        """Validate a DataFrame against this schema.
+
+        This is the primary API for validation using the new plugin-based
+        pipeline architecture.
+
+        Args:
+            df: DataFrame to validate.
+            registry: Plugin registry with parsers and checks.
+            **kwargs: Additional validation options passed to SchemaValidator.
+
+        Returns:
+            ValidationResult with validated data, errors, and report.
+
+        Raises:
+            ValidationError: If validation fails in strict mode.
+            PipelineError: If pipeline execution fails.
+
+        Example:
+            >>> from nyctea.plugins.registry import MasterRegistry
+            >>> schema = SchemaModel.from_yaml("schema.yaml")
+            >>> registry = MasterRegistry()
+            >>> # ... register plugins ...
+            >>> result = schema.validate(df, registry)
+            >>> print(result.report.summary())
+        """
+        from nyctea.schema.validator import SchemaValidator
+
+        validator = SchemaValidator(self, registry)
+        return validator.validate(df, **kwargs)
+
+    def create_validator(
+        self,
+        registry: MasterRegistry,
+        pipeline: ValidationPipeline | None = None,
+    ) -> SchemaValidator:
+        """Create a SchemaValidator for this schema.
+
+        This factory method allows you to create a validator and customize
+        its pipeline before running validation.
+
+        Args:
+            registry: Plugin registry with parsers and checks.
+            pipeline: Custom pipeline (if None, creates from schema).
+
+        Returns:
+            SchemaValidator instance.
+
+        Example:
+            >>> from nyctea.plugins.registry import MasterRegistry
+            >>> schema = SchemaModel.from_yaml("schema.yaml")
+            >>> registry = MasterRegistry()
+            >>> # ... register plugins ...
+            >>> validator = schema.create_validator(registry)
+            >>> # Customize pipeline
+            >>> validator.pipeline.add_phase(MyCustomPhase(), after="column_parsing")
+            >>> result = validator.validate(df)
+        """
+        from nyctea.schema.validator import SchemaValidator
+
+        return SchemaValidator(self, registry, pipeline)

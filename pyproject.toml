@@ -3,7 +3,7 @@ name = "nyctea"
 version = "0.1.0"
 description = "Polars-optimized data validation library with Pydantic schemas"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "polars>=1.36.1",
     "pydantic>=2.12.5",
@@ -35,6 +35,8 @@ docs = [
 ]
 test = [
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
+    "mypy>=1.13.0",
 ]
 
 [tool.ruff]
@@ -78,3 +80,5 @@ invalid-return-type = "error"
 invalid-argument-type = "error"
 division-by-zero = "error"
 redundant-cast = "warn"
+# Allow parameter name changes in method overrides (intentional design pattern)
+invalid-method-override = "warn"

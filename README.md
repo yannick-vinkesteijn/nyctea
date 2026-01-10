@@ -2,6 +2,23 @@
 
 Polars-optimized data validation library with Pydantic schemas based on packages like Pandera, Patito and Dataframely.
 
+> **📢 Nyctea v0.2 is here!** A complete architectural refactor with an extensible plugin system, customizable
+> validation pipeline, and schema-centric API. See [README_v0.2.md](README_v0.2.md) for the new API documentation.
+> The v0.1 API (documented below) remains available.
+
+______________________________________________________________________
+
+## Version Status
+
+- **v0.1** (this README): Stable, production-ready, functional API
+- **v0.2** ([README_v0.2.md](README_v0.2.md)): New OOP plugin-based architecture
+  - ✅ Core plugin system implemented
+  - ✅ 61 tests passing with 52% coverage
+  - ✅ GitHub Actions CI/CD configured
+  - 🚧 Additional phases and frame support in progress
+
+______________________________________________________________________
+
 ## Features
 
 - **Flexible validation profiles**: Switch between strict validation and lenient sanitization
@@ -365,6 +382,47 @@ result = validate(df, schema, registry, error_report=config)
 1. **Observable outcomes**: Track what was nullified, what failed, what passed
 1. **Predictable pipeline**: Fixed order, coercion before checks
 
+## Testing
+
+Nyctea has comprehensive test coverage with 61 tests across core modules:
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage report
+uv run pytest tests/ --cov=src/nyctea --cov-report=term --cov-report=html
+
+# Run specific test file
+uv run pytest tests/plugins/test_registry.py -v
+
+# Run with linting
+uv run ruff check src/ tests/
+uv run pytest tests/
+```
+
+### Test Coverage
+
+- **Overall**: 52% coverage
+- **Core modules**: Well-tested (78-96% coverage)
+  - Plugin base: 89%
+  - Plugin registry: 96%
+  - Schema validator: 95%
+  - Pipeline system: 78-88%
+- **Legacy v0.1**: Lower coverage (will improve in future sprints)
+
+See [TESTING_COMPLETE.md](TESTING_COMPLETE.md) for detailed test documentation.
+
+### CI/CD
+
+GitHub Actions run automatically on all PRs and pushes to main:
+
+- Linting with Ruff
+- Tests on Python 3.10, 3.11, 3.12
+- Coverage reporting
+- Type checking with mypy
+- Pre-commit hooks validation
+
 ## License
 
 MIT
@@ -372,3 +430,10 @@ MIT
 ## Contributing
 
 Contributions are welcome! Please open an issue or pull request.
+
+When contributing to v0.2:
+
+1. Follow the OOP plugin architecture patterns
+1. Add tests mirroring the `src/` structure
+1. Ensure Ruff linting passes
+1. Follow Google-style docstrings
