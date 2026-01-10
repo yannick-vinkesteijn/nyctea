@@ -1,0 +1,62 @@
+{
+  "lazy": true,
+  "coerce": true,
+  "columns": {
+    "patient_id": {
+      "dtype": "Utf8",
+      "synonyms": [
+        "pid"
+      ],
+      "required": true,
+      "nullable": false,
+      "parsers": [
+        {
+          "name": "strip",
+          "args": {}
+        }
+      ],
+      "checks": [
+        {
+          "name": "non_null",
+          "args": {}
+        }
+      ]
+    },
+    "age_years": {
+      "dtype": "Int64",
+      "synonyms": [
+        "age"
+      ],
+      "required": true,
+      "nullable": false,
+      "parsers": [
+        {
+          "name": "strip",
+          "args": {}
+        },
+        {
+          "name": "to_int",
+          "args": {}
+        }
+      ],
+      "checks": [
+        {
+          "name": "positive",
+          "args": {}
+        }
+      ]
+    }
+  },
+  "frame_parsers": [
+    {
+      "name": "strip_strings",
+      "args": {}
+    }
+  ],
+  "frame_checks": [
+    {
+      "name": "no_duplicate_ids",
+      "args": {}
+    }
+  ]
+}
