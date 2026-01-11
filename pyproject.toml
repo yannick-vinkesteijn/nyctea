@@ -105,3 +105,9 @@ division-by-zero = "error"
 redundant-cast = "warn"
 # Allow parameter name changes in method overrides (intentional design pattern)
 invalid-method-override = "warn"
+
+[tool.uv-secure.maintainability_criteria]
+max_package_age = "P360D"
+forbid_yanked = true
+forbid_archived = true
+forbid_quarantined = true

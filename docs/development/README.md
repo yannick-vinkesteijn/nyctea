@@ -42,7 +42,7 @@ The development followed an **agile sprint methodology**:
 
 ### Architecture Notes
 
-- **[TYPE_CHECKING_NOTES.md](../TYPE_CHECKING_NOTES.md)** - Type checker configuration decisions
+- **[TYPE_CHECKING_NOTES.md](TYPE_CHECKING_NOTES.md)** - Type checker configuration decisions
 
 ## Sprint 1 Results
 
@@ -84,7 +84,7 @@ The development followed an **agile sprint methodology**:
 
 ## Future Development
 
-See [nyctea-refactor-plan.md](../nyctea-refactor-plan.md) for the complete roadmap.
+See [nyctea-refactor-plan.md](nyctea-refactor-plan.md) for the complete roadmap.
 
 **Sprint 2 priorities**:
 - Frame parser/check support

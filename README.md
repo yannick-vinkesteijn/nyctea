@@ -222,7 +222,7 @@ GitHub Actions run automatically on all PRs and pushes to main:
 
 - **[Quick Reference](docs/QUICK_REFERENCE.md)** - API quick reference
 - **[Development Docs](docs/development/)** - Sprint notes, architecture decisions, and lessons learned
-- **[Refactor Plan](docs/nyctea-refactor-plan.md)** - Original architectural plan
+- **[Refactor Plan](docs/development/nyctea-refactor-plan.md)** - Original architectural plan
 
 ## Status
 
