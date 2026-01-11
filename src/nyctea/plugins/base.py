@@ -7,11 +7,9 @@ plugin registration and discovery.
 
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 __all__ = [
     "PluginMetadata",
