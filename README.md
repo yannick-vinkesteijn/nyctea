@@ -1,9 +1,10 @@
-# Nyctea
+<img align="center" width="150" height="150" src="docs/logo.png">
 
-![Nyctea Logo](docs/assets/logo-nyctea.png)
+# Nyctea
 
 Polars-based data validation library with an extensible OOP plugin architecture.
 
+> [!NOTE]
 > **🤖 Claude Code Experiment**: This project was built as a "vibe code" experiment to explore transferring
 > software engineering knowledge to Claude Code for production Python development. See
 > [docs/development/](docs/development/) for the full development story, sprint notes, and lessons learned.
@@ -11,6 +12,7 @@ Polars-based data validation library with an extensible OOP plugin architecture.
 ## Features
 
 ### 🔌 Plugin System
+
 
 - **Extensible**: Create custom parsers and checks by inheriting from base classes
 - **Type-safe**: Generic plugin classes with runtime validation
