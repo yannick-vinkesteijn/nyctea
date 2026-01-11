@@ -8,9 +8,9 @@ state container passed through all pipeline phases during validation.
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    import polars as pl
+import polars as pl
 
+if TYPE_CHECKING:
     from nyctea.engine.validate import ErrorReportConfig, ValidationReport
     from nyctea.plugins.registry import MasterRegistry
     from nyctea.schema.model import SchemaModel

@@ -5,10 +5,7 @@ that can occur during schema validation, plugin registration, and pipeline execu
 """
 
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import polars as pl
+import polars as pl
 
 __all__ = [
     "ConfigurationError",

@@ -107,7 +107,6 @@ redundant-cast = "warn"
 invalid-method-override = "warn"
 
 [tool.uv-secure.maintainability_criteria]
-max_package_age = "P360D"
 forbid_yanked = true
 forbid_archived = true
 forbid_quarantined = true

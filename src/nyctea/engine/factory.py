@@ -5,6 +5,7 @@ with common configurations.
 """
 
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from nyctea.engine.phases import (
@@ -15,8 +16,6 @@ from nyctea.engine.phases import (
 from nyctea.engine.pipeline import ValidationPipeline
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from nyctea.engine.observability import PipelineObserver
     from nyctea.schema.model import SchemaModel
 

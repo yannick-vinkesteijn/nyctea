@@ -6,8 +6,8 @@ functional API while leveraging the OOP plugin system internally.
 """
 
 
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
-from collections.abc import Callable
 
 import polars as pl
 
@@ -16,8 +16,6 @@ from nyctea.plugins.column import ColumnCheck, ColumnParser
 from nyctea.plugins.frame import FrameCheck, FrameParser
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from nyctea.plugins.registry import MasterRegistry
 
 __all__ = [
