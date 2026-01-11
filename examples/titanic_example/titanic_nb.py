@@ -66,7 +66,6 @@ def _(errors):
 def _(data_out):
     if hasattr(data_out, "explain"):
         data_out.explain(engine="default")  # or engine="streaming"
-
     return
 
 
