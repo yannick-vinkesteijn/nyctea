@@ -3,15 +3,19 @@
 Polars-optimized data validation library with Pydantic schemas based on packages like Pandera, Patito and Dataframely.
 
 > **📢 Nyctea v0.2 is here!** A complete architectural refactor with an extensible plugin system, customizable
-> validation pipeline, and schema-centric API. See [README_v0.2.md](README_v0.2.md) for the new API documentation.
-> The v0.1 API (documented below) remains available.
+> validation pipeline, and schema-centric API. See [docs/README_v0.2.md](docs/README_v0.2.md) for the new API
+> documentation. The v0.1 API (documented below) remains available.
+>
+> **🤖 Claude Code Experiment**: Nyctea v0.2 was built as a "vibe code" experiment to explore transferring
+> software engineering knowledge to Claude Code for production Python development. See
+> [docs/development/](docs/development/) for the full development story, sprint notes, and lessons learned.
 
 ______________________________________________________________________
 
 ## Version Status
 
 - **v0.1** (this README): Stable, production-ready, functional API
-- **v0.2** ([README_v0.2.md](README_v0.2.md)): New OOP plugin-based architecture
+- **v0.2** ([docs/README_v0.2.md](docs/README_v0.2.md)): New OOP plugin-based architecture
   - ✅ Core plugin system implemented
   - ✅ 61 tests passing with 52% coverage
   - ✅ GitHub Actions CI/CD configured
@@ -411,7 +415,7 @@ uv run pytest tests/
   - Pipeline system: 78-88%
 - **Legacy v0.1**: Lower coverage (will improve in future sprints)
 
-See [TESTING_COMPLETE.md](TESTING_COMPLETE.md) for detailed test documentation.
+See [docs/development/TESTING_COMPLETE.md](docs/development/TESTING_COMPLETE.md) for detailed test documentation.
 
 ### CI/CD
 
