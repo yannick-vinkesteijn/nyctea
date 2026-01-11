@@ -58,9 +58,8 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Install package
-        run: uv pip install --system dist/*.whl
-
-      - name: Test import
+      - name: Install and test package
         run: |
+          uv venv
+          uv pip install dist/*.whl
           uv run python -c "from nyctea import SchemaModel, MasterRegistry, register_builtins; print('✅ Import successful')"

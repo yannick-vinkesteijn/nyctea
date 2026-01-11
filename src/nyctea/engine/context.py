@@ -4,6 +4,7 @@ This module defines the PipelineContext dataclass, which serves as a shared
 state container passed through all pipeline phases during validation.
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
