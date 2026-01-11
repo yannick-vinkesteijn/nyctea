@@ -41,7 +41,7 @@ repos:
     rev: v3.21.2
     hooks:
       - id: pyupgrade
-        args: [--py314-plus, --keep-runtime-typing]
+        args: [--py310-plus, --keep-runtime-typing]
         exclude: ^src/nyctea/schema/model\.py$
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.24.1

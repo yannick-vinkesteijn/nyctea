@@ -4,6 +4,7 @@ This module provides generic registry classes for managing plugins with type saf
 metadata-based discovery, and lifecycle management.
 """
 
+from __future__ import annotations
 
 from typing import TYPE_CHECKING, Generic, TypeVar
 

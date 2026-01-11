@@ -117,6 +117,7 @@ result = validate(df, schema, registry)
 ```
 """
 
+from __future__ import annotations
 
 import inspect
 import json

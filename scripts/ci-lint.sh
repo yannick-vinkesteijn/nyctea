@@ -12,6 +12,10 @@ NC='\033[0m'
 echo -e "${BLUE}=== Simulating GitHub Actions: Lint ===${NC}"
 echo ""
 
+echo "Running pyupgrade..."
+find src tests -name "*.py" -type f -exec uv run pyupgrade --py310-plus --keep-runtime-typing {} +
+
+echo ""
 echo "Running Ruff linter..."
 uv run ruff check src/ tests/
 
