@@ -5,6 +5,8 @@ with configurable enforcement of shape preservation constraints.
 """
 
 
+from __future__ import annotations
+
 import inspect
 from abc import ABC
 from typing import TYPE_CHECKING, Any

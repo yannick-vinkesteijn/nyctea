@@ -8,6 +8,7 @@ This is a minimal implementation with core phases. Additional phases
 will be added in future iterations.
 """
 
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
 

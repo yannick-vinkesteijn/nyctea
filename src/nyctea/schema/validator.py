@@ -5,6 +5,8 @@ for validation using the new plugin-based pipeline architecture.
 """
 
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 import polars as pl

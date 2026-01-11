@@ -6,6 +6,8 @@ plugin registration and discovery.
 """
 
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field

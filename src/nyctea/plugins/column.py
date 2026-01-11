@@ -6,6 +6,8 @@ the input column and cannot access other columns in the DataFrame.
 """
 
 
+from __future__ import annotations
+
 import inspect
 from abc import ABC
 from typing import TYPE_CHECKING, Any

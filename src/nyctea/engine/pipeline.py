@@ -4,6 +4,7 @@ This module provides the core pipeline infrastructure for orchestrating
 validation phases with dependency validation and observability hooks.
 """
 
+from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod

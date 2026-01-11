@@ -4,6 +4,7 @@ This module provides observer protocols and implementations for monitoring
 pipeline execution, collecting metrics, and logging phase activity.
 """
 
+from __future__ import annotations
 
 import logging
 import time
