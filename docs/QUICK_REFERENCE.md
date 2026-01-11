@@ -1,4 +1,6 @@
-# Nyctea v0.2 Quick Reference
+# Nyctea Quick Reference
+
+![Nyctea Logo](assets/logo-nyctea.png)
 
 ## Installation & Setup
 

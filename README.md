@@ -1,6 +1,8 @@
 # Nyctea
 
-**Polars-based data validation library with an extensible OOP plugin architecture**
+![Nyctea Logo](docs/assets/logo-nyctea.png)
+
+Polars-based data validation library with an extensible OOP plugin architecture.
 
 > **🤖 Claude Code Experiment**: This project was built as a "vibe code" experiment to explore transferring
 > software engineering knowledge to Claude Code for production Python development. See
