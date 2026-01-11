@@ -19,7 +19,7 @@ repos:
       - id: no-commit-to-branch
       - id: check-merge-conflict
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.22
+    rev: 0.9.24
     hooks:
       - id: uv-lock
   - repo: https://github.com/owenlamont/uv-secure

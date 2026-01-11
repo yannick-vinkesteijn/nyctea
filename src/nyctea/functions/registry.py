@@ -118,7 +118,6 @@ result = validate(df, schema, registry)
 """
 
 
-
 import inspect
 import json
 from collections.abc import Callable
