@@ -33,6 +33,7 @@ Note:
     (e.g., `nullable=False` cannot be combined with `on_failure="null"`).
 """
 
+from __future__ import annotations
 
 import json
 from pathlib import Path

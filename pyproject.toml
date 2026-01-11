@@ -1,14 +1,37 @@
 [project]
 name = "nyctea"
 version = "0.1.0"
-description = "Polars-optimized data validation library with Pydantic schemas"
+description = "Polars-based data validation library with an extensible OOP plugin architecture"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Yannick Vinkesteijn" }
+]
+keywords = ["polars", "validation", "data", "schema", "pydantic", "etl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "polars>=1.36.1",
     "pydantic>=2.12.5",
     "pyyaml>=6.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yannick-vinkesteijn/nyctea"
+Repository = "https://github.com/yannick-vinkesteijn/nyctea"
+Issues = "https://github.com/yannick-vinkesteijn/nyctea/issues"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]
