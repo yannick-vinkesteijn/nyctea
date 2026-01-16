@@ -5,7 +5,7 @@
 Polars-based data validation library with an extensible OOP plugin architecture.
 
 > [!NOTE]
-> **🤖 Claude Code Experiment**: This project was built as a "vibe code" experiment to explore transferring
+> **🤖 Claude Code Experiment**: This project started as a "vibe code" experiment to explore transferring
 > software engineering knowledge to Claude Code for production Python development. See
 > [docs/development/](docs/development/) for the full development story, sprint notes, and lessons learned.
 
