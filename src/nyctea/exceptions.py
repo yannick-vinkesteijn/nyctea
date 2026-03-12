@@ -11,8 +11,8 @@ __all__ = [
     "ConfigurationError",
     "NycteaError",
     "PipelineError",
-    "PluginError",
-    "PluginExecutionError",
+    "ValidatorError",
+    "ValidatorExecutionError",
     "RegistrationError",
     "ValidationError",
 ]
@@ -27,7 +27,7 @@ class NycteaError(Exception):
 
 
 
-class PluginError(NycteaError):
+class ValidatorError(NycteaError):
     """Base exception for plugin-related errors."""
 
     def __init__(
@@ -49,7 +49,7 @@ class PluginError(NycteaError):
         self.plugin_type = plugin_type
 
 
-class RegistrationError(PluginError):
+class RegistrationError(ValidatorError):
     """Raised when plugin registration fails.
 
     This occurs when:
@@ -60,7 +60,7 @@ class RegistrationError(PluginError):
 
 
 
-class PluginExecutionError(PluginError):
+class ValidatorExecutionError(ValidatorError):
     """Raised when plugin execution fails.
 
     This occurs when:

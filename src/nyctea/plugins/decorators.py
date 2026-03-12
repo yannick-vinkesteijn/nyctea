@@ -13,30 +13,30 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from nyctea.plugins.base import PluginMetadata
+from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnCheck, ColumnParser
 from nyctea.plugins.frame import FrameCheck, FrameParser
 
 if TYPE_CHECKING:
-    from nyctea.plugins.registry import MasterRegistry
+    from nyctea.plugins.registry import Registry
 
 __all__ = [
-    "PluginDecorator",
+    "ValidatorDecorator",
 ]
 
 
-class PluginDecorator:
-    """Decorator factory for functional-style plugin registration.
+class ValidatorDecorator:
+    """Decorator factory for functional-style validator registration.
 
-    This class provides decorators that wrap functions in anonymous plugin
+    This class provides decorators that wrap functions in anonymous validator
     classes and register them automatically.
 
     Example:
-        >>> from nyctea.plugins.registry import MasterRegistry
+        >>> from nyctea.plugins.registry import Registry
         >>> import polars as pl
         >>>
-        >>> registry = MasterRegistry()
-        >>> decorators = PluginDecorator(registry)
+        >>> registry = Registry()
+        >>> decorators = ValidatorDecorator(registry)
         >>>
         >>> @decorators.column_parser(name="trim")
         >>> def trim(column: pl.Expr) -> pl.Expr:
@@ -47,11 +47,11 @@ class PluginDecorator:
         ...     return column > 0
     """
 
-    def __init__(self, registry: MasterRegistry) -> None:
+    def __init__(self, registry: Registry) -> None:
         """Initialize decorator factory with a registry.
 
         Args:
-            registry: Master registry where plugins will be registered.
+            registry: Registry where validators will be registered.
         """
         self.registry = registry
 
@@ -85,7 +85,7 @@ class PluginDecorator:
             # Create anonymous plugin class wrapping the function
             class FunctionColumnParser(ColumnParser):
                 def __init__(self) -> None:
-                    metadata = PluginMetadata(
+                    metadata = ValidatorMetadata(
                         name=name,
                         description=description or func.__doc__ or "",
                         version=version,
@@ -140,7 +140,7 @@ class PluginDecorator:
             # Create anonymous plugin class wrapping the function
             class FunctionColumnCheck(ColumnCheck):
                 def __init__(self) -> None:
-                    metadata = PluginMetadata(
+                    metadata = ValidatorMetadata(
                         name=name,
                         description=description or func.__doc__ or "",
                         version=version,
@@ -201,7 +201,7 @@ class PluginDecorator:
             # Create anonymous plugin class wrapping the function
             class FunctionFrameParser(FrameParser):
                 def __init__(self) -> None:
-                    metadata = PluginMetadata(
+                    metadata = ValidatorMetadata(
                         name=name,
                         description=description or func.__doc__ or "",
                         version=version,
@@ -265,7 +265,7 @@ class PluginDecorator:
             # Create anonymous plugin class wrapping the function
             class FunctionFrameCheck(FrameCheck):
                 def __init__(self) -> None:
-                    metadata = PluginMetadata(
+                    metadata = ValidatorMetadata(
                         name=name,
                         description=description or func.__doc__ or "",
                         version=version,

@@ -1,61 +1,64 @@
+---
+icon: lucide/code
+---
+
 # API Reference
 
-Complete API documentation for Nyctea.
+Complete reference for Nyctea's public API.
 
-## Core Modules
+<div class="grid cards" markdown>
 
-### Validation Engine
+-   :lucide-zap:{ .lg .middle } **Validation Engine**
 
-The validation engine is the heart of Nyctea, orchestrating the validation pipeline.
+    ---
 
-::: nyctea.engine.validate.validate
+    `ValidationResult`, `ValidationReport`, `ColumnValidationStats`, `ErrorReportConfig`.
 
-::: nyctea.engine.validate.ValidationResult
+    [:octicons-arrow-right-24: Engine](engine.md)
 
-::: nyctea.engine.validate.ValidationReport
+-   :lucide-layers:{ .lg .middle } **Schema Models**
 
-::: nyctea.engine.validate.ColumnValidationStats
+    ---
 
-::: nyctea.engine.validate.ErrorReportConfig
+    `SchemaModel`, `ColumnSchema`, `Parser`, `Check`, `ValidationProfile`.
 
-### Schema Definition
+    [:octicons-arrow-right-24: Schema](schema.md)
 
-Define and manage validation schemas.
+-   :lucide-plug:{ .lg .middle } **Plugin Registry**
 
-::: nyctea.schema.model.SchemaModel
+    ---
 
-::: nyctea.schema.model.ColumnSchema
+    `Registry`, `PluginRegistry`, `ColumnParser`, `ColumnCheck`, `FrameParser`, `FrameCheck`.
 
-::: nyctea.schema.model.Parser
+    [:octicons-arrow-right-24: Registry](registry.md)
 
-::: nyctea.schema.model.Check
+-   :lucide-database:{ .lg .middle } **Data Ingestion**
 
-::: nyctea.schema.model.ValidationProfile
+    ---
 
-### Function Registry
+    Schema-aware readers for CSV and Parquet.
 
-Register custom parsers and checks.
+    [:octicons-arrow-right-24: Ingest](ingest.md)
 
-::: nyctea.functions.registry.FunctionRegistry
+</div>
 
-::: nyctea.functions.registry.ColumnFunctionWrapper
+---
 
-::: nyctea.functions.registry.FrameFunctionWrapper
+## Public exports
 
-### Data Ingestion
+Everything importable directly from `nyctea`:
 
-Read data with schema-aware loading.
-
-::: nyctea.ingest.readers.read_csv
-
-::: nyctea.ingest.readers.read_parquet
-
-## Exception Classes
-
-::: nyctea.engine.validate.SchemaResolutionError
-
-::: nyctea.functions.registry.RegistryError
-
-::: nyctea.functions.registry.ColumnPurityError
-
-::: nyctea.functions.registry.FrameShapeError
+```python
+from nyctea import (
+    SchemaModel,          # schema definition
+    Registry,       # plugin registry
+    register_builtins,    # register built-in parsers/checks
+    ValidationResult,     # result of a validation run
+    ValidationReport,     # per-column statistics
+    ErrorReportConfig,    # error reporting mode (summary/rows/cells)
+    NycteaError,          # base exception
+    ValidationError,      # column/pipeline validation failure
+    ValidatorError,          # plugin registration or execution failure
+    PipelineError,        # pipeline phase failure
+)
+```

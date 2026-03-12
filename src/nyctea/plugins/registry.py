@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 from nyctea.exceptions import RegistrationError
-from nyctea.plugins.base import BasePlugin
+from nyctea.plugins.base import Validator
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -21,10 +21,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PluginRegistry",
-    "MasterRegistry",
+    "Registry",
 ]
 
-T = TypeVar("T", bound=BasePlugin)
+T = TypeVar("T", bound=Validator)
 
 
 class PluginRegistry(Generic[T]):
@@ -34,7 +34,7 @@ class PluginRegistry(Generic[T]):
     providing name-based lookup, tag-based discovery, and collision detection.
 
     Type Parameters:
-        T: The plugin type this registry manages (must extend BasePlugin).
+        T: The plugin type this registry manages (must extend Validator).
 
     Attributes:
         plugin_type: The class of plugins this registry accepts.
@@ -156,17 +156,17 @@ class PluginRegistry(Generic[T]):
         )
 
 
-class MasterRegistry(BaseModel):
-    """Master registry containing all plugin types.
+class Registry(BaseModel):
+    """Registry containing all validator types.
 
-    This Pydantic model manages separate registries for each plugin type,
-    providing type-safe registration methods and centralized plugin management.
+    This Pydantic model manages separate registries for each validator type,
+    providing type-safe registration methods and centralized validator management.
 
     Attributes:
-        column_parsers: Registry for column parser plugins.
-        column_checks: Registry for column check plugins.
-        frame_parsers: Registry for frame parser plugins.
-        frame_checks: Registry for frame check plugins.
+        column_parsers: Registry for column parser validators.
+        column_checks: Registry for column check validators.
+        frame_parsers: Registry for frame parser validators.
+        frame_checks: Registry for frame check validators.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -177,7 +177,7 @@ class MasterRegistry(BaseModel):
     frame_checks: PluginRegistry[FrameCheck] | None = None
 
     def __init__(self, **data) -> None:
-        """Initialize master registry with empty sub-registries."""
+        """Initialize registry with empty sub-registries."""
         # Import here to avoid circular imports
         from nyctea.plugins.column import ColumnCheck, ColumnParser
         from nyctea.plugins.frame import FrameCheck, FrameParser
@@ -240,10 +240,10 @@ class MasterRegistry(BaseModel):
         }
 
     def __repr__(self) -> str:
-        """Return string representation of master registry."""
+        """Return string representation of registry."""
         counts = self.get_plugin_counts()
         return (
-            f"MasterRegistry("
+            f"Registry("
             f"column_parsers={counts['column_parsers']}, "
             f"column_checks={counts['column_checks']}, "
             f"frame_parsers={counts['frame_parsers']}, "

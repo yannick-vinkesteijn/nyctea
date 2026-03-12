@@ -17,7 +17,7 @@ from nyctea.engine.validate import ErrorReportConfig, ValidationReport, Validati
 
 if TYPE_CHECKING:
     from nyctea.engine.pipeline import ValidationPipeline
-    from nyctea.plugins.registry import MasterRegistry
+    from nyctea.plugins.registry import Registry
     from nyctea.schema.model import SchemaModel
 
 __all__ = ["SchemaValidator"]
@@ -36,10 +36,10 @@ class SchemaValidator:
 
     Example:
         >>> from nyctea.schema.model import SchemaModel
-        >>> from nyctea.plugins.registry import MasterRegistry
+        >>> from nyctea.plugins.registry import Registry
         >>>
         >>> schema = SchemaModel.from_yaml("schema.yaml")
-        >>> registry = MasterRegistry()
+        >>> registry = Registry()
         >>> # ... register plugins ...
         >>>
         >>> validator = SchemaValidator(schema, registry)
@@ -49,7 +49,7 @@ class SchemaValidator:
     def __init__(
         self,
         schema: SchemaModel,
-        registry: MasterRegistry,
+        registry: Registry,
         pipeline: ValidationPipeline | None = None,
     ) -> None:
         """Initialize schema validator.

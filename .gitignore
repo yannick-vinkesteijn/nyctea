@@ -1,3 +1,10 @@
+# Claude Code — ignore everything except the project instructions
+.claude/*
+!.claude/CLAUDE.md
+
+# Generated data artifacts — examples write outputs here
+examples/**/data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

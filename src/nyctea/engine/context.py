@@ -13,7 +13,7 @@ import polars as pl
 
 if TYPE_CHECKING:
     from nyctea.engine.validate import ErrorReportConfig, ValidationReport
-    from nyctea.plugins.registry import MasterRegistry
+    from nyctea.plugins.registry import Registry
     from nyctea.schema.model import SchemaModel
 
 __all__ = ["PipelineContext"]
@@ -44,7 +44,7 @@ class PipelineContext:
     # Input configuration
     data: pl.LazyFrame
     schema: SchemaModel
-    registry: MasterRegistry
+    registry: Registry
     coerce_strategy: str = "strict"  # "strict" or "null_on_failure"
     error_report_config: ErrorReportConfig | None = None
 

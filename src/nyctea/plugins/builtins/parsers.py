@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 
-from nyctea.plugins.base import PluginMetadata
+from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnParser
 
 __all__ = [
@@ -22,7 +22,7 @@ class StripParser(ColumnParser):
     def __init__(self) -> None:
         """Initialize strip parser."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="strip",
                 description="Remove leading and trailing whitespace",
                 tags=["string", "cleaning"],
@@ -53,7 +53,7 @@ class ToIntParser(ColumnParser):
     def __init__(self) -> None:
         """Initialize to_int parser."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="to_int",
                 description="Convert string to integer (i64)",
                 tags=["conversion", "numeric"],
@@ -84,7 +84,7 @@ class ToFloatParser(ColumnParser):
     def __init__(self) -> None:
         """Initialize to_float parser."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="to_float",
                 description="Convert string to float (f64)",
                 tags=["conversion", "numeric"],
@@ -115,7 +115,7 @@ class LowerParser(ColumnParser):
     def __init__(self) -> None:
         """Initialize lower parser."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="lower",
                 description="Convert string to lowercase",
                 tags=["string", "normalization"],
@@ -146,7 +146,7 @@ class UpperParser(ColumnParser):
     def __init__(self) -> None:
         """Initialize upper parser."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="upper",
                 description="Convert string to uppercase",
                 tags=["string", "normalization"],

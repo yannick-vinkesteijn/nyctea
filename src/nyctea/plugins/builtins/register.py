@@ -13,21 +13,21 @@ from nyctea.plugins.builtins.parsers import (
     ToIntParser,
     UpperParser,
 )
-from nyctea.plugins.registry import MasterRegistry
+from nyctea.plugins.registry import Registry
 
 __all__ = ["register_builtins", "register_titanic_plugins"]
 
 
-def register_builtins(registry: MasterRegistry) -> None:
+def register_builtins(registry: Registry) -> None:
     """Register all built-in plugins.
 
     Args:
         registry: Master registry to register plugins in.
 
     Example:
-        >>> from nyctea.plugins.registry import MasterRegistry
+        >>> from nyctea.plugins.registry import Registry
         >>> from nyctea.plugins.builtins.register import register_builtins
-        >>> registry = MasterRegistry()
+        >>> registry = Registry()
         >>> register_builtins(registry)
     """
     # Register parsers
@@ -44,7 +44,7 @@ def register_builtins(registry: MasterRegistry) -> None:
     registry.register_column_check(UniqueCheck())
 
 
-def register_titanic_plugins(registry: MasterRegistry) -> None:
+def register_titanic_plugins(registry: Registry) -> None:
     """Register plugins needed for the Titanic example.
 
     This registers the built-in plugins plus Titanic-specific checks.
@@ -53,19 +53,19 @@ def register_titanic_plugins(registry: MasterRegistry) -> None:
         registry: Master registry to register plugins in.
 
     Example:
-        >>> from nyctea.plugins.registry import MasterRegistry
+        >>> from nyctea.plugins.registry import Registry
         >>> from nyctea.plugins.builtins.register import register_titanic_plugins
-        >>> registry = MasterRegistry()
+        >>> registry = Registry()
         >>> register_titanic_plugins(registry)
     """
     # Register all builtins first
     register_builtins(registry)
 
     # Import decorator for functional-style plugins
-    from nyctea.plugins.decorators import PluginDecorator
+    from nyctea.plugins.decorators import ValidatorDecorator
     import polars as pl
 
-    decorators = PluginDecorator(registry)
+    decorators = ValidatorDecorator(registry)
 
     # Titanic-specific checks using decorators
     @decorators.column_check(

@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 __all__ = [
-    "PluginMetadata",
-    "BasePlugin",
+    "ValidatorMetadata",
+    "Validator",
     "TInput",
     "TOutput",
 ]
@@ -26,7 +26,7 @@ TOutput = TypeVar("TOutput")
 
 
 @dataclass(frozen=True)
-class PluginMetadata:
+class ValidatorMetadata:
     """Metadata describing a plugin.
 
     This immutable dataclass contains descriptive information about a plugin
@@ -57,7 +57,7 @@ class PluginMetadata:
             )
 
 
-class BasePlugin(ABC, Generic[TInput, TOutput]):
+class Validator(ABC, Generic[TInput, TOutput]):
     """Abstract base class for all Nyctea plugins.
 
     This class establishes the fundamental contract that all plugins must implement:
@@ -74,7 +74,7 @@ class BasePlugin(ABC, Generic[TInput, TOutput]):
         metadata: Plugin metadata including name, description, and tags.
     """
 
-    def __init__(self, metadata: PluginMetadata) -> None:
+    def __init__(self, metadata: ValidatorMetadata) -> None:
         """Initialize the plugin with metadata.
 
         Args:
@@ -102,7 +102,7 @@ class BasePlugin(ABC, Generic[TInput, TOutput]):
             The plugin's output.
 
         Raises:
-            PluginExecutionError: If execution fails.
+            ValidatorExecutionError: If execution fails.
         """
         pass
 
@@ -140,7 +140,7 @@ class BasePlugin(ABC, Generic[TInput, TOutput]):
             The plugin's output.
 
         Raises:
-            PluginExecutionError: If validation or execution fails.
+            ValidatorExecutionError: If validation or execution fails.
         """
         # Validate arguments first
         self.validate_args(**kwargs)

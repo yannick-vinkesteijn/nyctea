@@ -20,14 +20,17 @@ Let's validate a simple DataFrame:
 
 ```python
 import polars as pl
-from nyctea import validate, SchemaModel
-from nyctea.functions import FunctionRegistry
+from nyctea import SchemaModel, Registry, register_builtins
 
-# 1. Create a function registry
-registry = FunctionRegistry()
+# 1. Create a plugin registry
+registry = Registry()
+register_builtins(registry)
 
-# 2. Register a validation check
-@registry.column_check(name="positive")
+# 2. Register a custom validation check (using ValidatorDecorator)
+from nyctea.plugins.decorators import ValidatorDecorator
+decorators = ValidatorDecorator(registry)
+
+@decorators.column_check(name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are positive."""
     return col.gt(0)
@@ -54,7 +57,7 @@ df = pl.DataFrame({
 })
 
 # 5. Validate!
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 
 # 6. Check results
 print(result.report.summary())
@@ -128,7 +131,7 @@ columns:
 
 ```python
 schema = SchemaModel.from_yaml_file("schema.yaml")
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 ```
 
 ## Lenient Mode
@@ -147,7 +150,7 @@ schema = SchemaModel.from_dict({
     }
 })
 
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 # Negative ages are set to null instead of failing
 print(result.data["age"])
 # [25, null, 30, null]

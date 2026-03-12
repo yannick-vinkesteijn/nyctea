@@ -5,16 +5,16 @@ with an extensible plugin architecture.
 
 Quick Start:
     >>> from nyctea.schema.model import SchemaModel
-    >>> from nyctea.plugins.registry import MasterRegistry
+    >>> from nyctea.plugins.registry import Registry
     >>> from nyctea.plugins.builtins.register import register_builtins
     >>>
-    >>> # Load schema and register plugins
+    >>> # Load schema and register validators
     >>> schema = SchemaModel.from_yaml("schema.yaml")
-    >>> registry = MasterRegistry()
+    >>> registry = Registry()
     >>> register_builtins(registry)
     >>>
     >>> # Validate data
-    >>> result = schema.validate(df, registry)
+    >>> result = schema.run(df, registry)
     >>> print(result.report.summary())
 """
 
@@ -25,13 +25,13 @@ configure_logging()
 
 # Core API exports
 from nyctea.schema.model import SchemaModel
-from nyctea.plugins.registry import MasterRegistry
+from nyctea.plugins.registry import Registry
 from nyctea.plugins.builtins.register import register_builtins, register_titanic_plugins
 from nyctea.engine.validate import ValidationResult, ValidationReport, ErrorReportConfig
 from nyctea.exceptions import (
     NycteaError,
     ValidationError,
-    PluginError,
+    ValidatorError,
     PipelineError,
 )
 
@@ -44,12 +44,25 @@ __all__ = [
     "ValidationReport",
     "ErrorReportConfig",
     # Plugin system
-    "MasterRegistry",
+    "Registry",
     "register_builtins",
     "register_titanic_plugins",
     # Exceptions
     "NycteaError",
     "ValidationError",
-    "PluginError",
+    "ValidatorError",
     "PipelineError",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "FunctionRegistry":
+        import warnings
+        warnings.warn(
+            "FunctionRegistry was renamed to Registry in v0.2.0. "
+            "FunctionRegistry will be removed in v0.3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return Registry
+    raise AttributeError(f"module 'nyctea' has no attribute {name!r}")

@@ -3,16 +3,16 @@
 import pytest
 
 from nyctea.exceptions import RegistrationError
-from nyctea.plugins.base import PluginMetadata
+from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnParser
-from nyctea.plugins.registry import MasterRegistry, PluginRegistry
+from nyctea.plugins.registry import Registry, PluginRegistry
 
 
 class TestParser(ColumnParser):
     """Test parser."""
 
     def __init__(self, name="test"):
-        super().__init__(PluginMetadata(name=name, tags=["test"]))
+        super().__init__(ValidatorMetadata(name=name, tags=["test"]))
 
     def execute(self, column, **kwargs):
         return column
@@ -71,7 +71,7 @@ def test_plugin_registry_collision_detection():
 def test_plugin_registry_type_validation():
     """Test that wrong plugin types are rejected."""
     from nyctea.plugins.frame import FrameParser
-    from nyctea.plugins.base import PluginMetadata
+    from nyctea.plugins.base import ValidatorMetadata
 
     class TestFrameParser(FrameParser):
         def execute(self, frame, **kwargs):
@@ -81,7 +81,7 @@ def test_plugin_registry_type_validation():
             pass
 
     registry = PluginRegistry(ColumnParser)
-    frame_plugin = TestFrameParser(PluginMetadata(name="frame"))
+    frame_plugin = TestFrameParser(ValidatorMetadata(name="frame"))
 
     with pytest.raises(TypeError, match="Registry expects ColumnParser"):
         registry.register(frame_plugin)
@@ -117,7 +117,7 @@ def test_plugin_registry_get_by_tag():
     """Test getting plugins by tag."""
     class TaggedParser(ColumnParser):
         def __init__(self, name, tags):
-            super().__init__(PluginMetadata(name=name, tags=tags))
+            super().__init__(ValidatorMetadata(name=name, tags=tags))
 
         def execute(self, column, **kwargs):
             return column
@@ -146,7 +146,7 @@ def test_plugin_registry_get_by_tag():
 
 def test_master_registry_creation():
     """Test creating a master registry."""
-    registry = MasterRegistry()
+    registry = Registry()
 
     assert registry.column_parsers is not None
     assert registry.column_checks is not None
@@ -156,7 +156,7 @@ def test_master_registry_creation():
 
 def test_master_registry_get_counts():
     """Test getting plugin counts."""
-    registry = MasterRegistry()
+    registry = Registry()
 
     counts = registry.get_plugin_counts()
     assert counts["column_parsers"] == 0
@@ -172,8 +172,8 @@ def test_master_registry_get_counts():
 
 def test_master_registry_repr():
     """Test master registry repr."""
-    registry = MasterRegistry()
+    registry = Registry()
     repr_str = repr(registry)
 
-    assert "MasterRegistry" in repr_str
+    assert "Registry" in repr_str
     assert "column_parsers" in repr_str

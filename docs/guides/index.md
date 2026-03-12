@@ -1,44 +1,45 @@
+---
+icon: lucide/book-open
+---
+
 # User Guides
 
-Comprehensive guides for using Nyctea effectively.
+Guides for using Nyctea, from first install to custom plugins.
 
-## Getting Started
+!!! tip "New to Nyctea?"
+    Start with [Quick Start](quickstart.md) to validate your first DataFrame in under 5 minutes.
 
-- [Quick Start](quickstart.md) - Get up and running in 5 minutes
-- [Installation](installation.md) - Detailed installation instructions
-- [Core Concepts](concepts.md) - Understanding Nyctea's architecture
+---
 
-## Defining Schemas
+<div class="grid cards" markdown>
 
-- [Schema Basics](schema-basics.md) - Creating and configuring schemas
-- [Validation Profiles](profiles.md) - Strict, clean, and audit modes
-- [Column Configuration](columns.md) - Dtypes, nullability, and synonyms
-- [YAML Schemas](yaml-schemas.md) - Using YAML for schema definitions
+-   :material-rocket-launch-outline:{ .lg .middle } **Quick Start**
 
-## Function Registry
+    ---
 
-- [Registry Overview](registry.md) - Understanding the function registry
-- [Column Parsers](column-parsers.md) - String transformations and preprocessing
-- [Column Checks](column-checks.md) - Validation rules
-- [Frame Operations](frame-operations.md) - DataFrame-level transformations and checks
+    Install Nyctea, define a schema, register plugins, and validate your first DataFrame.
 
-## Validation
+    [:octicons-arrow-right-24: Quick Start](quickstart.md)
 
-- [Validation Pipeline](pipeline.md) - Understanding the validation flow
-- [Error Reporting](error-reporting.md) - Configuring error detail levels
-- [Validation Reports](reports.md) - Interpreting validation statistics
-- [Error Handling](error-handling.md) - Dealing with validation failures
+-   :material-puzzle-outline:{ .lg .middle } **Plugin Registry**
 
-## Advanced Topics
+    ---
 
-- [Coercion Strategies](coercion.md) - Strict vs lenient type casting
-- [Performance Tips](performance.md) - Optimizing validation speed
-- [Custom Functions](custom-functions.md) - Writing advanced parsers and checks
-- [Integration Patterns](integration.md) - Using Nyctea in data pipelines
+    Register custom parsers and checks using OOP classes or the decorator API.
 
-## Examples
+    [:octicons-arrow-right-24: Plugin Registry](registry.md)
 
-- [Example Gallery](examples.md) - Real-world validation scenarios
-- [Titanic Dataset](example-titanic.md) - Complete walkthrough
-- [Medical Data](example-medical.md) - Healthcare data validation
-- [IoT Sensors](example-iot.md) - Time-series sensor data
+</div>
+
+---
+
+## What guides cover
+
+| Topic | Description |
+|-------|-------------|
+| **Schemas** | Columns, dtypes, nullability, synonyms, and validation profiles |
+| **Parsers** | Column-level transformations applied before checks |
+| **Checks** | Column-level validation rules (`min_value`, `in_set`, `between`, `unique`) |
+| **Registry** | Registering built-in and custom plugins |
+| **Pipeline** | How phases run, how to customise order, how to add your own phase |
+| **Error reporting** | Summary, rows, and cells modes in `ErrorReportConfig` |

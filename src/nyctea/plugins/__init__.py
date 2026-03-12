@@ -4,7 +4,7 @@ This package provides the foundation for Nyctea's plugin architecture, allowing
 users to extend validation capabilities through custom parsers and checks.
 
 Base Classes:
-    - BasePlugin: Abstract base for all plugins
+    - Validator: Abstract base for all validators
     - ColumnPlugin: Base for column-level operations
     - ColumnParser: Column transformations
     - ColumnCheck: Column validations
@@ -14,12 +14,12 @@ Base Classes:
 
 Example:
     >>> from nyctea.plugins.column import ColumnParser
-    >>> from nyctea.plugins.base import PluginMetadata
+    >>> from nyctea.plugins.base import ValidatorMetadata
     >>> import polars as pl
     >>>
     >>> class TrimParser(ColumnParser):
     ...     def __init__(self):
-    ...         super().__init__(PluginMetadata(name="trim"))
+    ...         super().__init__(ValidatorMetadata(name="trim"))
     ...
     ...     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
     ...         return column.str.strip_chars()
@@ -28,13 +28,13 @@ Example:
     ...         pass
 """
 
-from nyctea.plugins.base import BasePlugin, PluginMetadata
+from nyctea.plugins.base import Validator, ValidatorMetadata
 from nyctea.plugins.column import ColumnCheck, ColumnParser, ColumnPlugin
 from nyctea.plugins.frame import FrameCheck, FrameParser, FramePlugin
 
 __all__ = [
-    "BasePlugin",
-    "PluginMetadata",
+    "Validator",
+    "ValidatorMetadata",
     "ColumnPlugin",
     "ColumnParser",
     "ColumnCheck",

@@ -16,14 +16,22 @@ nav = [
     { "User Guides" = [
         { "Overview" = "guides/index.md" },
         { "Quick Start" = "guides/quickstart.md" },
-        { "Function Registry" = "guides/registry.md" },
+        { "Plugin Registry" = "guides/registry.md" },
     ]},
     { "API Reference" = [
         { "Overview" = "api/index.md" },
         { "Validation Engine" = "api/engine.md" },
-        { "Function Registry" = "api/registry.md" },
+        { "Plugin Registry" = "api/registry.md" },
         { "Schema Models" = "api/schema.md" },
         { "Data Ingestion" = "api/ingest.md" },
+    ]},
+    { "Development" = [
+        { "Overview" = "development/index.md" },
+        { "Roadmap" = "development/roadmap.md" },
+        { "Breaking Changes" = "development/breaking-changes.md" },
+        { "ADR: Pipeline Design" = "development/adr-pipeline-design.md" },
+        { "ADR: Validation API" = "development/adr-validation-api.md" },
+        { "Releasing" = "development/RELEASING.md" },
     ]},
 ]
 
@@ -49,21 +57,24 @@ features = [
     "search.highlight",
 ]
 
-# Color schemes - support both light and dark mode
-[[project.theme.palette]]
-scheme = "default"
-toggle.icon = "lucide/sun"
-toggle.name = "Switch to dark mode"
-
+# Color schemes — colors applied via docs/stylesheets/theme.css.
+# Slate (dark) is listed first so it loads as the default.
 [[project.theme.palette]]
 scheme = "slate"
-toggle.icon = "lucide/moon"
+toggle.icon = "lucide/sun"
 toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
 
 # Font configuration
 [project.theme.font]
 text = "Inter"
 code = "JetBrains Mono"
+
+extra_css = ["stylesheets/theme.css"]
 
 # Social links
 [[project.extra.social]]

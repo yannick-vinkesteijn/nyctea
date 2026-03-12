@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 
-from nyctea.plugins.base import PluginMetadata
+from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnCheck
 
 __all__ = [
@@ -21,7 +21,7 @@ class BetweenCheck(ColumnCheck):
     def __init__(self) -> None:
         """Initialize between check."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="between",
                 description="Check values are within min/max range (inclusive)",
                 tags=["numeric", "range"],
@@ -62,7 +62,7 @@ class InSetCheck(ColumnCheck):
     def __init__(self) -> None:
         """Initialize in_set check."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="in_set",
                 description="Check values are in allowed set",
                 tags=["categorical", "validation"],
@@ -98,7 +98,7 @@ class MinValueCheck(ColumnCheck):
     def __init__(self) -> None:
         """Initialize min_value check."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="min_value",
                 description="Check values are >= minimum",
                 tags=["numeric", "range"],
@@ -132,7 +132,7 @@ class UniqueCheck(ColumnCheck):
     def __init__(self) -> None:
         """Initialize unique check."""
         super().__init__(
-            PluginMetadata(
+            ValidatorMetadata(
                 name="unique",
                 description="Check all values are unique (no duplicates)",
                 tags=["uniqueness", "validation"],

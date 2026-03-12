@@ -3,8 +3,8 @@
 import polars as pl
 import pytest
 
-from nyctea.exceptions import PluginExecutionError, RegistrationError
-from nyctea.plugins.base import PluginMetadata
+from nyctea.exceptions import ValidatorExecutionError, RegistrationError
+from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnCheck, ColumnParser
 
 
@@ -12,7 +12,7 @@ class SimpleParser(ColumnParser):
     """Simple parser for testing."""
 
     def __init__(self):
-        super().__init__(PluginMetadata(name="simple"))
+        super().__init__(ValidatorMetadata(name="simple"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         return column.str.to_uppercase()
@@ -25,7 +25,7 @@ class SimpleCheck(ColumnCheck):
     """Simple check for testing."""
 
     def __init__(self):
-        super().__init__(PluginMetadata(name="simple_check"))
+        super().__init__(ValidatorMetadata(name="simple_check"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         return column.str.len_chars() > 0
@@ -87,7 +87,7 @@ def test_column_plugin_signature_validation():
     class BadParser(ColumnParser):
         def __init__(self):
             # This should fail because execute doesn't have 'column' parameter
-            metadata = PluginMetadata(name="bad")
+            metadata = ValidatorMetadata(name="bad")
             # Temporarily skip validation for this test
             # In real code, __init__ would call super().__init__ which validates
             self.metadata = metadata

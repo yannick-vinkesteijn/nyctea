@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from nyctea.exceptions import PluginExecutionError, RegistrationError
-from nyctea.plugins.base import BasePlugin, PluginMetadata
+from nyctea.exceptions import ValidatorExecutionError, RegistrationError
+from nyctea.plugins.base import Validator, ValidatorMetadata
 
 if TYPE_CHECKING:
     pass
@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 
-class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
+class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
     """Abstract base class for all column-level plugins.
 
     Column plugins operate on a single column (Polars expression) and must
@@ -42,7 +42,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
     - validate_args(**kwargs) -> None
     """
 
-    def __init__(self, metadata: PluginMetadata) -> None:
+    def __init__(self, metadata: ValidatorMetadata) -> None:
         """Initialize column plugin with metadata.
 
         Args:
@@ -98,14 +98,14 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
             context: Context description for error messages ("input" or "output").
 
         Raises:
-            PluginExecutionError: If expression references multiple columns.
+            ValidatorExecutionError: If expression references multiple columns.
         """
         try:
             # Get root column names referenced by this expression
             root_names = expr.meta.root_names()
 
             if len(root_names) == 0:
-                raise PluginExecutionError(
+                raise ValidatorExecutionError(
                     f"Plugin '{self.name}' {context} expression references no columns. "
                     "Column plugins must reference exactly one column.",
                     plugin_name=self.name,
@@ -113,7 +113,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
                 )
 
             if len(root_names) > 1:
-                raise PluginExecutionError(
+                raise ValidatorExecutionError(
                     f"Plugin '{self.name}' {context} expression references multiple "
                     f"columns: {root_names}. Column plugins must only reference "
                     "the input column (single-column purity).",
@@ -121,10 +121,10 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
                     plugin_type=self.__class__.__name__,
                 )
         except Exception as e:
-            if isinstance(e, PluginExecutionError):
+            if isinstance(e, ValidatorExecutionError):
                 raise
             # If meta.root_names() fails for any reason, raise an error
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' failed to validate {context} expression: {e}",
                 plugin_name=self.name,
                 plugin_type=self.__class__.__name__,
@@ -146,7 +146,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
             Output column expression.
 
         Raises:
-            PluginExecutionError: If purity validation fails.
+            ValidatorExecutionError: If purity validation fails.
             TypeError: If column is not a Polars expression.
         """
         # Type check
@@ -166,7 +166,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
         try:
             result = self.execute(column, **kwargs)
         except Exception as e:
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' execution failed: {e}",
                 plugin_name=self.name,
                 plugin_type=self.__class__.__name__,
@@ -176,7 +176,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
 
         # Type check output
         if not isinstance(result, pl.Expr):
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' must return pl.Expr, "
                 f"got {type(result).__name__}",
                 plugin_name=self.name,
@@ -190,7 +190,7 @@ class ColumnPlugin(BasePlugin[pl.Expr, pl.Expr], ABC):
 
         # Ensure input and output reference the same column
         if input_column != output_column:
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' violated purity constraint: "
                 f"input references '{input_column}' but output references "
                 f"'{output_column}'. Column plugins must preserve the column reference.",
@@ -211,12 +211,12 @@ class ColumnParser(ColumnPlugin):
     Parsers are executed before type coercion and checks in the validation pipeline.
 
     Example:
-        >>> from nyctea.plugins.base import PluginMetadata
+        >>> from nyctea.plugins.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class TrimParser(ColumnParser):
         ...     def __init__(self):
-        ...         super().__init__(PluginMetadata(name="trim"))
+        ...         super().__init__(ValidatorMetadata(name="trim"))
         ...
         ...     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         ...         return column.str.strip_chars()
@@ -237,12 +237,12 @@ class ColumnCheck(ColumnPlugin):
     Checks are executed after parsing and type coercion in the validation pipeline.
 
     Example:
-        >>> from nyctea.plugins.base import PluginMetadata
+        >>> from nyctea.plugins.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class PositiveCheck(ColumnCheck):
         ...     def __init__(self):
-        ...         super().__init__(PluginMetadata(name="positive"))
+        ...         super().__init__(ValidatorMetadata(name="positive"))
         ...
         ...     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         ...         return column > 0

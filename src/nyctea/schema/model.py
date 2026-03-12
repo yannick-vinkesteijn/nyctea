@@ -374,7 +374,7 @@ class SchemaModel(BaseModel):
     def validate(
         self,
         df: pl.DataFrame | pl.LazyFrame,
-        registry: MasterRegistry,
+        registry: Registry,
         **kwargs: Any,
     ) -> ValidationResult:
         """Validate a DataFrame against this schema.
@@ -395,9 +395,9 @@ class SchemaModel(BaseModel):
             PipelineError: If pipeline execution fails.
 
         Example:
-            >>> from nyctea.plugins.registry import MasterRegistry
+            >>> from nyctea.plugins.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
-            >>> registry = MasterRegistry()
+            >>> registry = Registry()
             >>> # ... register plugins ...
             >>> result = schema.validate(df, registry)
             >>> print(result.report.summary())
@@ -409,7 +409,7 @@ class SchemaModel(BaseModel):
 
     def create_validator(
         self,
-        registry: MasterRegistry,
+        registry: Registry,
         pipeline: ValidationPipeline | None = None,
     ) -> SchemaValidator:
         """Create a SchemaValidator for this schema.
@@ -425,9 +425,9 @@ class SchemaModel(BaseModel):
             SchemaValidator instance.
 
         Example:
-            >>> from nyctea.plugins.registry import MasterRegistry
+            >>> from nyctea.plugins.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
-            >>> registry = MasterRegistry()
+            >>> registry = Registry()
             >>> # ... register plugins ...
             >>> validator = schema.create_validator(registry)
             >>> # Customize pipeline

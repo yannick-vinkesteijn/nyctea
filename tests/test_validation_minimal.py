@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from nyctea import MasterRegistry, SchemaModel, register_builtins
+from nyctea import Registry, SchemaModel, register_builtins
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def sample_schema():
 @pytest.fixture
 def registry():
     """Create and populate a registry with built-in plugins."""
-    reg = MasterRegistry()
+    reg = Registry()
     register_builtins(reg)
     return reg
 

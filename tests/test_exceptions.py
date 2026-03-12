@@ -6,8 +6,8 @@ from nyctea.exceptions import (
     ConfigurationError,
     NycteaError,
     PipelineError,
-    PluginError,
-    PluginExecutionError,
+    ValidatorError,
+    ValidatorExecutionError,
     RegistrationError,
     ValidationError,
 )
@@ -15,15 +15,15 @@ from nyctea.exceptions import (
 
 def test_nyctea_error_is_base():
     """Test that NycteaError is the base exception."""
-    assert issubclass(PluginError, NycteaError)
+    assert issubclass(ValidatorError, NycteaError)
     assert issubclass(ValidationError, NycteaError)
     assert issubclass(PipelineError, NycteaError)
     assert issubclass(ConfigurationError, NycteaError)
 
 
 def test_plugin_error_with_context():
-    """Test PluginError stores context."""
-    error = PluginError(
+    """Test ValidatorError stores context."""
+    error = ValidatorError(
         "Test error",
         plugin_name="test_plugin",
         plugin_type="ColumnParser"
@@ -34,8 +34,8 @@ def test_plugin_error_with_context():
 
 
 def test_registration_error_inherits_plugin_error():
-    """Test RegistrationError is a PluginError."""
-    assert issubclass(RegistrationError, PluginError)
+    """Test RegistrationError is a ValidatorError."""
+    assert issubclass(RegistrationError, ValidatorError)
 
     error = RegistrationError(
         "Registration failed",
@@ -45,9 +45,9 @@ def test_registration_error_inherits_plugin_error():
 
 
 def test_plugin_execution_error_with_column():
-    """Test PluginExecutionError stores column and original error."""
+    """Test ValidatorExecutionError stores column and original error."""
     original = ValueError("Bad value")
-    error = PluginExecutionError(
+    error = ValidatorExecutionError(
         "Execution failed",
         plugin_name="my_parser",
         column="age",

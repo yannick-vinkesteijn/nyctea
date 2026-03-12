@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from nyctea.exceptions import PluginExecutionError, RegistrationError
-from nyctea.plugins.base import BasePlugin, PluginMetadata
+from nyctea.exceptions import ValidatorExecutionError, RegistrationError
+from nyctea.plugins.base import Validator, ValidatorMetadata
 
 if TYPE_CHECKING:
     pass
@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 
-class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
+class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
     """Abstract base class for all frame-level plugins.
 
     Frame plugins operate on entire DataFrames and can optionally enforce
@@ -47,7 +47,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
 
     def __init__(
         self,
-        metadata: PluginMetadata,
+        metadata: ValidatorMetadata,
         *,
         preserve_columns: bool = True,
         preserve_rows: bool = True,
@@ -117,7 +117,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
             Output LazyFrame.
 
         Raises:
-            PluginExecutionError: If shape validation fails.
+            ValidatorExecutionError: If shape validation fails.
             TypeError: If frame is not a LazyFrame.
         """
         # Type check
@@ -142,7 +142,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
         try:
             result = self.execute(frame, **kwargs)
         except Exception as e:
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' execution failed: {e}",
                 plugin_name=self.name,
                 plugin_type=self.__class__.__name__,
@@ -151,7 +151,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
 
         # Type check output
         if not isinstance(result, pl.LazyFrame):
-            raise PluginExecutionError(
+            raise ValidatorExecutionError(
                 f"Plugin '{self.name}' must return pl.LazyFrame, "
                 f"got {type(result).__name__}",
                 plugin_name=self.name,
@@ -169,7 +169,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
                     error_parts.append(f"missing columns: {sorted(missing)}")
                 if extra:
                     error_parts.append(f"extra columns: {sorted(extra)}")
-                raise PluginExecutionError(
+                raise ValidatorExecutionError(
                     f"Plugin '{self.name}' violated column preservation: "
                     f"{', '.join(error_parts)}",
                     plugin_name=self.name,
@@ -180,7 +180,7 @@ class FramePlugin(BasePlugin[pl.LazyFrame, pl.LazyFrame], ABC):
         if self.preserve_rows and input_row_count is not None:
             output_row_count = result.select(pl.len()).collect().item()
             if output_row_count != input_row_count:
-                raise PluginExecutionError(
+                raise ValidatorExecutionError(
                     f"Plugin '{self.name}' violated row preservation: "
                     f"input had {input_row_count} rows, output has {output_row_count}",
                     plugin_name=self.name,
@@ -200,13 +200,13 @@ class FrameParser(FramePlugin):
     This can be configured via preserve_columns and preserve_rows flags.
 
     Example:
-        >>> from nyctea.plugins.base import PluginMetadata
+        >>> from nyctea.plugins.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class DeduplicateParser(FrameParser):
         ...     def __init__(self):
         ...         super().__init__(
-        ...             PluginMetadata(name="deduplicate"),
+        ...             ValidatorMetadata(name="deduplicate"),
         ...             preserve_columns=True,
         ...             preserve_rows=False  # Dedup may remove rows
         ...         )
@@ -220,7 +220,7 @@ class FrameParser(FramePlugin):
 
     def __init__(
         self,
-        metadata: PluginMetadata,
+        metadata: ValidatorMetadata,
         *,
         preserve_columns: bool = True,
         preserve_rows: bool = False,  # Parsers may modify row count
@@ -248,12 +248,12 @@ class FrameCheck(FramePlugin):
     Frame checks always preserve both columns and rows.
 
     Example:
-        >>> from nyctea.plugins.base import PluginMetadata
+        >>> from nyctea.plugins.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class MinRowsCheck(FrameCheck):
         ...     def __init__(self):
-        ...         super().__init__(PluginMetadata(name="min_rows"))
+        ...         super().__init__(ValidatorMetadata(name="min_rows"))
         ...
         ...     def execute(self, frame: pl.LazyFrame, **kwargs) -> pl.LazyFrame:
         ...         min_rows = kwargs.get("min_rows", 1)
@@ -270,7 +270,7 @@ class FrameCheck(FramePlugin):
         ...                 raise ValueError("min_rows must be >= 0")
     """
 
-    def __init__(self, metadata: PluginMetadata) -> None:
+    def __init__(self, metadata: ValidatorMetadata) -> None:
         """Initialize frame check.
 
         Frame checks always preserve both columns and rows.
