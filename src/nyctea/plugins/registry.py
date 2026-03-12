@@ -6,18 +6,14 @@ metadata-based discovery, and lifecycle management.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from nyctea.exceptions import RegistrationError
 from nyctea.plugins.base import Validator
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from nyctea.plugins.column import ColumnCheck, ColumnParser
-    from nyctea.plugins.frame import FrameCheck, FrameParser
+from nyctea.plugins.column import ColumnCheck, ColumnParser
+from nyctea.plugins.frame import FrameCheck, FrameParser
 
 __all__ = [
     "PluginRegistry",
@@ -62,10 +58,7 @@ class PluginRegistry(Generic[T]):
         """
         # Type validation
         if not isinstance(plugin, self.plugin_type):
-            raise TypeError(
-                f"Registry expects {self.plugin_type.__name__}, "
-                f"got {type(plugin).__name__}"
-            )
+            raise TypeError(f"Registry expects {self.plugin_type.__name__}, got {type(plugin).__name__}")
 
         # Name collision check
         if plugin.name in self._plugins:
@@ -150,10 +143,7 @@ class PluginRegistry(Generic[T]):
 
     def __repr__(self) -> str:
         """Return string representation of registry."""
-        return (
-            f"PluginRegistry[{self.plugin_type.__name__}]("
-            f"{len(self._plugins)} plugins)"
-        )
+        return f"PluginRegistry[{self.plugin_type.__name__}]({len(self._plugins)} plugins)"
 
 
 class Registry(BaseModel):
@@ -171,28 +161,26 @@ class Registry(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    column_parsers: PluginRegistry[ColumnParser] | None = None
-    column_checks: PluginRegistry[ColumnCheck] | None = None
-    frame_parsers: PluginRegistry[FrameParser] | None = None
-    frame_checks: PluginRegistry[FrameCheck] | None = None
+    column_parsers: PluginRegistry[ColumnParser]
+    column_checks: PluginRegistry[ColumnCheck]
+    frame_parsers: PluginRegistry[FrameParser]
+    frame_checks: PluginRegistry[FrameCheck]
 
-    def __init__(self, **data) -> None:
-        """Initialize registry with empty sub-registries."""
-        # Import here to avoid circular imports
-        from nyctea.plugins.column import ColumnCheck, ColumnParser
-        from nyctea.plugins.frame import FrameCheck, FrameParser
-
-        super().__init__(**data)
-
-        # Initialize registries if not provided
-        if self.column_parsers is None:
-            self.column_parsers = PluginRegistry(ColumnParser)
-        if self.column_checks is None:
-            self.column_checks = PluginRegistry(ColumnCheck)
-        if self.frame_parsers is None:
-            self.frame_parsers = PluginRegistry(FrameParser)
-        if self.frame_checks is None:
-            self.frame_checks = PluginRegistry(FrameCheck)
+    @model_validator(mode="before")
+    @classmethod
+    def _init_registries(cls, data: Any) -> Any:
+        """Provide empty sub-registries when not supplied."""
+        if not isinstance(data, dict):
+            return data
+        if "column_parsers" not in data:
+            data["column_parsers"] = PluginRegistry(ColumnParser)
+        if "column_checks" not in data:
+            data["column_checks"] = PluginRegistry(ColumnCheck)
+        if "frame_parsers" not in data:
+            data["frame_parsers"] = PluginRegistry(FrameParser)
+        if "frame_checks" not in data:
+            data["frame_checks"] = PluginRegistry(FrameCheck)
+        return data
 
     def register_column_parser(self, plugin: ColumnParser) -> None:
         """Register a column parser plugin.

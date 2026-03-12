@@ -4,17 +4,16 @@ This module defines a comprehensive exception hierarchy for all error conditions
 that can occur during schema validation, plugin registration, and pipeline execution.
 """
 
-
 import polars as pl
 
 __all__ = [
     "ConfigurationError",
     "NycteaError",
     "PipelineError",
-    "ValidatorError",
-    "ValidatorExecutionError",
     "RegistrationError",
     "ValidationError",
+    "ValidatorError",
+    "ValidatorExecutionError",
 ]
 
 
@@ -24,7 +23,6 @@ class NycteaError(Exception):
     All custom exceptions in Nyctea inherit from this base class,
     making it easy to catch any library-specific error.
     """
-
 
 
 class ValidatorError(NycteaError):
@@ -57,7 +55,6 @@ class RegistrationError(ValidatorError):
     - Plugin validation fails (invalid signature, missing methods, etc.)
     - Plugin metadata is invalid
     """
-
 
 
 class ValidatorExecutionError(ValidatorError):

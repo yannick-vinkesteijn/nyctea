@@ -5,25 +5,24 @@ with strict enforcement of single-column purity - plugins can only reference
 the input column and cannot access other columns in the DataFrame.
 """
 
-
 from __future__ import annotations
 
 import inspect
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from nyctea.exceptions import ValidatorExecutionError, RegistrationError
-from nyctea.plugins.base import Validator, ValidatorMetadata
+from nyctea.exceptions import RegistrationError, ValidatorExecutionError
+from nyctea.plugins.base import Validator
 
 if TYPE_CHECKING:
-    pass
+    from nyctea.plugins.base import ValidatorMetadata
 
 __all__ = [
-    "ColumnPlugin",
-    "ColumnParser",
     "ColumnCheck",
+    "ColumnParser",
+    "ColumnPlugin",
 ]
 
 
@@ -53,6 +52,18 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         """
         super().__init__(metadata)
         self._validate_signature()
+
+    @abstractmethod
+    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:  # ty: ignore[invalid-method-override]
+        """Execute the plugin logic on a single column expression.
+
+        Args:
+            column: The input column expression.
+            **kwargs: Plugin-specific arguments.
+
+        Returns:
+            Transformed or validated column expression.
+        """
 
     def _validate_signature(self) -> None:
         """Validate that execute() has correct signature.
@@ -131,7 +142,7 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
                 original_error=e,
             ) from e
 
-    def __call__(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
+    def __call__(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:  # ty: ignore[invalid-method-override]
         """Execute plugin with purity validation.
 
         This method wraps execute() to enforce column purity constraints.
@@ -151,9 +162,7 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         """
         # Type check
         if not isinstance(column, pl.Expr):
-            raise TypeError(
-                f"Plugin '{self.name}' expected pl.Expr, got {type(column).__name__}"
-            )
+            raise TypeError(f"Plugin '{self.name}' expected pl.Expr, got {type(column).__name__}")
 
         # Validate input purity
         self._validate_purity(column, "input")
@@ -177,8 +186,7 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         # Type check output
         if not isinstance(result, pl.Expr):
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' must return pl.Expr, "
-                f"got {type(result).__name__}",
+                f"Plugin '{self.name}' must return pl.Expr, got {type(result).__name__}",
                 plugin_name=self.name,
                 plugin_type=self.__class__.__name__,
                 column=input_column,
@@ -225,8 +233,6 @@ class ColumnParser(ColumnPlugin):
         ...         pass  # No args to validate
     """
 
-    pass
-
 
 class ColumnCheck(ColumnPlugin):
     """Base class for column checks (validations).
@@ -250,5 +256,3 @@ class ColumnCheck(ColumnPlugin):
         ...     def validate_args(self, **kwargs) -> None:
         ...         pass  # No args to validate
     """
-
-    pass

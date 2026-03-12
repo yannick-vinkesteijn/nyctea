@@ -4,6 +4,12 @@ This package provides a set of commonly-used parsers and checks that are
 ready to use out of the box.
 """
 
+from nyctea.plugins.builtins.checks import (
+    BetweenCheck,
+    InSetCheck,
+    MinValueCheck,
+    UniqueCheck,
+)
 from nyctea.plugins.builtins.parsers import (
     LowerParser,
     StripParser,
@@ -11,23 +17,15 @@ from nyctea.plugins.builtins.parsers import (
     ToIntParser,
     UpperParser,
 )
-from nyctea.plugins.builtins.checks import (
-    BetweenCheck,
-    InSetCheck,
-    MinValueCheck,
-    UniqueCheck,
-)
 
 __all__ = [
-    # Parsers
-    "StripParser",
-    "ToIntParser",
-    "ToFloatParser",
-    "LowerParser",
-    "UpperParser",
-    # Checks
     "BetweenCheck",
     "InSetCheck",
+    "LowerParser",
     "MinValueCheck",
+    "StripParser",
+    "ToFloatParser",
+    "ToIntParser",
     "UniqueCheck",
+    "UpperParser",
 ]

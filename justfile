@@ -2,6 +2,7 @@
 # Run `just --list` to see all available commands
 
 set shell := ["bash", "-c"]
+set dotenv-load := true
 
 # Default recipe - show available commands
 default:
@@ -9,15 +10,15 @@ default:
 
 # === Environment Setup ===
 
-# Install development environment
+# Install development environment and pre-commit hooks
 setup:
-    @echo "Setting up development environment..."
-    uv sync --group dev --group test --group docs
+    uv sync --all-groups --all-extras
+    uv run pre-commit install
 
 # Clean build artifacts and caches
 clean:
     @echo "Cleaning build artifacts..."
-    rm -rf .venv dist build *.egg-info .pytest_cache .ruff_cache .mypy_cache
+    rm -rf .venv dist build *.egg-info .pytest_cache .ruff_cache .ty_cache
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     @echo "✓ Clean complete"
 
@@ -49,9 +50,10 @@ pre-commit:
 pre-commit-staged:
     uv run pre-commit run
 
-# Run ruff linter
+# Run linters (ruff + ty)
 lint:
     uv run ruff check src/ tests/
+    uv run ty check src/nyctea
 
 # Run ruff formatter
 format:
@@ -61,13 +63,17 @@ format:
 fix:
     uv run ruff check --fix src/ tests/
 
-# Run type checker
+# Run type checker on stable modules
 typecheck:
-    uv run mypy src/nyctea --ignore-missing-imports
+    uv run ty check src/nyctea
+
+# Run type checker on a specific path
+typecheck-path PATH:
+    uv run ty check {{PATH}}
 
 # Run security vulnerability scan
 secure:
-    uv run pre-commit run uv-secure --all-files
+    uv run uv-secure
 
 # === GitHub Actions Simulation ===
 
@@ -89,7 +95,7 @@ ci-test:
 # Simulate CI: Type check job
 ci-typecheck:
     @echo "=== Running CI: Type Check ==="
-    uv run mypy src/nyctea --ignore-missing-imports || true
+    uv run ty check src/nyctea
 
 # Simulate CI: Build job
 ci-build:

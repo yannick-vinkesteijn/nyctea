@@ -4,7 +4,6 @@ This module provides the SchemaValidator class, which is the main entry point
 for validation using the new plugin-based pipeline architecture.
 """
 
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -125,7 +124,12 @@ class SchemaValidator:
 
         # Collect if needed
         use_lazy = lazy if lazy is not None else self.schema.lazy
-        final_data = context.data if use_lazy else context.data.collect()
+        if use_lazy:
+            final_data: pl.DataFrame | pl.LazyFrame = context.data
+        else:
+            _collected = context.data.collect()
+            assert isinstance(_collected, pl.DataFrame)
+            final_data = _collected
 
         # Build minimal errors DataFrame (in full implementation, this would be done by ErrorReportingPhase)
         errors = self._build_errors(context)
@@ -149,7 +153,9 @@ class SchemaValidator:
             Validation report.
         """
         # Count total rows
-        total_rows = context.data.select(pl.len()).collect().item()
+        _count = context.data.select(pl.len()).collect()
+        assert isinstance(_count, pl.DataFrame)
+        total_rows = _count.item()
 
         # Count rows with check failures
         failed_rows = 0
@@ -180,11 +186,13 @@ class SchemaValidator:
         """
         if not context.check_failures:
             # No errors - return empty DataFrame with expected schema
-            return pl.DataFrame({
-                "column": [],
-                "check": [],
-                "failures": [],
-            })
+            return pl.DataFrame(
+                {
+                    "column": [],
+                    "check": [],
+                    "failures": [],
+                }
+            )
 
         # Build simple error summary
         errors_data = {

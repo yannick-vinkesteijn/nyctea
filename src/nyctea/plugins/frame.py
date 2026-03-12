@@ -4,25 +4,24 @@ This module provides base classes for frame-level operations (parsers and checks
 with configurable enforcement of shape preservation constraints.
 """
 
-
 from __future__ import annotations
 
 import inspect
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from nyctea.exceptions import ValidatorExecutionError, RegistrationError
-from nyctea.plugins.base import Validator, ValidatorMetadata
+from nyctea.exceptions import RegistrationError, ValidatorExecutionError
+from nyctea.plugins.base import Validator
 
 if TYPE_CHECKING:
-    pass
+    from nyctea.plugins.base import ValidatorMetadata
 
 __all__ = [
-    "FramePlugin",
-    "FrameParser",
     "FrameCheck",
+    "FrameParser",
+    "FramePlugin",
 ]
 
 
@@ -67,6 +66,18 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         self.preserve_rows = preserve_rows
         self._validate_signature()
 
+    @abstractmethod
+    def execute(self, frame: pl.LazyFrame, **kwargs: Any) -> pl.LazyFrame:  # ty: ignore[invalid-method-override]
+        """Execute the plugin logic on a LazyFrame.
+
+        Args:
+            frame: The input LazyFrame.
+            **kwargs: Plugin-specific arguments.
+
+        Returns:
+            Transformed LazyFrame.
+        """
+
     def _validate_signature(self) -> None:
         """Validate that execute() has correct signature.
 
@@ -103,7 +114,7 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
                 plugin_type=self.__class__.__name__,
             )
 
-    def __call__(self, frame: pl.LazyFrame, **kwargs: Any) -> pl.LazyFrame:
+    def __call__(self, frame: pl.LazyFrame, **kwargs: Any) -> pl.LazyFrame:  # ty: ignore[invalid-method-override]  # noqa: C901
         """Execute plugin with shape validation.
 
         This method wraps execute() to enforce shape preservation constraints
@@ -122,10 +133,7 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         """
         # Type check
         if not isinstance(frame, pl.LazyFrame):
-            raise TypeError(
-                f"Plugin '{self.name}' expected pl.LazyFrame, "
-                f"got {type(frame).__name__}"
-            )
+            raise TypeError(f"Plugin '{self.name}' expected pl.LazyFrame, got {type(frame).__name__}")
 
         # Capture input shape for validation
         input_columns = frame.collect_schema().names() if self.preserve_columns else None
@@ -133,7 +141,9 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         if self.preserve_rows:
             # We need to collect to get row count - this is a performance trade-off
             # Only do this if preserve_rows is True
-            input_row_count = frame.select(pl.len()).collect().item()
+            _count = frame.select(pl.len()).collect()
+            assert isinstance(_count, pl.DataFrame)
+            input_row_count = _count[0, 0]
 
         # Validate arguments
         self.validate_args(**kwargs)
@@ -152,14 +162,14 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         # Type check output
         if not isinstance(result, pl.LazyFrame):
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' must return pl.LazyFrame, "
-                f"got {type(result).__name__}",
+                f"Plugin '{self.name}' must return pl.LazyFrame, got {type(result).__name__}",
                 plugin_name=self.name,
                 plugin_type=self.__class__.__name__,
             )
 
         # Validate column preservation
         if self.preserve_columns:
+            assert input_columns is not None
             output_columns = result.collect_schema().names()
             if set(output_columns) != set(input_columns):
                 missing = set(input_columns) - set(output_columns)
@@ -170,15 +180,16 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
                 if extra:
                     error_parts.append(f"extra columns: {sorted(extra)}")
                 raise ValidatorExecutionError(
-                    f"Plugin '{self.name}' violated column preservation: "
-                    f"{', '.join(error_parts)}",
+                    f"Plugin '{self.name}' violated column preservation: {', '.join(error_parts)}",
                     plugin_name=self.name,
                     plugin_type=self.__class__.__name__,
                 )
 
         # Validate row count preservation
         if self.preserve_rows and input_row_count is not None:
-            output_row_count = result.select(pl.len()).collect().item()
+            _out_count = result.select(pl.len()).collect()
+            assert isinstance(_out_count, pl.DataFrame)
+            output_row_count = _out_count[0, 0]
             if output_row_count != input_row_count:
                 raise ValidatorExecutionError(
                     f"Plugin '{self.name}' violated row preservation: "
@@ -208,7 +219,7 @@ class FrameParser(FramePlugin):
         ...         super().__init__(
         ...             ValidatorMetadata(name="deduplicate"),
         ...             preserve_columns=True,
-        ...             preserve_rows=False  # Dedup may remove rows
+        ...             preserve_rows=False,  # Dedup may remove rows
         ...         )
         ...
         ...     def execute(self, frame: pl.LazyFrame, **kwargs) -> pl.LazyFrame:

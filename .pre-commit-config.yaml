@@ -15,7 +15,6 @@ repos:
       - id: debug-statements
       - id: detect-private-key
       - id: forbid-new-submodules
-      # - id: name-tests-test  # Disabled: Using pytest convention (test_*.py)
       - id: no-commit-to-branch
       - id: check-merge-conflict
   - repo: https://github.com/astral-sh/uv-pre-commit
@@ -29,6 +28,15 @@ repos:
         # Note: Shows vulnerability descriptions and aliases for better context
         # TODO: Add --min-age-days once available (to reject packages <7 days old)
         args: [--aliases, --desc]
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty check
+        entry: uv run ty check src/nyctea
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.11
     hooks:
@@ -37,12 +45,6 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
         require_serial: true
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus, --keep-runtime-typing]
-        exclude: ^src/nyctea/schema/model\.py$
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.24.1
     hooks:

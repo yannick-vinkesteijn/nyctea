@@ -62,8 +62,9 @@ def register_titanic_plugins(registry: Registry) -> None:
     register_builtins(registry)
 
     # Import decorator for functional-style plugins
-    from nyctea.plugins.decorators import ValidatorDecorator
     import polars as pl
+
+    from nyctea.plugins.decorators import ValidatorDecorator
 
     decorators = ValidatorDecorator(registry)
 

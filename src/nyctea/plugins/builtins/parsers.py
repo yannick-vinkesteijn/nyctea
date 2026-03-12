@@ -8,10 +8,10 @@ from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnParser
 
 __all__ = [
-    "StripParser",
-    "ToIntParser",
-    "ToFloatParser",
     "LowerParser",
+    "StripParser",
+    "ToFloatParser",
+    "ToIntParser",
     "UpperParser",
 ]
 

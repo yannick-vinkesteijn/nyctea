@@ -1,14 +1,14 @@
 """Schema models and loaders."""
 
-from .loader import SchemaLoader
-from .model import Check, ColumnSchema, FrameCheck, FrameParser, Parser, SchemaModel
+from nyctea.schema.loader import SchemaLoader
+from nyctea.schema.model import Check, ColumnSchema, FrameCheck, FrameParser, Parser, SchemaModel
 
 __all__ = [
-    "SchemaLoader",
     "Check",
     "ColumnSchema",
     "FrameCheck",
     "FrameParser",
     "Parser",
+    "SchemaLoader",
     "SchemaModel",
 ]

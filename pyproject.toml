@@ -45,65 +45,139 @@ nb = [
 
 [dependency-groups]
 dev = [
-    "mkdocstrings-python>=2.0.1",
-    "mkdocstrings[python]>=1.0.0",
     "pre-commit>=4.5.0",
-    "pyupgrade>=3.21.2",
-    "ruff>=0.14.8",
-    "ty>=0.0.5",
-    "zensical>=0.0.15",
+    { include-group = "lint" },
+    { include-group = "security" },
+    { include-group = "test" },
+    { include-group = "docs" },
 ]
-docs = [
-    "zensical>=0.0.11",
+lint = [
+    "ruff>=0.14.8",
+    "ty>=0.0.15",
+]
+security = [
+    "uv-secure>=0.15.4",
 ]
 test = [
     "pytest>=9.0.2",
     "pytest-cov>=6.0.0",
-    "mypy>=1.13.0",
 ]
+docs = [
+    "zensical>=0.0.15",
+]
+
+# --- Tool Configuration ---
 
 [tool.ruff]
 line-length = 120
-target-version = "py314"
-select = ["ALL"]
-# Skip examples and other demo/notebook directories
+target-version = "py310"
 exclude = [
     "examples/",
     "docs/",
     "scripts/",
-    "*.py",  # Skip any loose Python files in root
 ]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # Trailing comma missing — conflicts with ruff formatter
+    "ISC001",  # Implicit string concat on single line — conflicts with ruff formatter
+    "D203",    # One blank line before class docstring — conflicts with D211
+    "D213",    # Multi-line docstring summary on second line — conflicts with D212
+    "E501",    # Line length regulated by formatter
+    "TD002",   # Missing author in TODO
+    "TD003",   # Missing issue link on the line following this TODO
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    "SIM102",  # Use a single if statement instead of nested if statements
+    "SIM108",  # Use ternary operator
+    "EM101",   # Exception string literals — short messages are fine
+    "EM102",   # Exception f-string literals — common pattern
+    "ANN401",  # Disallow Any in **kwargs — **kwargs: Any is standard
+    "FBT001",  # Boolean-typed positional argument — too strict
+    "FBT002",  # Boolean default positional argument — too strict
+    "FBT003",  # Boolean positional value in function call — too strict
+    "TRY301",  # Abstract raise to inner function — unnecessary
+    "S101",    # Use of assert — used for type narrowing
+    "PLC0415", # Import not at top level — allowed for circular import prevention
+    "ARG002",  # Unused method argument — intentional for interface conformance
+    "PLR0913", # Too many function arguments — acceptable for plugin decorators
+    "TC002",   # Move third-party import to TYPE_CHECKING — kept at runtime for clarity
+]
+fixable = ["ALL"]
+unfixable = []
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# Relaxed linting for marimo notebook files
+[tool.ruff.lint.isort]
+known-first-party = ["nyctea"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
 [tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # Use of assert
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+    "D104",    # Missing docstring in public package
+    "ANN",     # Type annotations
+    "INP001",  # Implicit namespace package
+]
+"examples/**/*.py" = [
+    "INP001",  # Implicit namespace package
+    "T201",    # print() statements
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+]
 "*_nb.py" = [
-    "E402",  # Module level import not at top of file
-    "F401",  # Imported but unused (common in interactive notebooks)
-    "F403",  # 'from module import *' used
-    "T201",  # print() statements
-    "S101",  # Use of assert (for quick checks/demos)
-    "D100",  # Missing docstring in public module
-    "D103",  # Missing docstring in public function
+    "E402",    # Module level import not at top of file
+    "F401",    # Imported but unused
+    "F403",    # from module import * used
+    "T201",    # print() statements
+    "S101",    # Use of assert
+    "D100",    # Missing docstring in public module
+    "D103",    # Missing docstring in public function
+    "ANN",     # Type annotations
+    "PLC0415", # import not at top-level (marimo cells use inline imports)
 ]
 
-[tool.ty]
-respect-ignore-files = true
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-config",
+    "--strict-markers",
+    "--import-mode=importlib",
+]
+xfail_strict = true
+
+[tool.ty.src]
+# System A (engine + function registry) is being rewritten — exclude until removed
+exclude = [
+    "src/nyctea/engine/**",
+    "src/nyctea/functions/**",
+]
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.10"
 
 [tool.ty.rules]
 unused-ignore-comment = "warn"
-possibly-unbound-attribute = "error"
-possibly-unbound-import = "error"
+possibly-missing-attribute = "error"
+possibly-missing-import = "error"
 invalid-return-type = "error"
 invalid-argument-type = "error"
 division-by-zero = "error"
 redundant-cast = "warn"
-# Allow parameter name changes in method overrides (intentional design pattern)
 invalid-method-override = "warn"
 
 [tool.uv-secure.maintainability_criteria]

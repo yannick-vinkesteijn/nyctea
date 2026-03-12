@@ -5,10 +5,8 @@ without explicitly creating plugin classes. This maintains the ergonomic
 functional API while leveraging the OOP plugin system internally.
 """
 
-
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import polars as pl
@@ -18,6 +16,8 @@ from nyctea.plugins.column import ColumnCheck, ColumnParser
 from nyctea.plugins.frame import FrameCheck, FrameParser
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from nyctea.plugins.registry import Registry
 
 __all__ = [

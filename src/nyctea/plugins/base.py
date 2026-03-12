@@ -5,19 +5,20 @@ base classes that all plugins must inherit from and metadata structures for
 plugin registration and discovery.
 """
 
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 __all__ = [
-    "ValidatorMetadata",
-    "Validator",
     "TInput",
     "TOutput",
+    "Validator",
+    "ValidatorMetadata",
 ]
 
 # Generic type variables for plugin input/output
@@ -51,10 +52,7 @@ class ValidatorMetadata:
         if not self.name:
             raise ValueError("Plugin name cannot be empty")
         if not self.name.replace("_", "").replace("-", "").isalnum():
-            raise ValueError(
-                f"Plugin name '{self.name}' must be alphanumeric "
-                "(underscores and hyphens allowed)"
-            )
+            raise ValueError(f"Plugin name '{self.name}' must be alphanumeric (underscores and hyphens allowed)")
 
 
 class Validator(ABC, Generic[TInput, TOutput]):
@@ -104,7 +102,6 @@ class Validator(ABC, Generic[TInput, TOutput]):
         Raises:
             ValidatorExecutionError: If execution fails.
         """
-        pass
 
     @abstractmethod
     def validate_args(self, **kwargs: Any) -> None:
@@ -120,7 +117,6 @@ class Validator(ABC, Generic[TInput, TOutput]):
             TypeError: If argument types are invalid.
             ValueError: If argument values are invalid.
         """
-        pass
 
     def __call__(self, input_data: TInput, **kwargs: Any) -> TOutput:
         """Call the plugin with runtime validation.
@@ -150,8 +146,4 @@ class Validator(ABC, Generic[TInput, TOutput]):
 
     def __repr__(self) -> str:
         """Return a string representation of the plugin."""
-        return (
-            f"{self.__class__.__name__}("
-            f"name='{self.name}', "
-            f"version='{self.metadata.version}')"
-        )
+        return f"{self.__class__.__name__}(name='{self.name}', version='{self.metadata.version}')"

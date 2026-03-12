@@ -14,15 +14,9 @@ Example:
 
         from nyctea.schema.model import SchemaModel
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "age": {
-                    "dtype": "Int64",
-                    "nullable": False,
-                    "checks": [{"name": "positive"}]
-                }
-            }
-        })
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": False, "checks": [{"name": "positive"}]}}}
+        )
 
     Load from YAML::
 
@@ -37,11 +31,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
-from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from nyctea.engine.pipeline import ValidationPipeline
+    from nyctea.engine.validate import ValidationResult
+    from nyctea.plugins.registry import Registry
+    from nyctea.schema.validator import SchemaValidator
 
 # Type aliases for validation behavior
 OnFailureBehavior = Literal["raise", "null"]
@@ -59,9 +60,7 @@ class Parser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the parse function to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the parse function"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the parse function")
 
 
 class Check(BaseModel):
@@ -70,9 +69,7 @@ class Check(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the check function to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the check function"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the check function")
 
 
 class FrameParser(BaseModel):
@@ -81,9 +78,7 @@ class FrameParser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the frame-level parser to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the frame parser"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the frame parser")
 
 
 class FrameCheck(BaseModel):
@@ -92,9 +87,7 @@ class FrameCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the frame-level check to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the frame check"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the frame check")
 
 
 class ColumnSchema(BaseModel):
@@ -103,9 +96,7 @@ class ColumnSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dtype: str = Field(..., description="The final enforced dtype after validation")
-    synonyms: list[str] = Field(
-        default_factory=list, description="Allowed alternative names for this column"
-    )
+    synonyms: list[str] = Field(default_factory=list, description="Allowed alternative names for this column")
 
     parsers: list[Parser] = Field(
         default_factory=list,
@@ -145,7 +136,7 @@ class ColumnSchema(BaseModel):
             raise ValueError(f"'{v}' is not a valid Polars dtype")
         dtype_obj = getattr(pl, v)
         if not isinstance(dtype_obj, type) or not issubclass(dtype_obj, pl.DataType):
-            raise ValueError(f"'{v}' is not a valid Polars DataType")
+            raise TypeError(f"'{v}' is not a valid Polars DataType")
         return v
 
     @model_validator(mode="after")
@@ -153,8 +144,7 @@ class ColumnSchema(BaseModel):
         """Ensure on_failure='null' requires nullable=True."""
         if self.on_failure == "null" and not self.nullable:
             raise ValueError(
-                "on_failure='null' requires nullable=True. "
-                "Cannot nullify failures in a non-nullable column."
+                "on_failure='null' requires nullable=True. Cannot nullify failures in a non-nullable column."
             )
         return self
 
@@ -184,18 +174,13 @@ class SchemaModel(BaseModel):
         ),
     )
 
-    columns: dict[str, ColumnSchema] = Field(
-        ..., description="Mapping of column name to its validation schema"
-    )
-    frame_parsers: list[FrameParser] = Field(
-        default_factory=list, description="DataFrame-level parsing functions"
-    )
+    columns: dict[str, ColumnSchema] = Field(..., description="Mapping of column name to its validation schema")
+    frame_parsers: list[FrameParser] = Field(default_factory=list, description="DataFrame-level parsing functions")
 
-    frame_checks: list[FrameCheck] = Field(
-        default_factory=list, description="DataFrame-level checks"
-    )
+    frame_checks: list[FrameCheck] = Field(default_factory=list, description="DataFrame-level checks")
 
     def __repr__(self) -> str:
+        """Return string representation of the schema."""
         cols = ", ".join(self.columns.keys())
         return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, columns=[{cols}]>"
 
@@ -218,12 +203,11 @@ class SchemaModel(BaseModel):
         # Profile-based defaults
         if self.profile == "strict":
             return "raise"
-        elif self.profile == "clean":
+        if self.profile == "clean":
             return "null" if col_schema.nullable else "raise"
-        elif self.profile == "audit":
+        if self.profile == "audit":
             return "raise"
-        else:
-            return "raise"
+        return "raise"
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SchemaModel:
@@ -255,7 +239,7 @@ class SchemaModel(BaseModel):
         """
         if isinstance(schema, cls):
             return schema
-        return cls.from_dict(schema)
+        return cls.from_dict(schema)  # type: ignore[arg-type]
 
     @classmethod
     def from_json(cls, content: str) -> SchemaModel:
@@ -355,23 +339,17 @@ class SchemaModel(BaseModel):
         suffix = path_obj.suffix.lower()
         if suffix == ".json":
             return cls.from_json_file(path_obj)
-        elif suffix in {".yaml", ".yml"}:
+        if suffix in {".yaml", ".yml"}:
             return cls.from_yaml_file(path_obj)
-        else:
-            raise ValueError(
-                f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml"
-            )
+        raise ValueError(f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml")
 
     @staticmethod
     def _ensure_yaml() -> None:
         """Raise if PyYAML is unavailable."""
         if yaml is None:
-            raise ImportError(
-                "PyYAML is required for YAML schema loading. "
-                "Install with: pip install nyctea[yaml]"
-            )
+            raise ImportError("PyYAML is required for YAML schema loading. Install with: pip install nyctea[yaml]")
 
-    def validate(
+    def validate(  # ty: ignore[invalid-method-override]
         self,
         df: pl.DataFrame | pl.LazyFrame,
         registry: Registry,
