@@ -3,7 +3,7 @@ name = "nyctea"
 version = "0.1.0"
 description = "Polars-optimized data validation library with Pydantic schemas"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "polars>=1.36.1",
     "pydantic>=2.12.5",
@@ -39,7 +39,7 @@ test = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py314"
+target-version = "py311"
 select = ["ALL"]
 # Skip examples and other demo/notebook directories
 exclude = [
@@ -68,7 +68,7 @@ convention = "google"
 respect-ignore-files = true
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.13"
 
 [tool.ty.rules]
 unused-ignore-comment = "warn"

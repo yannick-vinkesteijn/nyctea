@@ -1,0 +1,42 @@
+name: Dependency Audit
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Every Monday at 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5.4.2
+
+      - name: Upgrade vulnerable packages
+        run: uv lock --upgrade
+
+      - name: Run pip-audit
+        run: uvx pip-audit --require-hashes -r <(uv export --no-dev) || true
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automated/dependency-audit
+          commit-message: "chore: upgrade dependencies (weekly audit)"
+          title: "chore: weekly dependency audit"
+          body: |
+            Automated weekly dependency audit.
+
+            Packages have been upgraded to resolve known vulnerabilities.
+            Review the `uv.lock` diff for what changed.
+          labels: dependencies
+          delete-branch: true
