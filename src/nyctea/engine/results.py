@@ -9,7 +9,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from nyctea.schema.model import ValidationProfile
+from nyctea.schema.model import OnFailureBehavior
 
 __all__ = [
     "ColumnValidationStats",
@@ -66,15 +66,14 @@ class ValidationReport(BaseModel):
 
     rows_processed: int
     rows_valid: int
-    profile_used: ValidationProfile
+    on_failure: OnFailureBehavior
     columns: dict[str, ColumnValidationStats] = Field(default_factory=dict)
 
     def summary(self) -> str:
         """Return a human-readable summary of the validation report."""
         lines = [
-            f"Validation Report (Profile: {self.profile_used})",
-            f"Rows: {self.rows_valid}/{self.rows_processed} valid "
-            f"({self.rows_valid / self.rows_processed * 100:.1f}%)",
+            f"Validation Report (on_failure: {self.on_failure})",
+            f"Rows: {self.rows_valid}/{self.rows_processed} valid ({self.rows_valid / self.rows_processed * 100:.1f}%)",
             "",
             "Column Issues:",
         ]

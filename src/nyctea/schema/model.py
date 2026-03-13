@@ -6,7 +6,7 @@ can be defined programmatically or loaded from YAML/JSON files.
 The schema defines:
     - Column specifications (dtypes, nullability, parsers, checks)
     - Frame-level operations (parsers and checks)
-    - Validation profiles (strict, clean, audit)
+    - Failure handling (on_failure: raise, null, ignore)
     - Synonym mappings for column names
 
 Example:
@@ -44,9 +44,8 @@ if TYPE_CHECKING:
     from nyctea.plugins.registry import Registry
     from nyctea.schema.validator import SchemaValidator
 
-# Type aliases for validation behavior
-OnFailureBehavior = Literal["raise", "null"]
-ValidationProfile = Literal["strict", "clean", "audit"]
+# Type alias for failure handling behavior
+OnFailureBehavior = Literal["raise", "null", "ignore"]
 
 try:
     import yaml
@@ -118,13 +117,19 @@ class ColumnSchema(BaseModel):
         description="Whether null values are allowed in this column",
     )
 
+    coerce: bool | None = Field(
+        None,
+        description="Whether to coerce this column to its dtype. None inherits from schema.",
+    )
+
     on_failure: OnFailureBehavior | None = Field(
         None,
         description=(
-            "How to handle parsing/check failures:\n"
-            "- 'raise': Stop and report errors (default for strict)\n"
-            "- 'null': Set failing values to null and continue (requires nullable=True)\n"
-            "- None: Inherit from schema profile"
+            "How to handle coercion/check failures for this column:\n"
+            "- 'raise': error, stop\n"
+            "- 'null': value becomes null (requires nullable=True)\n"
+            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported\n"
+            "- None: inherit from schema on_failure"
         ),
     )
 
@@ -164,13 +169,13 @@ class SchemaModel(BaseModel):
         description="Whether to coerce columns to the specified dtypes after parsing and validation",
     )
 
-    profile: ValidationProfile = Field(
-        "strict",
+    on_failure: OnFailureBehavior = Field(
+        "raise",
         description=(
-            "Default validation behavior:\n"
-            "- 'strict': All failures raise (on_failure='raise' default)\n"
-            "- 'clean': Nullify failures for nullable columns\n"
-            "- 'audit': Like strict with enhanced reporting"
+            "Default failure handling for all columns:\n"
+            "- 'raise': error, stop\n"
+            "- 'null': value becomes null\n"
+            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported"
         ),
     )
 
@@ -182,32 +187,50 @@ class SchemaModel(BaseModel):
     def __repr__(self) -> str:
         """Return string representation of the schema."""
         cols = ", ".join(self.columns.keys())
-        return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, columns=[{cols}]>"
+        return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, on_failure={self.on_failure!r}, columns=[{cols}]>"
+
+    def resolve_coerce(self, col_name: str) -> bool:
+        """Resolve effective coerce setting for a column.
+
+        Resolution order:
+        1. Column coerce if set explicitly.
+        2. Schema coerce as default.
+
+        Args:
+            col_name: Name of the column.
+
+        Returns:
+            Whether to coerce this column.
+        """
+        col_schema = self.columns[col_name]
+        if col_schema.coerce is not None:
+            return col_schema.coerce
+        return self.coerce
 
     def resolve_on_failure(self, col_name: str) -> OnFailureBehavior:
         """Resolve effective on_failure for a column.
 
-        Precedence: column explicit > profile default
+        Resolution order:
+        1. Column on_failure if set explicitly.
+        2. Schema on_failure as default.
+        3. Guard: on_failure=null requires nullable=True. Non-nullable columns
+           fall back to raise.
 
         Args:
-            col_name: Name of the column
+            col_name: Name of the column.
 
         Returns:
-            Resolved on_failure behavior
+            Resolved on_failure behavior.
         """
         col_schema = self.columns[col_name]
 
-        if col_schema.on_failure is not None:
-            return col_schema.on_failure
+        behavior = col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
 
-        # Profile-based defaults
-        if self.profile == "strict":
+        # Guard: can't nullify non-nullable columns
+        if behavior == "null" and not col_schema.nullable:
             return "raise"
-        if self.profile == "clean":
-            return "null" if col_schema.nullable else "raise"
-        if self.profile == "audit":
-            return "raise"
-        return "raise"
+
+        return behavior
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SchemaModel:

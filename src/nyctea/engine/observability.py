@@ -138,9 +138,9 @@ class LoggingObserver:
         """Log pipeline start."""
         self.logger.log(
             self.log_level,
-            "Pipeline starting: %d columns, coerce_strategy=%s",
+            "Pipeline starting: %d columns, on_failure=%s",
             len(context.schema.columns),
-            context.coerce_strategy,
+            context.schema.on_failure,
         )
 
     def on_phase_start(self, phase_name: str, context: PipelineContext) -> None:
@@ -187,7 +187,6 @@ class LoggingObserver:
         self.logger.error(
             "Pipeline failed: %s",
             error,
-            exc_info=True,
         )
 
 

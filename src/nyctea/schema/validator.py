@@ -13,6 +13,7 @@ import polars as pl
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.exceptions import PipelineError
 
 if TYPE_CHECKING:
     from nyctea.engine.pipeline import ValidationPipeline
@@ -71,16 +72,17 @@ class SchemaValidator:
         self,
         df: pl.DataFrame | pl.LazyFrame,
         *,
-        coerce_strategy: str = "strict",
         error_report_config: ErrorReportConfig | None = None,
         lazy: bool | None = None,
         **kwargs: Any,
     ) -> ValidationResult:
         """Validate a DataFrame against the schema.
 
+        Failure handling is controlled by ``schema.on_failure`` (default) and
+        per-column ``on_failure`` overrides. See ``SchemaModel.resolve_on_failure``.
+
         Args:
             df: Input DataFrame to validate.
-            coerce_strategy: How to handle coercion failures ("strict" or "null_on_failure").
             error_report_config: Configuration for error reporting.
             lazy: Return LazyFrame (True) or DataFrame (False). If None, uses schema.lazy.
             **kwargs: Additional validation options (reserved for future use).
@@ -89,7 +91,7 @@ class SchemaValidator:
             ValidationResult with validated data, errors, and report.
 
         Raises:
-            ValidationError: If validation fails in strict mode.
+            ValidationError: If validation fails for on_failure=raise columns.
             PipelineError: If pipeline execution fails.
 
         Example:
@@ -109,30 +111,29 @@ class SchemaValidator:
             data=lf,
             schema=self.schema,
             registry=self.registry,
-            coerce_strategy=coerce_strategy,
             error_report_config=error_report_config or ErrorReportConfig(),
         )
 
-        # Execute pipeline
+        # Execute pipeline (fully lazy — no collects inside phases)
         context = self.pipeline.execute(context)
 
-        # Remove row index
-        context.data = context.data.drop("__row_index__")
+        # Single collect at API boundary
+        collected: pl.DataFrame = context.data.collect()  # type: ignore[assignment]
 
-        # Build minimal report (in full implementation, this would be done by ReportGenerationPhase)
-        report = self._build_report(context)
+        # Enforce on_failure=raise for coercion failures
+        self._enforce_coercion_raise(context, collected)
 
-        # Collect if needed
+        # Build report and errors from collected data
+        report = self._build_report(context, collected)
+        errors = self._build_errors(context, collected)
+
+        # Strip internal columns (__row_index__, __check__*, __pre_null__*)
+        internal_cols = [c for c in collected.columns if c.startswith(("__check__", "__pre_null__", "__row_index__"))]
+        clean = collected.drop(internal_cols)
+
+        # Return lazy or eager based on preference
         use_lazy = lazy if lazy is not None else self.schema.lazy
-        if use_lazy:
-            final_data: pl.DataFrame | pl.LazyFrame = context.data
-        else:
-            _collected = context.data.collect()
-            assert isinstance(_collected, pl.DataFrame)
-            final_data = _collected
-
-        # Build minimal errors DataFrame (in full implementation, this would be done by ErrorReportingPhase)
-        errors = self._build_errors(context)
+        final_data: pl.DataFrame | pl.LazyFrame = clean.lazy() if use_lazy else clean
 
         return ValidationResult(
             data=final_data,
@@ -140,73 +141,71 @@ class SchemaValidator:
             report=report,
         )
 
-    def _build_report(self, context: PipelineContext) -> ValidationReport:
-        """Build validation report from context.
-
-        This is a minimal implementation. In the full version, this would be
-        done by ReportGenerationPhase.
+    def _enforce_coercion_raise(self, context: PipelineContext, collected: pl.DataFrame) -> None:
+        """Raise PipelineError if on_failure=raise columns gained nulls from coercion.
 
         Args:
             context: Pipeline context.
+            collected: Collected DataFrame with __pre_null__ mask columns.
 
-        Returns:
-            Validation report.
+        Raises:
+            PipelineError: If any on_failure=raise column has coercion-introduced nulls.
         """
-        # Count total rows
-        _count = context.data.select(pl.len()).collect()
-        assert isinstance(_count, pl.DataFrame)
-        total_rows = _count.item()
+        schema = context.schema
+        for col_name in schema.columns:
+            pre_null_col = f"__pre_null__{col_name}"
+            if pre_null_col not in collected.columns:
+                continue
 
-        # Count rows with check failures
-        failed_rows = 0
-        if context.check_failures:
-            # In full implementation, would track which rows failed
-            failed_rows = sum(context.check_failures.values())
+            behavior = schema.resolve_on_failure(col_name)
+            if behavior != "raise":
+                continue
 
-        valid_rows = max(0, total_rows - failed_rows)
+            # New nulls = currently null AND was not null before cast
+            pre_null = collected.get_column(pre_null_col)
+            post_null = collected.get_column(col_name).is_null()
+            new_nulls = (post_null & ~pre_null).sum()
 
+            if new_nulls > 0:
+                raise PipelineError(
+                    f"Coercion failed for column '{col_name}': "
+                    f"{new_nulls} value(s) could not be cast to "
+                    f"{schema.columns[col_name].dtype}",
+                    phase="coercion",
+                )
+
+    def _build_report(self, context: PipelineContext, collected: pl.DataFrame) -> ValidationReport:
+        """Stub — row counts only. Replaced by ReportGenerationPhase (Step 4)."""
+        total = len(collected)
         return ValidationReport(
-            rows_processed=total_rows,
-            rows_valid=valid_rows,
-            profile_used=context.schema.profile,
-            columns={},  # In full implementation, would populate column stats
+            rows_processed=total,
+            rows_valid=total,
+            on_failure=context.schema.on_failure,
+            columns={},
         )
 
-    def _build_errors(self, context: PipelineContext) -> pl.DataFrame:
-        """Build errors DataFrame from context.
+    def _build_errors(self, context: PipelineContext, collected: pl.DataFrame) -> pl.DataFrame:
+        """Stub — summary from masks. Replaced by ErrorReportingPhase (Step 3)."""
+        empty = pl.DataFrame(
+            {"column": [], "check": [], "failures": []},
+            schema={"column": pl.String, "check": pl.String, "failures": pl.UInt32},
+        )
+        if not context.check_masks:
+            return empty
 
-        This is a minimal implementation. In the full version, this would be
-        done by ErrorReportingPhase.
+        rows: list[dict[str, str | int]] = []
+        for (col_name, check_name), alias in context.check_masks.items():
+            count = int(collected.get_column(alias).not_().sum())
+            if count > 0:
+                rows.append({"column": col_name, "check": check_name, "failures": count})
 
-        Args:
-            context: Pipeline context.
+        if not rows:
+            return empty
 
-        Returns:
-            Errors DataFrame or empty DataFrame if no errors.
-        """
-        if not context.check_failures:
-            # No errors - return empty DataFrame with expected schema
-            return pl.DataFrame(
-                {
-                    "column": [],
-                    "check": [],
-                    "failures": [],
-                }
-            )
-
-        # Build simple error summary
-        errors_data = {
-            "column": [],
-            "check": [],
-            "failures": [],
-        }
-
-        for (col_name, check_name), count in context.check_failures.items():
-            errors_data["column"].append(col_name)
-            errors_data["check"].append(check_name)
-            errors_data["failures"].append(count)
-
-        return pl.DataFrame(errors_data)
+        return pl.DataFrame(
+            rows,
+            schema={"column": pl.String, "check": pl.String, "failures": pl.UInt32},
+        )
 
     def customize_pipeline(self) -> ValidationPipeline:
         """Get a copy of the pipeline for customization.

@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from nyctea.exceptions import ValidatorExecutionError, RegistrationError
+from nyctea.exceptions import RegistrationError
 from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnCheck, ColumnParser
 
@@ -12,6 +12,7 @@ class SimpleParser(ColumnParser):
     """Simple parser for testing."""
 
     def __init__(self):
+        """Initialize with simple metadata."""
         super().__init__(ValidatorMetadata(name="simple"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
@@ -25,6 +26,7 @@ class SimpleCheck(ColumnCheck):
     """Simple check for testing."""
 
     def __init__(self):
+        """Initialize with simple_check metadata."""
         super().__init__(ValidatorMetadata(name="simple_check"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
@@ -63,7 +65,7 @@ def test_column_parser_rejects_non_expr():
     parser = SimpleParser()
 
     with pytest.raises(TypeError, match="expected pl.Expr"):
-        parser("not an expression")  # type: ignore
+        parser("not an expression")  # type: ignore[arg-type]
 
 
 def test_column_check_creation():
@@ -84,6 +86,7 @@ def test_column_check_returns_boolean():
 
 def test_column_plugin_signature_validation():
     """Test that invalid signatures are rejected."""
+
     class BadParser(ColumnParser):
         def __init__(self):
             # This should fail because execute doesn't have 'column' parameter
@@ -100,4 +103,4 @@ def test_column_plugin_signature_validation():
 
     with pytest.raises(RegistrationError, match="must have 'column' as first parameter"):
         parser = BadParser()
-        parser._validate_signature()
+        parser._validate_signature()  # noqa: SLF001

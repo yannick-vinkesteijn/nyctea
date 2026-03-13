@@ -20,7 +20,7 @@ Complete reference for Nyctea's public API.
 
     ---
 
-    `SchemaModel`, `ColumnSchema`, `Parser`, `Check`, `ValidationProfile`.
+    `SchemaModel`, `ColumnSchema`, `Parser`, `Check`, `OnFailureBehavior`.
 
     [:octicons-arrow-right-24: Schema](schema.md)
 

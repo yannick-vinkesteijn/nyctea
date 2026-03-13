@@ -24,43 +24,39 @@ from nyctea.utils import configure_logging
 configure_logging()
 
 # Core API exports
-from nyctea.schema.model import SchemaModel
-from nyctea.plugins.registry import Registry
-from nyctea.plugins.builtins.register import register_builtins, register_titanic_plugins
-from nyctea.engine.validate import ValidationResult, ValidationReport, ErrorReportConfig
+from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import (
     NycteaError,
+    PipelineError,
     ValidationError,
     ValidatorError,
-    PipelineError,
 )
+from nyctea.plugins.builtins.register import register_builtins, register_titanic_plugins
+from nyctea.plugins.registry import Registry
+from nyctea.schema.model import SchemaModel
 
 __all__ = [
-    # Logging
-    "configure_logging",
-    # Schema and validation
-    "SchemaModel",
-    "ValidationResult",
-    "ValidationReport",
     "ErrorReportConfig",
-    # Plugin system
+    "NycteaError",
+    "PipelineError",
     "Registry",
+    "SchemaModel",
+    "ValidationError",
+    "ValidationReport",
+    "ValidationResult",
+    "ValidatorError",
+    "configure_logging",
     "register_builtins",
     "register_titanic_plugins",
-    # Exceptions
-    "NycteaError",
-    "ValidationError",
-    "ValidatorError",
-    "PipelineError",
 ]
 
 
 def __getattr__(name: str) -> object:
     if name == "FunctionRegistry":
         import warnings
+
         warnings.warn(
-            "FunctionRegistry was renamed to Registry in v0.2.0. "
-            "FunctionRegistry will be removed in v0.3.0.",
+            "FunctionRegistry was renamed to Registry in v0.2.0. FunctionRegistry will be removed in v0.3.0.",
             DeprecationWarning,
             stacklevel=2,
         )

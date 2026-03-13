@@ -132,7 +132,7 @@ print(summary)
 ```yaml
 lazy: true
 coerce: false
-profile: strict  # strict, clean, or audit
+on_failure: raise  # raise, null, or ignore
 
 columns:
   name:
@@ -150,6 +150,7 @@ columns:
 
   age:
     dtype: Int64
+    coerce: true          # per-column override (inherits from schema default if omitted)
     parsers:
       - name: to_int
     checks:

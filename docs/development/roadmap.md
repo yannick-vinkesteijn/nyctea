@@ -13,35 +13,32 @@ icon: lucide/map
 
 ### Step 1: Batch `ColumnCheckPhase` collects
 
-**Status:** :material-wrench: Pending — performance bug
+**Status:** :material-check-circle: Done
 
-[`engine/phases.py`](../../src/nyctea/engine/phases.py) calls `.collect()` once per check per column. A schema with 10 columns and 3 checks each causes ~30 collects. It should be 1.
-
-!!! bug "Impact"
-    For large schemas this serialises all Polars parallelism and dramatically slows validation.
-
-**Fix:** build all check expressions into a single `select` and collect once.
+Check expressions are built as boolean mask columns on the LazyFrame. Zero collects in the check phase.
 
 ---
 
-### Step 2: `CoercionPhase`
+### Step 2: `CoercionPhase` + `on_failure` refactor
 
-**Status:** :material-clock-outline: Pending
+**Status:** :material-check-circle: Done
 
-Type casting with `strict` and `null_on_failure` modes. Ported from System A (`engine/validate.py`). Must run after parsing, before checks, so checks operate on typed data.
+Type casting with per-column `on_failure` behavior. Always casts with `strict=False`; pre-null masks track coercion-introduced nulls. The validator enforces `on_failure=raise` columns post-collect.
 
-=== "strict mode"
+Replaced `ValidationProfile` (`strict`/`clean`/`audit`) and `coerce_strategy` parameter with a unified `on_failure` field at schema and column level. See [ADR: on_failure](decisions/adr-on-failure.md).
+
+=== "on_failure: raise (default)"
 
     ```python
-    schema.validate(df, registry, coerce_strategy="strict")
-    # raises on any cast failure
+    schema = SchemaModel.from_dict({"coerce": True, "on_failure": "raise", ...})
+    schema.validate(df, registry)  # raises on any cast failure
     ```
 
-=== "null_on_failure mode"
+=== "on_failure: null"
 
     ```python
-    schema.validate(df, registry, coerce_strategy="null_on_failure")
-    # failed casts become null, validation continues
+    schema = SchemaModel.from_dict({"coerce": True, "on_failure": "null", ...})
+    schema.validate(df, registry)  # failed casts become null
     ```
 
 ---
@@ -78,7 +75,7 @@ Fix after `ErrorReportingPhase` is in place so the report has real data.
 
 **Status:** :material-clock-outline: Depends on Steps 2 + 3
 
-Set failing values to null for columns with `on_failure='null'` (lenient / `clean` profile mode). Depends on coercion and error reporting being done first.
+Set failing values to null for columns with `on_failure='null'`. Depends on coercion and error reporting being done first.
 
 ---
 
@@ -107,13 +104,13 @@ Once all pipeline phases cover System A's features, delete the standalone `valid
 
 Critical paths currently uncovered:
 
-- [ ] Coercion — strict + null-on-failure
-- [ ] Lenient nullification (`on_failure='null'`)
+- [x] Coercion — on_failure raise + null
+- [x] on_failure resolution (schema default, column override, nullable guard)
+- [ ] Lenient nullification (`on_failure='null'` for check failures)
 - [ ] Error reporting modes — summary, rows, cells
 - [ ] Frame-level plugins
 - [ ] Schema loading from YAML
 - [ ] Edge cases — empty DataFrames, missing columns, ambiguous synonyms
-- [ ] Validation profiles — `clean`, `audit`
 - [ ] Pipeline observer notifications
 
 ---
@@ -147,8 +144,8 @@ For a schema with 10 columns and 3 checks each, this reduces from ~68 collects t
 |---|---|
 | `ColumnResolutionPhase` | :material-check-circle: Done |
 | `ColumnParsingPhase` | :material-check-circle: Done |
-| `ColumnCheckPhase` | :material-alert-circle: Partial (collect batching needed) |
-| `CoercionPhase` | :material-clock-outline: Todo |
+| `ColumnCheckPhase` | :material-check-circle: Done |
+| `CoercionPhase` | :material-check-circle: Done |
 | `NullificationPhase` | :material-clock-outline: Todo |
 | `ErrorReportingPhase` | :material-clock-outline: Todo |
 | `FrameParserPhase` | :material-clock-outline: Todo |

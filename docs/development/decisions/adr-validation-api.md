@@ -162,7 +162,7 @@ None of the alternatives above support a dedicated parse layer on the Polars bac
 Nyctea treats parsing and checking as distinct, ordered phases:
 - **ETL pipelines.** Normalise strings, coerce types, then check typed values.
 - **Clean output.** The validated frame is already transformed and ready to use downstream.
-- **Coercion strategies.** `strict` (fail on bad cast) vs `null_on_failure` (null bad values and continue) are explicit options, not flags.
+- **Failure handling.** `on_failure` at schema and column level controls what happens when coercion or checks fail: `raise`, `null`, or `ignore`.
 
 ### 4. Pipeline is composable, not fixed
 
@@ -216,7 +216,6 @@ def validate(
     self,
     df: pl.DataFrame | pl.LazyFrame,
     *,
-    coerce_strategy: str = "strict",
     error_report_config: ErrorReportConfig | None = None,
     lazy: bool | None = None,
 ) -> ValidationResult:
@@ -225,7 +224,7 @@ def validate(
 Key decisions:
 - `df` is positional. It is the only required argument after `self`.
 - `registry` is on `self` (set at construction time), not passed per-call. A validator is bound to a registry; swapping registries means creating a new validator.
-- `coerce_strategy` defaults to `"strict"`. Lenient coercion must be opted into.
+- Failure handling is on the schema (`on_failure` at schema and column level), not a runtime parameter. See [ADR: on_failure](adr-on-failure.md).
 - `error_report_config` controls the shape of the `errors` DataFrame in `ValidationResult`. Defaults to `ErrorReportConfig(mode="summary")`.
 - `lazy` overrides `schema.lazy`. By default the output type matches what the schema declares.
 - All optional arguments are keyword-only (`*`) to prevent positional coupling as the API evolves.

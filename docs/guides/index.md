@@ -37,7 +37,7 @@ Guides for using Nyctea, from first install to custom plugins.
 
 | Topic | Description |
 |-------|-------------|
-| **Schemas** | Columns, dtypes, nullability, synonyms, and validation profiles |
+| **Schemas** | Columns, dtypes, nullability, synonyms, coercion, and failure handling |
 | **Parsers** | Column-level transformations applied before checks |
 | **Checks** | Column-level validation rules (`min_value`, `in_set`, `between`, `unique`) |
 | **Registry** | Registering built-in and custom plugins |

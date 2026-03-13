@@ -5,13 +5,14 @@ import pytest
 from nyctea.exceptions import RegistrationError
 from nyctea.plugins.base import ValidatorMetadata
 from nyctea.plugins.column import ColumnParser
-from nyctea.plugins.registry import Registry, PluginRegistry
+from nyctea.plugins.registry import PluginRegistry, Registry
 
 
 class TestParser(ColumnParser):
     """Test parser."""
 
     def __init__(self, name="test"):
+        """Initialize with test metadata."""
         super().__init__(ValidatorMetadata(name=name, tags=["test"]))
 
     def execute(self, column, **kwargs):
@@ -70,8 +71,8 @@ def test_plugin_registry_collision_detection():
 
 def test_plugin_registry_type_validation():
     """Test that wrong plugin types are rejected."""
-    from nyctea.plugins.frame import FrameParser
     from nyctea.plugins.base import ValidatorMetadata
+    from nyctea.plugins.frame import FrameParser
 
     class TestFrameParser(FrameParser):
         def execute(self, frame, **kwargs):
@@ -115,6 +116,7 @@ def test_plugin_registry_list_all():
 
 def test_plugin_registry_get_by_tag():
     """Test getting plugins by tag."""
+
     class TaggedParser(ColumnParser):
         def __init__(self, name, tags):
             super().__init__(ValidatorMetadata(name=name, tags=tags))

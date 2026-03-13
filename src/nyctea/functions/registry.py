@@ -84,34 +84,40 @@ import polars as pl
 
 registry = FunctionRegistry()
 
+
 # Register a column parser
 @registry.column_parser(name="trim")
 def trim_whitespace(col: pl.Expr) -> pl.Expr:
     return col.str.strip_chars()
+
 
 # Register a column check with parameters
 @registry.column_check(name="in_range")
 def in_range(col: pl.Expr, min_val: float, max_val: float) -> pl.Expr:
     return col.is_between(min_val, max_val)
 
+
 # Register a frame parser
 @registry.frame_parser(name="dedupe")
 def deduplicate(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.unique()
 
+
 # Use in validation
 from nyctea import validate, SchemaModel
 
-schema = SchemaModel.from_dict({
-    "columns": {
-        "age": {
-            "dtype": "Int64",
-            "parsers": [{"name": "trim"}],
-            "checks": [{"name": "in_range", "args": {"min_val": 0, "max_val": 120}}]
-        }
-    },
-    "frame_parsers": [{"name": "dedupe"}]
-})
+schema = SchemaModel.from_dict(
+    {
+        "columns": {
+            "age": {
+                "dtype": "Int64",
+                "parsers": [{"name": "trim"}],
+                "checks": [{"name": "in_range", "args": {"min_val": 0, "max_val": 120}}],
+            }
+        },
+        "frame_parsers": [{"name": "dedupe"}],
+    }
+)
 
 result = validate(df, schema, registry)
 ```
@@ -219,14 +225,10 @@ class SignatureValidator:
 
         return_hint = hints.get("return")
         if return_hint is None:
-            raise RegistryError(
-                f"{kind} '{func.__name__}' must return {expected_return.__name__}"
-            )
+            raise RegistryError(f"{kind} '{func.__name__}' must return {expected_return.__name__}")
         return_hint = SignatureValidator._strip_annotated(return_hint)
         if return_hint is not expected_return:
-            raise RegistryError(
-                f"{kind} '{func.__name__}' must return {expected_return.__name__}"
-            )
+            raise RegistryError(f"{kind} '{func.__name__}' must return {expected_return.__name__}")
 
         for param in parameters[1:]:
             if param.kind in (
@@ -519,11 +521,11 @@ class FunctionRegistry(BaseModel):
 
 
 __all__ = [
-    "FunctionRegistry",
     "ColumnFunctionWrapper",
-    "FrameFunctionWrapper",
-    "DecoratorAdapter",
-    "RegistryError",
     "ColumnPurityError",
+    "DecoratorAdapter",
+    "FrameFunctionWrapper",
     "FrameShapeError",
+    "FunctionRegistry",
+    "RegistryError",
 ]

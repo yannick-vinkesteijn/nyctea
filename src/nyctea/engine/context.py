@@ -30,11 +30,10 @@ class PipelineContext:
         data: The DataFrame/LazyFrame being validated (mutated by phases).
         schema: The schema definition.
         registry: Plugin registry for lookups.
-        coerce_strategy: How to handle type coercion failures.
         error_report_config: Configuration for error reporting detail.
         original_nulls: Null counts before validation (set by NullCountingPhase).
         coercion_failures: Tracking coercion failures per column.
-        check_failures: Tracking check failures per column and check name.
+        check_masks: Maps (column, check) to boolean mask column alias in data.
         nullified_counts: Counts of nullified values per column.
         errors: Error DataFrame (built by ErrorReportingPhase).
         report: Final validation report (built by ReportGenerationPhase).
@@ -45,13 +44,12 @@ class PipelineContext:
     data: pl.LazyFrame
     schema: SchemaModel
     registry: Registry
-    coerce_strategy: str = "strict"  # "strict" or "null_on_failure"
     error_report_config: ErrorReportConfig | None = None
 
     # Tracking state (populated by phases)
     original_nulls: dict[str, int] = field(default_factory=dict)
     coercion_failures: dict[str, int] = field(default_factory=dict)
-    check_failures: dict[tuple[str, str], int] = field(default_factory=dict)  # (col, check) -> count
+    check_masks: dict[tuple[str, str], str] = field(default_factory=dict)  # (col, check) -> mask column alias
     nullified_counts: dict[str, int] = field(default_factory=dict)
 
     # Output (built by phases)

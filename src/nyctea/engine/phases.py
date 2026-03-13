@@ -15,12 +15,14 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
+from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
 
 if TYPE_CHECKING:
     from nyctea.engine.context import PipelineContext
 
 __all__ = [
+    "CoercionPhase",
     "ColumnCheckPhase",
     "ColumnParsingPhase",
     "ColumnResolutionPhase",
@@ -76,8 +78,7 @@ class ColumnResolutionPhase(PipelinePhase):
             if not found:
                 if col_schema.required:
                     raise ValidationError(
-                        f"Required column '{canonical}' is missing. "
-                        f"Looked for: {sorted(candidates)}",
+                        f"Required column '{canonical}' is missing. Looked for: {sorted(candidates)}",
                         column=canonical,
                         phase=self.name,
                     )
@@ -85,8 +86,7 @@ class ColumnResolutionPhase(PipelinePhase):
 
             if len(found) > 1:
                 raise ValidationError(
-                    f"Ambiguous columns for '{canonical}': {found}. "
-                    "Only one canonical/synonym is allowed.",
+                    f"Ambiguous columns for '{canonical}': {found}. Only one canonical/synonym is allowed.",
                     column=canonical,
                     phase=self.name,
                 )
@@ -174,8 +174,7 @@ class ColumnParsingPhase(PipelinePhase):
                     expr = parser(expr, **args)
                 except Exception as e:
                     raise PipelineError(
-                        f"Failed to apply parser '{parser_spec.name}' "
-                        f"to column '{col_name}': {e}",
+                        f"Failed to apply parser '{parser_spec.name}' to column '{col_name}': {e}",
                         phase=self.name,
                     ) from e
 
@@ -197,10 +196,90 @@ class ColumnParsingPhase(PipelinePhase):
         Returns:
             True if no columns have parsers defined.
         """
-        return not any(
-            col_schema.parsers
-            for col_schema in context.schema.columns.values()
+        return not any(col_schema.parsers for col_schema in context.schema.columns.values())
+
+
+class CoercionPhase(PipelinePhase):
+    """Cast columns to their declared dtypes.
+
+    Runs after parsing so parsers operate on raw strings, and before checks
+    so checks operate on typed data. Skipped when ``schema.coerce`` is False.
+
+    Always casts with ``strict=False``. Pre-coercion null masks
+    (``__pre_null__{col}``) are added for every cast column so the validator
+    can detect coercion-introduced nulls at collect time and enforce
+    per-column ``on_failure`` behavior.
+
+    Dependencies: column_resolution
+    """
+
+    def __init__(self) -> None:
+        """Initialize coercion phase."""
+        super().__init__(
+            name="coercion",
+            phase_type=PhaseType.COERCION,
+            dependencies=["column_resolution"],
         )
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        """Cast columns to their schema-declared dtypes.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            Updated context with coerced columns.
+
+        Raises:
+            PipelineError: If dtype is invalid.
+        """
+        schema = context.schema
+        lf = context.data
+
+        current_dtypes = lf.collect_schema()
+        cast_exprs: list[pl.Expr] = []
+
+        for col_name, col_schema in schema.columns.items():
+            if col_name not in current_dtypes:
+                continue
+
+            if not schema.resolve_coerce(col_name):
+                continue
+
+            try:
+                target = _resolve_dtype(col_schema.dtype)
+            except ValueError as e:
+                raise PipelineError(
+                    f"Invalid dtype '{col_schema.dtype}' for column '{col_name}': {e}",
+                    phase=self.name,
+                ) from e
+
+            if current_dtypes[col_name] == target:
+                continue
+
+            cast_exprs.append(pl.col(col_name).cast(target, strict=False).alias(col_name))
+
+        if not cast_exprs:
+            return context
+
+        # Snapshot null state before casting so coercion-introduced nulls
+        # can be detected at collect time.
+        cols_to_cast = [expr.meta.output_name() for expr in cast_exprs]
+        pre_null_exprs = [pl.col(c).is_null().alias(f"__pre_null__{c}") for c in cols_to_cast]
+        context.data = lf.with_columns(pre_null_exprs).with_columns(cast_exprs)
+
+        return context
+
+    def can_skip(self, context: PipelineContext) -> bool:
+        """Skip if no column needs coercion.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            True if no column will be coerced.
+        """
+        return not any(context.schema.resolve_coerce(col_name) for col_name in context.schema.columns)
 
 
 class ColumnCheckPhase(PipelinePhase):
@@ -209,7 +288,7 @@ class ColumnCheckPhase(PipelinePhase):
     This phase applies all column-level checks defined in the schema,
     collecting validation errors for the error report.
 
-    Dependencies: column_parsing (checks run after transformations)
+    Dependencies: coercion (checks run on typed data)
     """
 
     def __init__(self) -> None:
@@ -217,7 +296,7 @@ class ColumnCheckPhase(PipelinePhase):
         super().__init__(
             name="column_checks",
             phase_type=PhaseType.CHECKING,
-            dependencies=["column_parsing"],
+            dependencies=["coercion"],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -236,27 +315,18 @@ class ColumnCheckPhase(PipelinePhase):
         registry = context.registry
         lf = context.data
 
-        # Track check failures
-        check_failures: dict[tuple[str, str], int] = {}
+        # Build boolean mask columns for each check (True = passed)
+        # No collect here — downstream phases use these masks lazily
+        mask_exprs: list[pl.Expr] = []
+        check_masks: dict[tuple[str, str], str] = {}
 
         for col_name, col_schema in schema.columns.items():
-            # Auto-inject non_null check if nullable=False
             checks_to_run = list(col_schema.checks) if col_schema.checks else []
-
-            if not col_schema.nullable:
-                # Add implicit non_null check if not already present
-                has_non_null = any(c.name == "non_null" for c in checks_to_run)
-                if not has_non_null:
-                    # We'll handle nullable checking in a simple way for now
-                    # In the full implementation, this would use a proper Check object
-                    pass
 
             if not checks_to_run:
                 continue
 
-            # Apply each check
             for check_spec in checks_to_run:
-                # Look up check plugin
                 try:
                     check = registry.column_checks.get(check_spec.name)
                 except KeyError as e:
@@ -266,30 +336,23 @@ class ColumnCheckPhase(PipelinePhase):
                         phase=self.name,
                     ) from e
 
-                # Apply check with arguments
                 args = check_spec.args or {}
                 try:
                     check_expr = check(pl.col(col_name), **args)
                 except Exception as e:
                     raise PipelineError(
-                        f"Failed to apply check '{check_spec.name}' "
-                        f"to column '{col_name}': {e}",
+                        f"Failed to apply check '{check_spec.name}' to column '{col_name}': {e}",
                         phase=self.name,
                     ) from e
 
-                # Count failures (values where check returned False)
-                # For now, we'll track this in context but not fail
-                # In full implementation, this would build error DataFrame
-                failure_count_expr = lf.select(
-                    (~check_expr).sum().alias("failures"),
-                )
-                failure_count = failure_count_expr.collect().item()
+                alias = f"__check__{col_name}__{check_spec.name}"
+                mask_exprs.append(check_expr.alias(alias))
+                check_masks[(col_name, check_spec.name)] = alias
 
-                if failure_count > 0:
-                    check_failures[(col_name, check_spec.name)] = failure_count
+        if mask_exprs:
+            context.data = lf.with_columns(mask_exprs)
 
-        # Store check failures in context
-        context.check_failures = check_failures
+        context.check_masks = check_masks
 
         return context
 
@@ -302,7 +365,4 @@ class ColumnCheckPhase(PipelinePhase):
         Returns:
             True if no columns have checks defined.
         """
-        return not any(
-            col_schema.checks or not col_schema.nullable
-            for col_schema in context.schema.columns.values()
-        )
+        return not any(col_schema.checks or not col_schema.nullable for col_schema in context.schema.columns.values())

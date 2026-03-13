@@ -4,13 +4,15 @@ This module provides factory functions for creating validation pipelines
 with common configurations.
 """
 
-
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 from nyctea.engine.phases import (
+    CoercionPhase,
     ColumnCheckPhase,
     ColumnParsingPhase,
     ColumnResolutionPhase,
@@ -51,6 +53,7 @@ def create_minimal_pipeline(
     phases = [
         ColumnResolutionPhase(),
         ColumnParsingPhase(),
+        CoercionPhase(),
         ColumnCheckPhase(),
     ]
 
@@ -76,7 +79,7 @@ def create_standard_pipeline(
         >>> result = pipeline.execute(context)
     """
     # For now, standard = minimal
-    # TODO: Add coercion, error reporting, nullification phases
+    # TODO: Add error reporting, nullification phases  # noqa: FIX002
     return create_minimal_pipeline(observers=observers)
 
 
@@ -107,18 +110,15 @@ def create_pipeline_from_schema(
     phases.append(ColumnResolutionPhase())
 
     # Add parsing phase if any column has parsers
-    has_parsers = any(
-        col_schema.parsers
-        for col_schema in schema.columns.values()
-    )
+    has_parsers = any(col_schema.parsers for col_schema in schema.columns.values())
     if has_parsers:
         phases.append(ColumnParsingPhase())
 
+    # Coercion always present (can_skip handles coerce=False)
+    phases.append(CoercionPhase())
+
     # Add check phase if any column has checks or nullable=False
-    has_checks = any(
-        col_schema.checks or not col_schema.nullable
-        for col_schema in schema.columns.values()
-    )
+    has_checks = any(col_schema.checks or not col_schema.nullable for col_schema in schema.columns.values())
     if has_checks:
         phases.append(ColumnCheckPhase())
 
