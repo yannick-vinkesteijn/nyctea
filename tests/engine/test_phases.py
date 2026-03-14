@@ -359,7 +359,6 @@ class TestNullification:
 
 
 class TestErrorReporting:
-    @pytest.mark.skip(reason="Step 3: ErrorReportingPhase not yet implemented")
     def test_summary_mode_count_columns(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -371,9 +370,11 @@ class TestErrorReporting:
         df = pl.DataFrame({"age": [1, -1, -2]})
         result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="summary"))
         assert "column" in result.errors.columns
+        assert "check" in result.errors.columns
         assert "count" in result.errors.columns
+        assert len(result.errors) == 1
+        assert result.errors["count"].item() == 2
 
-    @pytest.mark.skip(reason="Step 3: ErrorReportingPhase not yet implemented")
     def test_cells_mode_row_index(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -385,6 +386,85 @@ class TestErrorReporting:
         df = pl.DataFrame({"age": [1, -1, -2]})
         result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="cells"))
         assert "row_index" in result.errors.columns
+        assert "value" in result.errors.columns
+        assert len(result.errors) == 2
+        assert result.errors["row_index"].to_list() == [1, 2]
+
+    def test_rows_mode_row_indices(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [1, -1, 5, -3]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="rows"))
+        assert "row_indices" in result.errors.columns
+        assert "count" in result.errors.columns
+        assert result.errors["count"].item() == 2
+        assert result.errors["row_indices"].to_list() == [[1, 3]]
+
+    def test_limit_caps_error_rows(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [-1, -2, -3, -4, -5]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="cells", limit=2))
+        assert len(result.errors) == 2
+
+    def test_limit_caps_rows_mode(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [-1, -2, -3, -4, -5]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="rows", limit=3))
+        assert len(result.errors["row_indices"].to_list()[0]) == 3
+        # count still reflects total failures
+        assert result.errors["count"].item() == 5
+
+    def test_empty_errors_when_all_pass(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [1, 2, 3]})
+        for mode in ("summary", "rows", "cells"):
+            result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode=mode))
+            assert len(result.errors) == 0
+
+    def test_multiple_checks_same_column(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [
+                            {"name": "min_value", "args": {"min": 0}},
+                            {"name": "between", "args": {"min": 0, "max": 100}},
+                        ],
+                    }
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [-1, 50, 200]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="summary"))
+        assert len(result.errors) == 2
+        checks = result.errors["check"].to_list()
+        assert "min_value" in checks
+        assert "between" in checks
 
 
 # ---------------------------------------------------------------------------

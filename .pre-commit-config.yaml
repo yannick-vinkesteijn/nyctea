@@ -25,8 +25,6 @@ repos:
     rev: 0.15.4
     hooks:
       - id: uv-secure
-        # Note: Shows vulnerability descriptions and aliases for better context
-        # TODO: Add --min-age-days once available (to reject packages <7 days old)
         args: [--aliases, --desc]
   - repo: local
     hooks:
@@ -49,6 +47,19 @@ repos:
     rev: v0.24.1
     hooks:
       - id: validate-pyproject
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat-mkdocs==5.0.0
+          - mdformat-footnote==0.1.2
+        files: "README\\.md"
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.47.0
+    hooks:
+      - id: markdownlint-fix
+        files: "README\\.md"
   - repo: https://github.com/crate-ci/typos
     rev: v1
     hooks:

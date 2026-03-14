@@ -141,6 +141,7 @@ FrameCheckFunction = FrameFunction
 
 InFunc = TypeVar("InFunc", bound=Callable[..., Any])
 OutFunc = TypeVar("OutFunc", bound=Callable[..., Any])
+F = TypeVar("F")
 
 
 class RegistryError(ValueError):

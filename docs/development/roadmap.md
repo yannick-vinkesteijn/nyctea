@@ -5,7 +5,10 @@ icon: lucide/map
 # Roadmap
 
 !!! info "v0.2.0 status"
-    The OOP plugin system and pipeline scaffolding are in place. Three phases are working (`ColumnResolutionPhase`, `ColumnParsingPhase`, `ColumnCheckPhase`). The remaining work below completes the pipeline and stabilises the public API.
+
+    The OOP plugin system and pipeline scaffolding are in place.
+    Three phases are working (`ColumnResolutionPhase`, `ColumnParsingPhase`, `ColumnCheckPhase`).
+    The remaining work below completes the pipeline and stabilises the public API.
 
 ---
 
@@ -23,9 +26,13 @@ Check expressions are built as boolean mask columns on the LazyFrame. Zero colle
 
 **Status:** :material-check-circle: Done
 
-Type casting with per-column `on_failure` behavior. Always casts with `strict=False`; pre-null masks track coercion-introduced nulls. The validator enforces `on_failure=raise` columns post-collect.
+Type casting with per-column `on_failure` behavior.
+Always casts with `strict=False`; pre-null masks track coercion-introduced nulls.
+The validator enforces `on_failure=raise` columns post-collect.
 
-Replaced `ValidationProfile` (`strict`/`clean`/`audit`) and `coerce_strategy` parameter with a unified `on_failure` field at schema and column level. See [ADR: on_failure](decisions/adr-on-failure.md).
+Replaced `ValidationProfile` (`strict`/`clean`/`audit`) and `coerce_strategy` parameter
+with a unified `on_failure` field at schema and column level.
+See [ADR: on_failure](decisions/adr-on-failure.md).
 
 === "on_failure: raise (default)"
 
@@ -45,18 +52,19 @@ Replaced `ValidationProfile` (`strict`/`clean`/`audit`) and `coerce_strategy` pa
 
 ### Step 3: `ErrorReportingPhase`
 
-**Status:** :material-clock-outline: Pending
+**Status:** :material-check-circle: Done
 
-Replaces the `_build_errors()` stub in `schema/validator.py`. Produces row-level and cell-level error records in all three modes.
+`_build_errors()` in `schema/validator.py` supports all three error reporting modes.
+Uses targeted collects of only the columns needed for error reporting.
+The data itself stays fully lazy.
 
-!!! warning "Currently broken"
-    `_build_errors()` returns an empty DataFrame regardless of failures. Nothing in the current pipeline surfaces per-row error detail.
+| Mode      | Output                                      |
+| --------- | ------------------------------------------- |
+| `summary` | column · check · count                      |
+| `rows`    | column · check · count · row_indices (list) |
+| `cells`   | column · check · row_index · value          |
 
-| Mode | Output |
-|------|--------|
-| `summary` | column · check · count |
-| `rows` | + list of failing row indices |
-| `cells` | + actual failing values per row |
+Optional `limit` caps the number of error entries per column+check.
 
 ---
 
@@ -65,7 +73,10 @@ Replaces the `_build_errors()` stub in `schema/validator.py`. Produces row-level
 **Status:** :material-clock-outline: Depends on Step 3
 
 !!! warning "Currently broken"
-    `_build_report()` computes `valid_rows` by summing failure counts (wrong: counts duplicates across checks on the same row). The `columns` dict is always empty.
+
+    `_build_report()` computes `valid_rows` by summing failure counts
+    (wrong: counts duplicates across checks on the same row).
+    The `columns` dict is always empty.
 
 Fix after `ErrorReportingPhase` is in place so the report has real data.
 
@@ -91,10 +102,13 @@ Frame-level plugin execution. Required to complete the plugin hierarchy and unbl
 
 **Status:** :material-clock-outline: Depends on Steps 1–6
 
-Once all pipeline phases cover System A's features, delete the standalone `validate()` function. Until then, keep it as the reference implementation.
+Once all pipeline phases cover System A's features, delete the standalone `validate()` function.
+Until then, keep it as the reference implementation.
 
 !!! tip "Why keep it?"
-    System A is fully working and serves as the ground-truth oracle. Each new phase should produce identical output to its System A counterpart before System A is removed.
+
+    System A is fully working and serves as the ground-truth oracle.
+    Each new phase should produce identical output to its System A counterpart before System A is removed.
 
 ---
 
@@ -107,7 +121,7 @@ Critical paths currently uncovered:
 - [x] Coercion — on_failure raise + null
 - [x] on_failure resolution (schema default, column override, nullable guard)
 - [ ] Lenient nullification (`on_failure='null'` for check failures)
-- [ ] Error reporting modes — summary, rows, cells
+- [x] Error reporting modes — summary, rows, cells
 - [ ] Frame-level plugins
 - [ ] Schema loading from YAML
 - [ ] Edge cases — empty DataFrames, missing columns, ambiguous synonyms
@@ -127,11 +141,11 @@ PR from `v0.2.0` to `main` once the full backlog is complete.
 
 The biggest wins come from reducing premature `.collect()` calls that break Polars lazy evaluation.
 
-| Optimisation | Reduction |
-|---|---|
-| Batch null counting | Per-column loops → 1 `select` |
-| Batch check failure counting | N×M collects → 1 collect |
-| Defer row counting | After every phase → end only |
+| Optimisation                  | Reduction                               |
+| ----------------------------- | --------------------------------------- |
+| Batch null counting           | Per-column loops → 1 `select`           |
+| Batch check failure counting  | N×M collects → 1 collect                |
+| Defer row counting            | After every phase → end only            |
 | Frame plugin shape validation | Always → only when `preserve_rows=True` |
 
 For a schema with 10 columns and 3 checks each, this reduces from ~68 collects to ~5.
@@ -140,16 +154,16 @@ For a schema with 10 columns and 3 checks each, this reduces from ~68 collects t
 
 ## Background: planned pipeline phases
 
-| Phase | Status |
-|---|---|
-| `ColumnResolutionPhase` | :material-check-circle: Done |
-| `ColumnParsingPhase` | :material-check-circle: Done |
-| `ColumnCheckPhase` | :material-check-circle: Done |
-| `CoercionPhase` | :material-check-circle: Done |
-| `NullificationPhase` | :material-clock-outline: Todo |
-| `ErrorReportingPhase` | :material-clock-outline: Todo |
-| `FrameParserPhase` | :material-clock-outline: Todo |
-| `FrameCheckPhase` | :material-clock-outline: Todo |
+| Phase                   | Status                        |
+| ----------------------- | ----------------------------- |
+| `ColumnResolutionPhase` | :material-check-circle: Done  |
+| `ColumnParsingPhase`    | :material-check-circle: Done  |
+| `ColumnCheckPhase`      | :material-check-circle: Done  |
+| `CoercionPhase`         | :material-check-circle: Done  |
+| `NullificationPhase`    | :material-clock-outline: Todo |
+| `ErrorReportingPhase`   | :material-check-circle: Done  |
+| `FrameParserPhase`      | :material-clock-outline: Todo |
+| `FrameCheckPhase`       | :material-clock-outline: Todo |
 
 ---
 

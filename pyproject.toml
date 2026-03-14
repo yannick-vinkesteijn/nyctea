@@ -3,7 +3,7 @@ name = "nyctea"
 version = "0.2.0"
 description = "Polars-based data validation library with an extensible OOP plugin architecture"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Yannick Vinkesteijn" }
@@ -16,7 +16,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -70,7 +69,7 @@ docs = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 exclude = [
     "examples/",
     "docs/",
@@ -210,7 +209,7 @@ exclude = [
 ]
 
 [tool.ty.environment]
-python-version = "3.10"
+python-version = "3.11"
 
 [tool.ty.rules]
 unused-ignore-comment = "warn"
