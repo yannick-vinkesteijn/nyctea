@@ -1,1 +1,0 @@
-"""Patient project example package."""

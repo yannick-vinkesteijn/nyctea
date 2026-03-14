@@ -1,11 +1,11 @@
-# Function Registry
+# Plugin Registry
 
-The Function Registry is the heart of Nyctea's extensibility. It allows you to register custom parsers and validation
+The Registry is the heart of Nyctea's extensibility. It allows you to register custom parsers and validation
 checks that are used during the validation pipeline.
 
 ## Overview
 
-The `FunctionRegistry` class manages four types of functions:
+The `Registry` class manages four types of validators:
 
 | Function Type     | Purpose                 | Input          | Output           | Row Count Preserved |
 | ----------------- | ----------------------- | -------------- | ---------------- | ------------------- |
@@ -17,9 +17,9 @@ The `FunctionRegistry` class manages four types of functions:
 ## Creating a Registry
 
 ```python
-from nyctea.functions import FunctionRegistry
+from nyctea import Registry
 
-registry = FunctionRegistry()
+registry = Registry()
 ```
 
 ## Column Parsers
@@ -283,8 +283,8 @@ def bad_func(col: pl.Expr) -> pl.Expr:
 You can register the same function in multiple registries:
 
 ```python
-registry1 = FunctionRegistry()
-registry2 = FunctionRegistry()
+registry1 = Registry()
+registry2 = Registry()
 
 def positive(col: pl.Expr) -> pl.Expr:
     return col.gt(0)

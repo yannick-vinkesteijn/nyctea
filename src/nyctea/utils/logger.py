@@ -2,7 +2,6 @@
 
 import logging
 import os
-from typing import Optional
 
 DEFAULT_LEVEL = "INFO"
 LOG_LEVEL_ENV = "NYCTEA_LOG_LEVEL"
@@ -46,4 +45,4 @@ def get_logger(name: str | None = None) -> logging.Logger:
     return logging.getLogger(qualified_name)
 
 
-__all__ = ["configure_logging", "get_logger", "DEFAULT_LEVEL", "LOG_LEVEL_ENV"]
+__all__ = ["DEFAULT_LEVEL", "LOG_LEVEL_ENV", "configure_logging", "get_logger"]

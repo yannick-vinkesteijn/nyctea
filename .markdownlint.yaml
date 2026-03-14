@@ -1,24 +1,26 @@
 # Markdownlint configuration
 # https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.yaml
 
-# MD013/line-length - Line length
+# MD013/line-length
 MD013:
-  # Number of characters
   line_length: 120
-  # Number of characters for headings
   heading_line_length: 120
-  # Number of characters for code blocks
   code_block_line_length: 120
-  # Include code blocks
-  code_blocks: true
-  # Include tables
-  tables: true
-  # Include headings
+  code_blocks: false
+  tables: false
   headings: true
-  # Strict length checking
   strict: false
-  # Stern length checking
   stern: false
 
-# MD040/fenced-code-language - Fenced code blocks should have a language specified
-MD040: true
+# Allow HTML needed by MkDocs Material (grids, admonitions)
+MD033:
+  allowed_elements:
+    - div
+    - img
+    - br
+
+# MkDocs files use YAML frontmatter before the first heading
+MD041: false
+
+# MkDocs admonitions and tabs use fenced blocks without a language
+MD040: false

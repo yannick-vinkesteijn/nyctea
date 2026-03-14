@@ -1,123 +1,176 @@
-# Nyctea Documentation
+---
+icon: lucide/home
+---
 
-Polars-optimized data validation library with Pydantic schemas based on packages like Pandera, Patito and Dataframely.
+<div class="hero" markdown>
+<div align="center" markdown>
 
-## Overview
+![Nyctea](assets/logo-nyctea.png){ width="110" }
 
-Nyctea provides a flexible, observable validation framework for Polars DataFrames with:
+# Nyctea
 
-- **Flexible validation profiles** - Switch between strict validation and lenient sanitization
-- **Observable outcomes** - Comprehensive validation reports track what was fixed, what failed, and what passed
-- **Two orthogonal controls** - Separate `nullable` (data quality) from `on_failure` (processing behavior)
-- **Auto-enforced nullability** - `nullable=False` is automatically enforced
-- **Predictable pipeline** - Fixed order ensures checks run on final dtypes
+**Polars-native data validation with a composable plugin pipeline.**
 
-## Quick Links
+[Get started :octicons-arrow-right-24:](guides/quickstart.md){ .md-button .md-button--primary }
+[View on GitHub :octicons-mark-github-16:](https://github.com/yourusername/nyctea){ .md-button }
 
-- [Installation](#installation)
-- [Quick Start](guides/quickstart.md)
-- [API Reference](api/index.md)
-- [User Guides](guides/index.md)
-- [Examples](guides/examples.md)
+</div>
+</div>
 
-## Installation
+---
 
-```bash
-pip install nyctea
-```
+=== ":material-package: uv"
 
-Or with uv:
+    ```bash
+    uv add nyctea
+    ```
 
-```bash
-uv add nyctea
-```
+=== ":material-language-python: pip"
 
-## Quick Example
+    ```bash
+    pip install nyctea
+    ```
+
+---
+
+## Features
+
+<div class="grid cards" markdown>
+
+-   :material-transit-connection-variant:{ .lg .middle } **Composable pipeline**
+
+    ---
+
+    Add, remove, or reorder validation phases. Inject custom logic anywhere without forking the library.
+
+-   :material-puzzle-outline:{ .lg .middle } **Plugin registry**
+
+    ---
+
+    Register parsers and checks by name. Share a `Registry` across many schemas.
+
+-   :material-lightning-bolt-outline:{ .lg .middle } **Lazy by default**
+
+    ---
+
+    All phases run on `LazyFrame`. Designed for datasets larger than RAM.
+
+-   :material-file-code-outline:{ .lg .middle } **Schema as code or YAML**
+
+    ---
+
+    Define schemas in Python dicts, YAML, or JSON. Load from file or build programmatically.
+
+-   :material-filter-outline:{ .lg .middle } **Parse then validate**
+
+    ---
+
+    Transform columns before checking. The output frame is already clean and typed.
+
+-   :material-alert-circle-outline:{ .lg .middle } **Structured errors**
+
+    ---
+
+    Three reporting modes: summary counts, row indices, or cell values with `ErrorReportConfig`.
+
+</div>
+
+---
+
+## Quick example
 
 ```python
+from nyctea import SchemaModel, Registry, register_builtins
 import polars as pl
-from nyctea import validate, SchemaModel
-from nyctea.functions import FunctionRegistry
 
-# Define schema
 schema = SchemaModel.from_dict({
     "columns": {
-        "age": {
+        "age":  {
             "dtype": "Int64",
-            "nullable": False,  # Auto-enforced!
-            "checks": [{"name": "positive"}]
+            "nullable": False,
+            "checks": [{"name": "min_value", "args": {"min": 0}}],
         },
         "name": {
             "dtype": "Utf8",
-            "nullable": False
-        }
+            "nullable": False,
+            "parsers": [{"name": "strip"}, {"name": "lower"}],
+        },
     }
 })
 
-# Create function registry
-registry = FunctionRegistry()
+registry = Registry()
+register_builtins(registry)
 
-@registry.column_check(name="positive")
-def positive(col: pl.Expr) -> pl.Expr:
-    return col.gt(0)
+df = pl.read_csv("data.csv")
+result = schema.validate(df, registry)
 
-# Validate data
-df = pl.DataFrame({
-    "age": [25, -5, 30],
-    "name": ["Alice", "Bob", None]
-})
-
-result = validate(df, schema, registry)
-
-# Check results
-print(result.errors)  # Shows validation failures
-print(result.report.summary())  # Human-readable summary
+print(result.report.summary())  # (1)!
+result.errors                   # (2)!
 ```
 
-## Core Concepts
+1. Human-readable summary: rows processed, rows valid, per-column stats.
+2. Structured `DataFrame` with column, check, and failure count per row.
 
-### Validation Pipeline
+---
 
-Nyctea uses a fixed, predictable pipeline order:
+## Browse the docs
 
-1. **Column resolution** - Map synonyms to canonical names
-1. **Count original nulls** - Track initial data quality
-1. **Frame parsers** - DataFrame-level transformations
-1. **Column parsers** - String transformations per column
-1. **Coercion** - Type casting (before checks!)
-1. **Frame checks** - DataFrame-level validations
-1. **Column checks** - Column-level validations
-1. **Error reporting** - Capture all failures
-1. **Nullification** - Apply lenient behavior where configured
-1. **Final checks** - Safety assertions
-1. **Report generation** - Build comprehensive validation report
+<div class="grid cards" markdown>
 
-### Validation Profiles
+-   :material-book-open-variant:{ .lg .middle } **User Guides**
 
-Three built-in profiles for common use cases:
+    ---
 
-- **strict** (default) - All failures raise errors
-- **clean** - Nullify failures for nullable columns, raise for non-nullable
-- **audit** - Like strict, but with enhanced reporting
+    Get up and running. Learn schemas, parsers, checks, and the registry.
 
-### Column-Level Control
+    [:octicons-arrow-right-24: Guides](guides/index.md)
 
-Override profile defaults per-column:
+-   :material-code-braces:{ .lg .middle } **API Reference**
 
-```yaml
-profile: strict  # Default is strict
-columns:
-  age:
-    dtype: Int64
-    nullable: true
-    on_failure: null  # Override: lenient for this column only
-    checks:
-      - name: positive
-```
+    ---
 
-## Next Steps
+    Full reference for `SchemaModel`, `Registry`, `ValidationResult`, and more.
 
-- Read the [Quick Start Guide](guides/quickstart.md)
-- Explore the [API Reference](api/index.md)
-- Check out [Examples](guides/examples.md)
-- Learn about [Function Registries](guides/registry.md)
+    [:octicons-arrow-right-24: API](api/index.md)
+
+-   :material-source-branch:{ .lg .middle } **Development**
+
+    ---
+
+    Architecture decisions, roadmap, and breaking change notes.
+
+    [:octicons-arrow-right-24: Development](development/index.md)
+
+-   :material-map-outline:{ .lg .middle } **Roadmap**
+
+    ---
+
+    What's planned for v0.2.0: pipeline phases, test coverage, and the path to main.
+
+    [:octicons-arrow-right-24: Roadmap](development/roadmap.md)
+
+</div>
+
+---
+
+## Why Nyctea?
+
+Verified against Pandera 0.29.0 · Patito 0.8.6 · Dataframely 2.7.0 · Great Expectations 1.15.0.
+
+|  | Nyctea | Pandera 0.29 | Patito 0.8.6 | Dataframely 2.7 |
+|--|:------:|:-----------:|:-----------:|:--------------:|
+| Polars-native | :material-check: | Partial (multi-backend) | :material-check: | :material-check: (Polars-only) |
+| LazyFrame accepted | :material-check: | Partial¹ | Partial | :material-check: (`eager=False`) |
+| True out-of-core / streaming | :material-check: | :material-close: | :material-close: | :material-close: (deferred²) |
+| Plugin registry (Polars) | :material-check: | :material-close: (pandas only) | :material-close: | :material-close: |
+| Composable pipeline phases | :material-check: | :material-close: | :material-close: | :material-close: |
+| Parsers on Polars backend | :material-check: | :material-close: (pandas only) | :material-close: | :material-close: |
+
+!!! note "Footnotes"
+    ¹ Pandera `LazyFrame` requires `PANDERA_VALIDATION_DEPTH=SCHEMA_AND_DATA` for full data validation, which forces `collect()`. "Lazy validation" in Pandera means deferred error collection, not lazy execution.
+
+    ² Dataframely `eager=False` defers validation to `collect()` time. Data must still fit in memory.
+
+    Great Expectations 1.15 has no Polars support. The community request was closed as "not planned" in August 2024.
+
+[Full comparison and citations :octicons-arrow-right-24:](development/adr-validation-api.md){ .md-button }

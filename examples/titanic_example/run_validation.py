@@ -18,10 +18,13 @@ from examples.titanic_example.functions import registry
 
 
 def main() -> None:
-    schema_path = project_root / "examples/titanic_example/schema.yaml"
-    data_path = project_root / "examples/titanic_example/titanic_sample.csv"
-    output_data = project_root / "examples/titanic_example/validated.parquet"
-    output_errors = project_root / "examples/titanic_example/errors.parquet"
+    example_dir = project_root / "examples/titanic_example"
+    schema_path = example_dir / "schema.yaml"
+    data_path = example_dir / "titanic_sample.csv"
+    output_dir = example_dir / "data"
+    output_dir.mkdir(exist_ok=True)
+    output_data = output_dir / "validated.parquet"
+    output_errors = output_dir / "errors.parquet"
 
     schema = SchemaModel.from_yaml_file(schema_path)
     lf = read_csv(data_path, schema, lazy=True, typed=False)

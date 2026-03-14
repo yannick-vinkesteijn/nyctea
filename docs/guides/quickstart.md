@@ -20,14 +20,17 @@ Let's validate a simple DataFrame:
 
 ```python
 import polars as pl
-from nyctea import validate, SchemaModel
-from nyctea.functions import FunctionRegistry
+from nyctea import SchemaModel, Registry, register_builtins
 
-# 1. Create a function registry
-registry = FunctionRegistry()
+# 1. Create a plugin registry
+registry = Registry()
+register_builtins(registry)
 
-# 2. Register a validation check
-@registry.column_check(name="positive")
+# 2. Register a custom validation check (using ValidatorDecorator)
+from nyctea.plugins.decorators import ValidatorDecorator
+decorators = ValidatorDecorator(registry)
+
+@decorators.column_check(name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are positive."""
     return col.gt(0)
@@ -54,11 +57,11 @@ df = pl.DataFrame({
 })
 
 # 5. Validate!
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 
 # 6. Check results
 print(result.report.summary())
-# Validation Report (Profile: strict)
+# Validation Report (on_failure: raise)
 # Rows: 2/4 valid (50.0%)
 #
 # Column Issues:
@@ -93,7 +96,7 @@ The report provides high-level statistics:
 ```python
 result.report.rows_processed  # Total rows: 4
 result.report.rows_valid      # Valid rows: 2
-result.report.profile_used    # "strict"
+result.report.on_failure      # "raise"
 ```
 
 Per-column statistics:
@@ -128,34 +131,52 @@ columns:
 
 ```python
 schema = SchemaModel.from_yaml_file("schema.yaml")
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 ```
 
 ## Lenient Mode
 
-Want to clean data instead of failing on errors?
+Want to clean data instead of failing on errors? Set `on_failure: "null"` at the schema level. Columns with `nullable: true` will have failing values set to null instead of raising.
 
 ```python
 schema = SchemaModel.from_dict({
-    "profile": "clean",  # Use lenient mode
+    "on_failure": "null",
     "columns": {
         "age": {
             "dtype": "Int64",
-            "nullable": True,  # Required for lenient mode
+            "nullable": True,
             "checks": [{"name": "positive"}]
         }
     }
 })
 
-result = validate(df, schema, registry)
+result = schema.validate(df, registry)
 # Negative ages are set to null instead of failing
 print(result.data["age"])
 # [25, null, 30, null]
 ```
 
+Both `on_failure` and `coerce` support per-column overrides. This lets you mix strict and lenient behavior:
+
+```python
+schema = SchemaModel.from_dict({
+    "on_failure": "null",
+    "columns": {
+        "patient_id": {
+            "dtype": "Utf8",
+            "nullable": False,
+            "on_failure": "raise",  # must be clean
+        },
+        "age": {
+            "dtype": "Int64",
+            "nullable": True,  # inherits on_failure: null from schema
+        },
+    }
+})
+```
+
 ## Next Steps
 
-- Learn about [validation profiles](profiles.md)
 - Understand the [validation pipeline](pipeline.md)
 - Write [custom functions](custom-functions.md)
 - Explore [examples](examples.md)

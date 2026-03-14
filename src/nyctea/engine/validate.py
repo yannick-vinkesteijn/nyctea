@@ -35,11 +35,7 @@ from nyctea.engine import validate, ErrorReportConfig
 from nyctea.schema.model import SchemaModel
 from nyctea.functions import FunctionRegistry
 
-schema = SchemaModel.from_dict({
-    "columns": {
-        "age": {"dtype": "Int64", "nullable": False}
-    }
-})
+schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
 registry = FunctionRegistry()
 
 result = validate(df, schema, registry)
@@ -47,15 +43,14 @@ print(result.report.summary())
 ```
 """
 
-
 from dataclasses import dataclass
-from typing import Literal, Tuple
+from typing import Literal
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from nyctea.functions.registry import FunctionRegistry
-from nyctea.schema.model import SchemaModel, ValidationProfile
+from nyctea.schema.model import OnFailureBehavior, SchemaModel
 
 
 class SchemaResolutionError(ValueError):
@@ -109,14 +104,14 @@ class ValidationReport(BaseModel):
 
     rows_processed: int
     rows_valid: int
-    profile_used: ValidationProfile
+    on_failure: OnFailureBehavior
     columns: dict[str, ColumnValidationStats] = Field(default_factory=dict)
 
     def summary(self) -> str:
         """Human-readable summary."""
         lines = [
-            f"Validation Report (Profile: {self.profile_used})",
-            f"Rows: {self.rows_valid}/{self.rows_processed} valid ({self.rows_valid/self.rows_processed*100:.1f}%)",
+            f"Validation Report (on_failure: {self.on_failure})",
+            f"Rows: {self.rows_valid}/{self.rows_processed} valid ({self.rows_valid / self.rows_processed * 100:.1f}%)",
             "",
             "Column Issues:",
         ]
@@ -184,10 +179,7 @@ def resolve_column_names(schema: SchemaModel, df: pl.DataFrame | pl.LazyFrame) -
     return df.rename(mapping)
 
 
-def _count_original_nulls(
-    lf: pl.LazyFrame,
-    schema: SchemaModel
-) -> dict[str, int]:
+def _count_original_nulls(lf: pl.LazyFrame, schema: SchemaModel) -> dict[str, int]:
     """Count nulls in original data before validation.
 
     Args:
@@ -197,19 +189,13 @@ def _count_original_nulls(
     Returns:
         Dictionary mapping column names to original null counts
     """
-    count_exprs = [
-        pl.col(col_name).is_null().sum().alias(col_name)
-        for col_name in schema.columns.keys()
-    ]
+    count_exprs = [pl.col(col_name).is_null().sum().alias(col_name) for col_name in schema.columns.keys()]
 
     if not count_exprs:
         return {}
 
     counts_df = lf.select(count_exprs).collect()
-    return {
-        col_name: int(counts_df[col_name].item())
-        for col_name in schema.columns.keys()
-    }
+    return {col_name: int(counts_df[col_name].item()) for col_name in schema.columns.keys()}
 
 
 def _apply_frame_parsers(df: pl.LazyFrame, schema: SchemaModel, registry: FunctionRegistry) -> pl.LazyFrame:
@@ -347,16 +333,20 @@ def _build_error_report(
         # Return empty DataFrame with appropriate schema
         if config.mode == "summary":
             return pl.DataFrame({"column": [], "check": [], "count": pl.Series([], dtype=pl.UInt32)})
-        elif config.mode == "rows":
-            return pl.DataFrame({
-                "column": [], "check": [], "count": pl.Series([], dtype=pl.UInt32),
-                "row_indices": pl.Series([], dtype=pl.List(pl.UInt32))
-            })
-        else:  # cells
-            cols = {"column": [], "check": [], "row_index": pl.Series([], dtype=pl.UInt32)}
-            if config.include_values:
-                cols["value"] = []
-            return pl.DataFrame(cols)
+        if config.mode == "rows":
+            return pl.DataFrame(
+                {
+                    "column": [],
+                    "check": [],
+                    "count": pl.Series([], dtype=pl.UInt32),
+                    "row_indices": pl.Series([], dtype=pl.List(pl.UInt32)),
+                }
+            )
+        # cells
+        cols = {"column": [], "check": [], "row_index": pl.Series([], dtype=pl.UInt32)}
+        if config.include_values:
+            cols["value"] = []
+        return pl.DataFrame(cols)
 
     # Collect check results
     error_table = lf.select([pl.col("__row_index__").alias("row_index"), *fail_exprs]).collect()
@@ -379,33 +369,29 @@ def _build_error_report(
         # Return empty with proper schema
         if config.mode == "summary":
             return pl.DataFrame({"column": [], "check": [], "count": pl.Series([], dtype=pl.UInt32)})
-        elif config.mode == "rows":
-            return pl.DataFrame({
-                "column": [], "check": [], "count": pl.Series([], dtype=pl.UInt32),
-                "row_indices": pl.Series([], dtype=pl.List(pl.UInt32))
-            })
-        else:
-            cols = {"column": [], "check": [], "row_index": pl.Series([], dtype=pl.UInt32)}
-            if config.include_values:
-                cols["value"] = []
-            return pl.DataFrame(cols)
+        if config.mode == "rows":
+            return pl.DataFrame(
+                {
+                    "column": [],
+                    "check": [],
+                    "count": pl.Series([], dtype=pl.UInt32),
+                    "row_indices": pl.Series([], dtype=pl.List(pl.UInt32)),
+                }
+            )
+        cols = {"column": [], "check": [], "row_index": pl.Series([], dtype=pl.UInt32)}
+        if config.include_values:
+            cols["value"] = []
+        return pl.DataFrame(cols)
 
     # Mode: summary - just counts
     if config.mode == "summary":
-        return (
-            failures.group_by("column", "check")
-            .agg(pl.len().alias("count"))
-            .sort(["column", "check"])
-        )
+        return failures.group_by("column", "check").agg(pl.len().alias("count")).sort(["column", "check"])
 
     # Mode: rows - counts + list of row indices
-    elif config.mode == "rows":
+    if config.mode == "rows":
         grouped = (
             failures.group_by("column", "check")
-            .agg([
-                pl.len().alias("count"),
-                pl.col("row_index").sort().alias("row_indices")
-            ])
+            .agg([pl.len().alias("count"), pl.col("row_index").sort().alias("row_indices")])
             .sort(["column", "check"])
         )
 
@@ -416,51 +402,43 @@ def _build_error_report(
                 pl.when(pl.col("count") > config.limit)
                 .then(pl.lit(config.limit))
                 .otherwise(pl.col("count"))
-                .alias("count")
+                .alias("count"),
             )
 
         return grouped
 
     # Mode: cells - individual rows with optional values
-    else:  # cells
-        # Apply limit per column+check if specified
-        if config.limit is not None:
-            failures = (
-                failures.with_columns(
-                    pl.col("row_index")
-                    .rank("dense")
-                    .over(["column", "check"])
-                    .alias("_rank")
-                )
-                .filter(pl.col("_rank") <= config.limit)
-                .drop("_rank")
-            )
+    # cells
+    # Apply limit per column+check if specified
+    if config.limit is not None:
+        failures = (
+            failures.with_columns(pl.col("row_index").rank("dense").over(["column", "check"]).alias("_rank"))
+            .filter(pl.col("_rank") <= config.limit)
+            .drop("_rank")
+        )
 
-        # Add actual values if requested
-        if config.include_values:
-            # Collect original data with row indices
-            original_with_idx = original_df.select([
-                pl.col("__row_index__").alias("row_index"),
-                pl.all().exclude("__row_index__")
-            ]).collect()
+    # Add actual values if requested
+    if config.include_values:
+        # Collect original data with row indices
+        original_with_idx = original_df.select(
+            [pl.col("__row_index__").alias("row_index"), pl.all().exclude("__row_index__")]
+        ).collect()
 
-            # For each unique column, join to get values
-            result_parts = []
-            for col_name in failures["column"].unique().to_list():
-                col_failures = failures.filter(pl.col("column") == col_name)
+        # For each unique column, join to get values
+        result_parts = []
+        for col_name in failures["column"].unique().to_list():
+            col_failures = failures.filter(pl.col("column") == col_name)
 
-                # Join with original data to get values
-                with_values = col_failures.join(
-                    original_with_idx.select(["row_index", col_name]),
-                    on="row_index",
-                    how="left"
-                ).rename({col_name: "value"})
+            # Join with original data to get values
+            with_values = col_failures.join(
+                original_with_idx.select(["row_index", col_name]), on="row_index", how="left"
+            ).rename({col_name: "value"})
 
-                result_parts.append(with_values)
+            result_parts.append(with_values)
 
-            failures = pl.concat(result_parts).sort(["column", "check", "row_index"])
+        failures = pl.concat(result_parts).sort(["column", "check", "row_index"])
 
-        return failures.sort(["column", "check", "row_index"])
+    return failures.sort(["column", "check", "row_index"])
 
 
 def _apply_lenient_checks(
@@ -514,11 +492,7 @@ def _apply_lenient_checks(
         fail_mask_names = [expr.meta.output_name() for expr in fail_mask_cols]
 
         # Join check results back to data (convert DataFrame to LazyFrame)
-        lf = lf.join(
-            check_results.select(["__row_index__"] + fail_mask_names).lazy(),
-            on="__row_index__",
-            how="left"
-        )
+        lf = lf.join(check_results.select(["__row_index__"] + fail_mask_names).lazy(), on="__row_index__", how="left")
 
         # Build nullification expressions
         null_exprs = []
@@ -530,12 +504,7 @@ def _apply_lenient_checks(
             nullified_counts[col_name] = int(count_val)
 
             # Nullify expression using the joined mask column
-            null_expr = (
-                pl.when(pl.col(fail_mask_name))
-                .then(None)
-                .otherwise(pl.col(col_name))
-                .alias(col_name)
-            )
+            null_expr = pl.when(pl.col(fail_mask_name)).then(None).otherwise(pl.col(col_name)).alias(col_name)
             null_exprs.append(null_expr)
 
         lf = lf.with_columns(null_exprs)
@@ -682,8 +651,7 @@ def validate(
             # Count nulls before coercion
             try:
                 before_nulls = {
-                    col: int(lf.select(pl.col(col).is_null().sum()).collect().item())
-                    for col in schema.columns.keys()
+                    col: int(lf.select(pl.col(col).is_null().sum()).collect().item()) for col in schema.columns.keys()
                 }
             except pl.exceptions.SchemaError as e:
                 # Provide helpful error message for dtype mismatches
@@ -695,15 +663,13 @@ def validate(
                     current = current_dtypes.get(col_name)
                     expected = schema_dtypes.get(col_name)
                     if current and expected and current != expected:
-                        error_details.append(
-                            f"  - {col_name}: current type is {current}, schema expects {expected}"
-                        )
+                        error_details.append(f"  - {col_name}: current type is {current}, schema expects {expected}")
 
                 raise ValueError(
-                    f"Schema dtype mismatch after parsers. This often happens when:\n"
-                    f"1. Column parsers (e.g., to_int, to_float) already convert the dtype\n"
-                    f"2. The schema's dtype doesn't match what the parsers produce\n\n"
-                    f"Mismatched columns:\n" + "\n".join(error_details) + "\n\n"
+                    "Schema dtype mismatch after parsers. This often happens when:\n"
+                    "1. Column parsers (e.g., to_int, to_float) already convert the dtype\n"
+                    "2. The schema's dtype doesn't match what the parsers produce\n\n"
+                    "Mismatched columns:\n" + "\n".join(error_details) + "\n\n"
                     f"Solutions:\n"
                     f"  - Remove parsers and rely on coercion alone, OR\n"
                     f"  - Update schema dtypes to match parser outputs (Int64 -> i64, Float64 -> f64), OR\n"
@@ -728,15 +694,13 @@ def validate(
                     current = current_dtypes.get(col_name)
                     expected = schema_dtypes.get(col_name)
                     if current and expected and current != expected:
-                        error_details.append(
-                            f"  - {col_name}: current type is {current}, schema expects {expected}"
-                        )
+                        error_details.append(f"  - {col_name}: current type is {current}, schema expects {expected}")
 
                 raise ValueError(
-                    f"Schema dtype mismatch after parsers. This often happens when:\n"
-                    f"1. Column parsers (e.g., to_int, to_float) already convert the dtype\n"
-                    f"2. The schema's dtype doesn't match what the parsers produce\n\n"
-                    f"Mismatched columns:\n" + "\n".join(error_details) + "\n\n"
+                    "Schema dtype mismatch after parsers. This often happens when:\n"
+                    "1. Column parsers (e.g., to_int, to_float) already convert the dtype\n"
+                    "2. The schema's dtype doesn't match what the parsers produce\n\n"
+                    "Mismatched columns:\n" + "\n".join(error_details) + "\n\n"
                     f"Solutions:\n"
                     f"  - Remove parsers and rely on coercion alone, OR\n"
                     f"  - Update schema dtypes to match parser outputs (Int64 -> i64, Float64 -> f64), OR\n"
@@ -763,10 +727,7 @@ def validate(
     _check_final_nullable(lf, schema)
 
     # Phase 11: Count final nulls
-    final_nulls = {
-        col: int(lf.select(pl.col(col).is_null().sum()).collect().item())
-        for col in schema.columns.keys()
-    }
+    final_nulls = {col: int(lf.select(pl.col(col).is_null().sum()).collect().item()) for col in schema.columns.keys()}
 
     # Phase 12: Build validation report
     column_stats = {}
@@ -791,18 +752,17 @@ def validate(
     # Calculate valid rows
     if errors_df.is_empty():
         valid_rows = total_rows
+    # Conservative: total - unique failing rows
+    elif error_report.mode == "cells":
+        failed_row_count = len(errors_df.select(pl.col("row_index").unique()).collect())
+        valid_rows = total_rows - failed_row_count
     else:
-        # Conservative: total - unique failing rows
-        if error_report.mode == "cells":
-            failed_row_count = len(errors_df.select(pl.col("row_index").unique()).collect())
-            valid_rows = total_rows - failed_row_count
-        else:
-            valid_rows = max(0, total_rows - int(errors_df.select(pl.col("count").sum()).item() or 0))
+        valid_rows = max(0, total_rows - int(errors_df.select(pl.col("count").sum()).item() or 0))
 
     validation_report = ValidationReport(
         rows_processed=total_rows,
         rows_valid=valid_rows,
-        profile_used=schema.profile,
+        on_failure=schema.on_failure,
         columns=column_stats,
     )
 
@@ -818,11 +778,11 @@ def validate(
 
 
 __all__ = [
-    "validate",
-    "resolve_column_names",
-    "ValidationResult",
-    "ValidationReport",
     "ColumnValidationStats",
-    "SchemaResolutionError",
     "ErrorReportConfig",
+    "SchemaResolutionError",
+    "ValidationReport",
+    "ValidationResult",
+    "resolve_column_names",
+    "validate",
 ]

@@ -39,7 +39,6 @@ Note:
 """
 
 from pathlib import Path
-from collections.abc import Iterable
 
 import polars as pl
 
@@ -100,15 +99,14 @@ def read_csv(
         if use_lazy:
             return pl.scan_csv(path, schema_overrides=dtype_overrides)
         return pl.read_csv(path, schema_overrides=dtype_overrides)
-    else:
-        # Simpler approach: disable schema inference to read everything as strings
-        if use_lazy:
-            return pl.scan_csv(path, infer_schema=False)
-        return pl.read_csv(path, infer_schema=False)
+    # Simpler approach: disable schema inference to read everything as strings
+    if use_lazy:
+        return pl.scan_csv(path, infer_schema=False)
+    return pl.read_csv(path, infer_schema=False)
 
 
 def read_parquet(
-    path: str | Path | Iterable[str | Path],
+    path: str | Path | list[str | Path],
     schema: SchemaModel,
     lazy: bool | None = None,
 ) -> pl.DataFrame | pl.LazyFrame:
@@ -124,8 +122,8 @@ def read_parquet(
     """
     use_lazy = schema.lazy if lazy is None else lazy
     if use_lazy:
-        return pl.scan_parquet(path)
-    return pl.read_parquet(path)
+        return pl.scan_parquet(path)  # type: ignore[arg-type]
+    return pl.read_parquet(path)  # type: ignore[arg-type]
 
 
 __all__ = ["read_csv", "read_parquet"]
