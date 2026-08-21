@@ -65,7 +65,12 @@ def _(errors):
 @app.cell
 def _(data_out):
     if hasattr(data_out, "explain"):
-        data_out.explain(streaming=False)
+        data_out.explain(engine="default")  # or engine="streaming"
+    return
+
+
+@app.cell
+def _():
     return
 
 

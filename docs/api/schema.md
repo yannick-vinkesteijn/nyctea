@@ -28,25 +28,14 @@ Pydantic models for defining validation schemas.
 
 ## Type Aliases
 
-### ValidationProfile
-
-```python
-ValidationProfile = Literal["strict", "clean", "audit"]
-```
-
-Defines the available validation profiles:
-
-- `"strict"` - All failures raise errors (default)
-- `"clean"` - Nullify failures for nullable columns
-- `"audit"` - Like strict, with enhanced reporting
-
 ### OnFailureBehavior
 
 ```python
-OnFailureBehavior = Literal["raise", "null"]
+OnFailureBehavior = Literal["raise", "null", "ignore"]
 ```
 
-Defines how validation failures are handled:
+Controls what happens when coercion or checks fail. Set at schema level (default for all columns) or per column (override).
 
-- `"raise"` - Stop validation and report errors
-- `"null"` - Set failing values to null and continue
+- `"raise"` - Error, stop. Default.
+- `"null"` - Value becomes null. Requires `nullable=True`.
+- `"ignore"` - Coercion nulls forced by dtype. Check failures kept as-is, reported.

@@ -15,13 +15,26 @@ repos:
       - id: debug-statements
       - id: detect-private-key
       - id: forbid-new-submodules
-      - id: name-tests-test
       - id: no-commit-to-branch
       - id: check-merge-conflict
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.22
+    rev: 0.9.24
     hooks:
       - id: uv-lock
+  - repo: https://github.com/owenlamont/uv-secure
+    rev: 0.15.4
+    hooks:
+      - id: uv-secure
+        args: [--aliases, --desc]
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty check
+        entry: uv run ty check src/nyctea
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.11
     hooks:
@@ -30,19 +43,10 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
         require_serial: true
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args: [--py314-plus]
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.24.1
     hooks:
       - id: validate-pyproject
-  # - repo: https://github.com/mgedmin/check-manifest
-  #   rev: "0.51"
-  #   hooks:
-  #     - id: check-manifest
   - repo: https://github.com/executablebooks/mdformat
     rev: 1.0.0
     hooks:
@@ -50,12 +54,12 @@ repos:
         additional_dependencies:
           - mdformat-mkdocs==5.0.0
           - mdformat-footnote==0.1.2
-        files: "(README\\.md|docs/.*\\.md)"
+        files: "README\\.md"
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.47.0
     hooks:
       - id: markdownlint-fix
-        files: "(README\\.md|docs/.*\\.md)"
+        files: "README\\.md"
   - repo: https://github.com/crate-ci/typos
     rev: v1
     hooks:
@@ -65,10 +69,6 @@ repos:
     hooks:
       - id: check-github-workflows
         files: ^\.github/workflows/.+\.ya?ml$
-  - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.20.0
-    hooks:
-      - id: zizmor
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.10
     hooks:

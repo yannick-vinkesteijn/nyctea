@@ -1,374 +1,251 @@
+<img align="center" width="150" height="150" src="docs/logo.png">
+
 # Nyctea
 
-Polars-optimized data validation library with Pydantic schemas based on packages like Pandera, Patito and Dataframely.
+Polars-based data validation library with an extensible OOP plugin architecture.
+
+> [!NOTE]
+> **🤖 Claude Code Experiment**: This project started as a "vibe code" experiment to explore transferring
+> software engineering knowledge to Claude Code for production Python development. See
+> [docs/development/](docs/development/) for the full development story, sprint notes, and lessons learned.
 
 ## Features
 
-- **Flexible validation profiles**: Switch between strict validation and lenient sanitization
-- **Observable outcomes**: Comprehensive validation reports track what was fixed, what failed, and what passed
-- **Two orthogonal controls**: Separate `nullable` (data quality) from `on_failure` (processing behavior)
-- **Auto-enforced nullability**: `nullable=False` is now automatically enforced
-- **Predictable pipeline**: Fixed order ensures checks run on final dtypes
+### 🔌 Plugin System
+
+
+- **Extensible**: Create custom parsers and checks by inheriting from base classes
+- **Type-safe**: Generic plugin classes with runtime validation
+- **Discoverable**: Tag-based plugin discovery and registration
+
+### 🔧 Customizable Pipeline
+
+- **Flexible**: Add, remove, or reorder validation phases
+- **Validated**: Strict dependency enforcement prevents invalid configurations
+- **Observable**: Built-in logging and metrics collection
+
+### 🎯 Schema-Centric API
+
+- **Intuitive**: `schema.validate(df, registry)` - the schema owns validation
+- **Pythonic**: Clean, object-oriented design
+- **Production-ready**: Comprehensive error handling and logging
 
 ## Installation
 
 ```bash
 pip install nyctea
+# or with uv
+uv add nyctea
 ```
 
 ## Quick Start
 
-### Basic Validation (Strict Mode)
-
 ```python
 import polars as pl
-from nyctea import validate, SchemaModel
-from nyctea.functions import FunctionRegistry
+from nyctea import SchemaModel, MasterRegistry, register_builtins
 
 # Define schema
 schema = SchemaModel.from_dict({
     "columns": {
-        "age": {
-            "dtype": "Int64",
-            "nullable": False,  # Auto-enforced!
-            "checks": [{"name": "positive"}]
-        },
         "name": {
             "dtype": "Utf8",
-            "nullable": False
-        }
-    }
-})
-
-# Create function registry
-registry = FunctionRegistry()
-
-@registry.column_check(name="positive")
-def positive(col: pl.Expr) -> pl.Expr:
-    return col.gt(0)
-
-# Validate data
-df = pl.DataFrame({
-    "age": [25, -5, 30],
-    "name": ["Alice", "Bob", None]
-})
-
-result = validate(df, schema, registry)
-
-# Check results
-print(result.errors)  # Shows validation failures
-print(result.report.summary())  # Human-readable summary
-```
-
-## Validation Pipeline
-
-Nyctea uses a fixed, predictable pipeline order:
-
-```text
-1. Column resolution (synonym mapping)
-2. Count original nulls
-3. Frame parsers (DataFrame-level transformations)
-4. Column parsers (string transformations)
-5. COERCE (dtype casting) ← Moved before checks for cleaner semantics
-6. Frame checks
-7. Column checks (validation on coerced dtype)
-   - Auto-inject non_null check if nullable=False
-8. Build error report (captures ALL failures)
-9. NULLIFY failures where on_failure="null"
-10. Final nullable check (safety assertion)
-11. Build validation report
-12. Return (data + errors + report)
-```
-
-**Key insight**: Coercion happens BEFORE checks, so checks run on the final dtype (e.g., check `age > 0` on `Int64`,
-not on string).
-
-## Validation Profiles
-
-Nyctea supports three validation profiles:
-
-### Strict Profile (default)
-
-All failures raise errors. This is the traditional validation behavior.
-
-```yaml
-profile: strict  # Can omit, it's the default
-columns:
-  age:
-    dtype: Int64
-    nullable: false  # Now actually enforced!
-    checks:
-      - name: positive
-```
-
-### Clean Profile
-
-Lenient mode: nullify failures for nullable columns, raise for non-nullable.
-
-```yaml
-profile: clean
-columns:
-  age:
-    dtype: Int64
-    nullable: true  # Failures → null
-    checks:
-      - name: positive
-  id:
-    dtype: Utf8
-    nullable: false  # Failures → error (even in clean mode)
-    checks:
-      - name: non_empty
-```
-
-### Audit Profile
-
-Like strict, but with enhanced reporting (for tracking data quality issues).
-
-```yaml
-profile: audit
-columns:
-  age:
-    dtype: Int64
-    nullable: false
-    checks:
-      - name: positive
-```
-
-## Column-Level Control
-
-Override profile defaults on a per-column basis using `on_failure`:
-
-```yaml
-profile: strict  # Default is strict
-columns:
-  age:
-    dtype: Int64
-    nullable: true
-    on_failure: null  # Override: lenient for this column only
-    checks:
-      - name: positive
-  name:
-    dtype: Utf8
-    nullable: false  # Follows profile: strict
-```
-
-## Configuration Rules
-
-- `on_failure: "raise"` - Stop validation and report errors (default for strict)
-- `on_failure: "null"` - Set failing values to null and continue (requires `nullable: true`)
-- `on_failure: null` - Inherit from schema profile
-
-**Important**: You cannot have `on_failure: "null"` with `nullable: false` - this is validated at schema parse time.
-
-## Validation Reports
-
-Every validation returns both an error DataFrame and a comprehensive report:
-
-```python
-result = validate(df, schema, registry)
-
-# Traditional error DataFrame (backward compatible)
-print(result.errors)
-# ┌──────────┬───────────┬───────┐
-# │ column   │ check     │ count │
-# │ ---      │ ---       │ ---   │
-# │ str      │ str       │ u32   │
-# ╞══════════╪═══════════╪═══════╡
-# │ age      │ positive  │ 5     │
-# └──────────┴───────────┴───────┘
-
-# New validation report
-print(result.report.summary())
-# Validation Report (Profile: clean)
-# Rows: 95/100 valid (95.0%)
-#
-# Column Issues:
-#   age:
-#     Check failures: 5
-#     Nullified: 5
-#     Final nulls: 5
-
-# Per-column stats
-for col, stats in result.report.columns.items():
-    print(f"{col}:")
-    print(f"  Coercion failures: {stats.coercion_failures}")
-    print(f"  Check failures: {stats.check_failures}")
-    print(f"  Nullified: {stats.nullified}")
-    print(f"  Final nulls: {stats.final_null_count}")
-```
-
-## Examples
-
-### Example 1: Strict Validation
-
-```python
-schema = SchemaModel.from_dict({
-    "profile": "strict",
-    "columns": {
-        "patient_id": {
-            "dtype": "Utf8",
+            "parsers": [{"name": "strip"}, {"name": "lower"}],
             "nullable": False,
-            "checks": [{"name": "unique"}]
         },
         "age": {
             "dtype": "Int64",
+            "parsers": [{"name": "to_int"}],
+            "checks": [{"name": "min_value", "args": {"min": 0}}],
             "nullable": False,
-            "checks": [{"name": "between", "args": {"min": 0, "max": 120}}]
-        }
-    }
-})
-
-# This will raise on any validation failures
-result = validate(df, schema, registry)
-```
-
-### Example 2: Lenient Sanitization
-
-```python
-schema = SchemaModel.from_dict({
-    "profile": "clean",
-    "columns": {
-        "optional_age": {
-            "dtype": "Int64",
-            "nullable": True,  # Required for lenient mode
-            "checks": [{"name": "positive"}]
         },
-        "required_id": {
-            "dtype": "Utf8",
-            "nullable": False,  # Still strict for this column
-        }
     }
 })
 
-result = validate(df, schema, registry)
+# Register built-in plugins
+registry = MasterRegistry()
+register_builtins(registry)
 
-# Negative ages → null (lenient)
-# Missing IDs → error (strict)
+# Load and validate data
+df = pl.read_csv("data.csv")
+result = schema.validate(df, registry)
+
+# Inspect results
 print(result.report.summary())
+print(result.data)
 ```
 
-### Example 3: Mixed Mode
+## Creating Custom Plugins
+
+### Custom Parser (OOP)
 
 ```python
-schema = SchemaModel.from_dict({
-    "profile": "strict",  # Default is strict
-    "columns": {
-        "sensor_reading": {
-            "dtype": "Float64",
-            "nullable": True,
-            "on_failure": "null",  # Override: lenient
-            "checks": [{"name": "in_range", "args": {"min": -40, "max": 85}}]
-        },
-        "timestamp": {
-            "dtype": "Datetime",
-            "nullable": False,  # Follows profile: strict
-        }
-    }
-})
+from nyctea.plugins.column import ColumnParser
+from nyctea.plugins.base import PluginMetadata
+import polars as pl
 
-# Out-of-range sensor readings → null
-# Invalid timestamps → error
-result = validate(df, schema, registry)
+class TrimParser(ColumnParser):
+    def __init__(self):
+        super().__init__(PluginMetadata(
+            name="trim",
+            description="Remove whitespace",
+            tags=["string", "cleaning"]
+        ))
+
+    def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
+        return column.str.strip_chars()
+
+    def validate_args(self, **kwargs) -> None:
+        pass  # No arguments
+
+# Register
+registry.register_column_parser(TrimParser())
 ```
 
-### Example 4: Coercion Strategy
+### Custom Check (Functional)
 
 ```python
-# Strict coercion: raise on failures
-result = validate(df, schema, registry, coerce_strategy="strict")
+from nyctea.plugins.decorators import PluginDecorator
+import polars as pl
 
-# Lenient coercion: nullify on failures
-result = validate(df, schema, registry, coerce_strategy="null_on_failure")
+decorators = PluginDecorator(registry)
 
-# Check what failed to coerce
-for col, stats in result.report.columns.items():
-    if stats.coercion_failures > 0:
-        print(f"{col}: {stats.coercion_failures} coercion failures")
+@decorators.column_check(name="positive", tags=["numeric"])
+def is_positive(column: pl.Expr) -> pl.Expr:
+    return column > 0
 ```
 
-## Backward Compatibility
-
-- Default `profile="strict"` preserves existing validation behavior
-- Default `on_failure=None` inherits from profile
-- Existing schemas work unchanged
-
-**Breaking change** (justified):
-
-- `nullable=False` is now automatically enforced (was documented but not implemented)
-- This closes a gap between documentation and implementation
-
-## Advanced Usage
-
-### Custom Parsers
+## Pipeline Customization
 
 ```python
-@registry.column_parser(name="trim_whitespace")
-def trim(col: pl.Expr) -> pl.Expr:
-    return col.str.strip_chars()
+from nyctea.engine.pipeline import PipelinePhase, PhaseType
+from nyctea.engine.context import PipelineContext
 
-@registry.column_parser(name="to_uppercase")
-def uppercase(col: pl.Expr) -> pl.Expr:
-    return col.str.to_uppercase()
+# Define custom phase
+class AuditPhase(PipelinePhase):
+    def __init__(self):
+        super().__init__(
+            name="audit",
+            phase_type=PhaseType.REPORTING,
+            dependencies=["column_checks"]
+        )
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        # Custom audit logic
+        print(f"Audit: {len(context.check_failures)} failures")
+        return context
+
+# Customize pipeline
+validator = schema.create_validator(registry)
+validator.pipeline.add_phase(AuditPhase(), after="column_checks")
+result = validator.validate(df)
 ```
 
-### Custom Checks
+## Built-in Plugins
 
-```python
-@registry.column_check(name="email_format")
-def is_email(col: pl.Expr) -> pl.Expr:
-    return col.str.contains(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+### Parsers
 
-@registry.column_check(name="in_list")
-def in_list(col: pl.Expr, values: list) -> pl.Expr:
-    return col.is_in(values)
+- `strip` - Remove whitespace
+- `to_int` - Convert to integer
+- `to_float` - Convert to float
+- `lower` - Convert to lowercase
+- `upper` - Convert to uppercase
+
+### Checks
+
+- `between` - Value in range (min, max)
+- `in_set` - Value in allowed set
+- `min_value` - Value >= minimum
+- `unique` - All values unique
+
+## Architecture
+
+```text
+BasePlugin[TInput, TOutput]
+├── ColumnPlugin[pl.Expr, pl.Expr]
+│   ├── ColumnParser (transformations)
+│   └── ColumnCheck (validations)
+└── FramePlugin[pl.LazyFrame, pl.LazyFrame]
+    ├── FrameParser (transformations)
+    └── FrameCheck (validations)
+
+MasterRegistry
+├── column_parsers: PluginRegistry[ColumnParser]
+├── column_checks: PluginRegistry[ColumnCheck]
+├── frame_parsers: PluginRegistry[FrameParser]
+└── frame_checks: PluginRegistry[FrameCheck]
+
+ValidationPipeline
+├── ColumnResolutionPhase (synonyms)
+├── ColumnParsingPhase (transformations)
+└── ColumnCheckPhase (validations)
 ```
 
-### Frame-Level Operations
+## Testing
 
-```python
-@registry.frame_parser(name="deduplicate")
-def dedup(lf: pl.LazyFrame) -> pl.LazyFrame:
-    return lf.unique()
+Nyctea has comprehensive test coverage with 61 tests across core modules:
 
-@registry.frame_check(name="min_rows")
-def min_rows(lf: pl.LazyFrame, count: int) -> pl.LazyFrame:
-    if lf.collect().height < count:
-        raise ValueError(f"Frame has fewer than {count} rows")
-    return lf
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage report
+uv run pytest tests/ --cov=src/nyctea --cov-report=term --cov-report=html
+
+# Run specific test file
+uv run pytest tests/plugins/test_registry.py -v
+
+# Run with linting
+uv run ruff check src/ tests/
+uv run pytest tests/
 ```
 
-## Error Reporting Modes
+### Test Coverage
 
-Control error detail level:
+- **Overall**: 52% coverage
+- **Core modules**: Well-tested (78-96% coverage)
+  - Plugin base: 89%
+  - Plugin registry: 96%
+  - Schema validator: 95%
+  - Pipeline system: 78-88%
 
-```python
-from nyctea.engine import ErrorReportConfig
+See [docs/development/TESTING_COMPLETE.md](docs/development/TESTING_COMPLETE.md) for detailed test documentation.
 
-# Summary mode (default) - just counts
-config = ErrorReportConfig(mode="summary")
-result = validate(df, schema, registry, error_report=config)
+### CI/CD
 
-# Rows mode - counts + row indices
-config = ErrorReportConfig(mode="rows", limit=100)
-result = validate(df, schema, registry, error_report=config)
+GitHub Actions run automatically on all PRs and pushes to main:
 
-# Cells mode - individual failing cells with values
-config = ErrorReportConfig(mode="cells", include_values=True, limit=10)
-result = validate(df, schema, registry, error_report=config)
-```
+- Linting with Ruff
+- Tests on Python 3.10, 3.11, 3.12
+- Coverage reporting
+- Type checking with mypy
+- Pre-commit hooks validation
 
-## Design Principles
+## Documentation
 
-1. **Two orthogonal knobs**: `nullable` (data quality requirement) ⊥ `on_failure` (processing behavior)
-1. **Profile-based defaults**: Common patterns get names (`strict`/`clean`/`audit`)
-1. **Column overrides profile**: Explicit `on_failure` at column level wins
-1. **Observable outcomes**: Track what was nullified, what failed, what passed
-1. **Predictable pipeline**: Fixed order, coercion before checks
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - API quick reference
+- **[Development Docs](docs/development/)** - Sprint notes, architecture decisions, and lessons learned
+- **[Refactor Plan](docs/development/nyctea-refactor-plan.md)** - Original architectural plan
 
-## License
+## Status
 
-MIT
+**Current**: v0.2.0 MVP
+
+- ✅ Core plugin system implemented
+- ✅ 61 tests passing with 52% coverage
+- ✅ GitHub Actions CI/CD configured
+- 🚧 Additional phases and frame support in progress
 
 ## Contributing
 
 Contributions are welcome! Please open an issue or pull request.
+
+Guidelines:
+
+1. Follow the OOP plugin architecture patterns
+2. Add tests mirroring the `src/` structure
+3. Ensure Ruff linting passes
+4. Follow Google-style docstrings
+
+## License
+
+MIT

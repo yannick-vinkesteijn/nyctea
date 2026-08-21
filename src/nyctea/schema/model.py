@@ -6,7 +6,7 @@ can be defined programmatically or loaded from YAML/JSON files.
 The schema defines:
     - Column specifications (dtypes, nullability, parsers, checks)
     - Frame-level operations (parsers and checks)
-    - Validation profiles (strict, clean, audit)
+    - Failure handling (on_failure: raise, null, ignore)
     - Synonym mappings for column names
 
 Example:
@@ -14,15 +14,9 @@ Example:
 
         from nyctea.schema.model import SchemaModel
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "age": {
-                    "dtype": "Int64",
-                    "nullable": False,
-                    "checks": [{"name": "positive"}]
-                }
-            }
-        })
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": False, "checks": [{"name": "positive"}]}}}
+        )
 
     Load from YAML::
 
@@ -33,18 +27,25 @@ Note:
     (e.g., `nullable=False` cannot be combined with `on_failure="null"`).
 """
 
+from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
-from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-# Type aliases for validation behavior
-OnFailureBehavior = Literal["raise", "null"]
-ValidationProfile = Literal["strict", "clean", "audit"]
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from nyctea.engine.pipeline import ValidationPipeline
+    from nyctea.engine.validate import ValidationResult
+    from nyctea.plugins.registry import Registry
+    from nyctea.schema.validator import SchemaValidator
+
+# Type alias for failure handling behavior
+OnFailureBehavior = Literal["raise", "null", "ignore"]
 
 try:
     import yaml
@@ -58,9 +59,7 @@ class Parser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the parse function to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the parse function"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the parse function")
 
 
 class Check(BaseModel):
@@ -69,9 +68,7 @@ class Check(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the check function to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the check function"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the check function")
 
 
 class FrameParser(BaseModel):
@@ -80,9 +77,7 @@ class FrameParser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the frame-level parser to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the frame parser"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the frame parser")
 
 
 class FrameCheck(BaseModel):
@@ -91,9 +86,7 @@ class FrameCheck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="Name of the frame-level check to apply")
-    args: dict[str, Any] = Field(
-        default_factory=dict, description="Arguments passed to the frame check"
-    )
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments passed to the frame check")
 
 
 class ColumnSchema(BaseModel):
@@ -102,9 +95,7 @@ class ColumnSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dtype: str = Field(..., description="The final enforced dtype after validation")
-    synonyms: list[str] = Field(
-        default_factory=list, description="Allowed alternative names for this column"
-    )
+    synonyms: list[str] = Field(default_factory=list, description="Allowed alternative names for this column")
 
     parsers: list[Parser] = Field(
         default_factory=list,
@@ -126,13 +117,19 @@ class ColumnSchema(BaseModel):
         description="Whether null values are allowed in this column",
     )
 
+    coerce: bool | None = Field(
+        None,
+        description="Whether to coerce this column to its dtype. None inherits from schema.",
+    )
+
     on_failure: OnFailureBehavior | None = Field(
         None,
         description=(
-            "How to handle parsing/check failures:\n"
-            "- 'raise': Stop and report errors (default for strict)\n"
-            "- 'null': Set failing values to null and continue (requires nullable=True)\n"
-            "- None: Inherit from schema profile"
+            "How to handle coercion/check failures for this column:\n"
+            "- 'raise': error, stop\n"
+            "- 'null': value becomes null (requires nullable=True)\n"
+            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported\n"
+            "- None: inherit from schema on_failure"
         ),
     )
 
@@ -144,7 +141,7 @@ class ColumnSchema(BaseModel):
             raise ValueError(f"'{v}' is not a valid Polars dtype")
         dtype_obj = getattr(pl, v)
         if not isinstance(dtype_obj, type) or not issubclass(dtype_obj, pl.DataType):
-            raise ValueError(f"'{v}' is not a valid Polars DataType")
+            raise TypeError(f"'{v}' is not a valid Polars DataType")
         return v
 
     @model_validator(mode="after")
@@ -152,8 +149,7 @@ class ColumnSchema(BaseModel):
         """Ensure on_failure='null' requires nullable=True."""
         if self.on_failure == "null" and not self.nullable:
             raise ValueError(
-                "on_failure='null' requires nullable=True. "
-                "Cannot nullify failures in a non-nullable column."
+                "on_failure='null' requires nullable=True. Cannot nullify failures in a non-nullable column."
             )
         return self
 
@@ -173,56 +169,68 @@ class SchemaModel(BaseModel):
         description="Whether to coerce columns to the specified dtypes after parsing and validation",
     )
 
-    profile: ValidationProfile = Field(
-        "strict",
+    on_failure: OnFailureBehavior = Field(
+        "raise",
         description=(
-            "Default validation behavior:\n"
-            "- 'strict': All failures raise (on_failure='raise' default)\n"
-            "- 'clean': Nullify failures for nullable columns\n"
-            "- 'audit': Like strict with enhanced reporting"
+            "Default failure handling for all columns:\n"
+            "- 'raise': error, stop\n"
+            "- 'null': value becomes null\n"
+            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported"
         ),
     )
 
-    columns: dict[str, ColumnSchema] = Field(
-        ..., description="Mapping of column name to its validation schema"
-    )
-    frame_parsers: list[FrameParser] = Field(
-        default_factory=list, description="DataFrame-level parsing functions"
-    )
+    columns: dict[str, ColumnSchema] = Field(..., description="Mapping of column name to its validation schema")
+    frame_parsers: list[FrameParser] = Field(default_factory=list, description="DataFrame-level parsing functions")
 
-    frame_checks: list[FrameCheck] = Field(
-        default_factory=list, description="DataFrame-level checks"
-    )
+    frame_checks: list[FrameCheck] = Field(default_factory=list, description="DataFrame-level checks")
 
     def __repr__(self) -> str:
+        """Return string representation of the schema."""
         cols = ", ".join(self.columns.keys())
-        return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, columns=[{cols}]>"
+        return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, on_failure={self.on_failure!r}, columns=[{cols}]>"
+
+    def resolve_coerce(self, col_name: str) -> bool:
+        """Resolve effective coerce setting for a column.
+
+        Resolution order:
+        1. Column coerce if set explicitly.
+        2. Schema coerce as default.
+
+        Args:
+            col_name: Name of the column.
+
+        Returns:
+            Whether to coerce this column.
+        """
+        col_schema = self.columns[col_name]
+        if col_schema.coerce is not None:
+            return col_schema.coerce
+        return self.coerce
 
     def resolve_on_failure(self, col_name: str) -> OnFailureBehavior:
         """Resolve effective on_failure for a column.
 
-        Precedence: column explicit > profile default
+        Resolution order:
+        1. Column on_failure if set explicitly.
+        2. Schema on_failure as default.
+        3. Guard: on_failure=null requires nullable=True. Non-nullable columns
+           fall back to raise.
 
         Args:
-            col_name: Name of the column
+            col_name: Name of the column.
 
         Returns:
-            Resolved on_failure behavior
+            Resolved on_failure behavior.
         """
         col_schema = self.columns[col_name]
 
-        if col_schema.on_failure is not None:
-            return col_schema.on_failure
+        behavior = col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
 
-        # Profile-based defaults
-        if self.profile == "strict":
+        # Guard: can't nullify non-nullable columns
+        if behavior == "null" and not col_schema.nullable:
             return "raise"
-        elif self.profile == "clean":
-            return "null" if col_schema.nullable else "raise"
-        elif self.profile == "audit":
-            return "raise"
-        else:
-            return "raise"
+
+        return behavior
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SchemaModel:
@@ -254,7 +262,7 @@ class SchemaModel(BaseModel):
         """
         if isinstance(schema, cls):
             return schema
-        return cls.from_dict(schema)
+        return cls.from_dict(schema)  # type: ignore[arg-type]
 
     @classmethod
     def from_json(cls, content: str) -> SchemaModel:
@@ -354,18 +362,79 @@ class SchemaModel(BaseModel):
         suffix = path_obj.suffix.lower()
         if suffix == ".json":
             return cls.from_json_file(path_obj)
-        elif suffix in {".yaml", ".yml"}:
+        if suffix in {".yaml", ".yml"}:
             return cls.from_yaml_file(path_obj)
-        else:
-            raise ValueError(
-                f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml"
-            )
+        raise ValueError(f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml")
 
     @staticmethod
     def _ensure_yaml() -> None:
         """Raise if PyYAML is unavailable."""
         if yaml is None:
-            raise ImportError(
-                "PyYAML is required for YAML schema loading. "
-                "Install with: pip install nyctea[yaml]"
-            )
+            raise ImportError("PyYAML is required for YAML schema loading. Install with: pip install nyctea[yaml]")
+
+    def validate(  # ty: ignore[invalid-method-override]
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        registry: Registry,
+        **kwargs: Any,
+    ) -> ValidationResult:
+        """Validate a DataFrame against this schema.
+
+        This is the primary API for validation using the new plugin-based
+        pipeline architecture.
+
+        Args:
+            df: DataFrame to validate.
+            registry: Plugin registry with parsers and checks.
+            **kwargs: Additional validation options passed to SchemaValidator.
+
+        Returns:
+            ValidationResult with validated data, errors, and report.
+
+        Raises:
+            ValidationError: If validation fails in strict mode.
+            PipelineError: If pipeline execution fails.
+
+        Example:
+            >>> from nyctea.plugins.registry import Registry
+            >>> schema = SchemaModel.from_yaml("schema.yaml")
+            >>> registry = Registry()
+            >>> # ... register plugins ...
+            >>> result = schema.validate(df, registry)
+            >>> print(result.report.summary())
+        """
+        from nyctea.schema.validator import SchemaValidator
+
+        validator = SchemaValidator(self, registry)
+        return validator.validate(df, **kwargs)
+
+    def create_validator(
+        self,
+        registry: Registry,
+        pipeline: ValidationPipeline | None = None,
+    ) -> SchemaValidator:
+        """Create a SchemaValidator for this schema.
+
+        This factory method allows you to create a validator and customize
+        its pipeline before running validation.
+
+        Args:
+            registry: Plugin registry with parsers and checks.
+            pipeline: Custom pipeline (if None, creates from schema).
+
+        Returns:
+            SchemaValidator instance.
+
+        Example:
+            >>> from nyctea.plugins.registry import Registry
+            >>> schema = SchemaModel.from_yaml("schema.yaml")
+            >>> registry = Registry()
+            >>> # ... register plugins ...
+            >>> validator = schema.create_validator(registry)
+            >>> # Customize pipeline
+            >>> validator.pipeline.add_phase(MyCustomPhase(), after="column_parsing")
+            >>> result = validator.validate(df)
+        """
+        from nyctea.schema.validator import SchemaValidator
+
+        return SchemaValidator(self, registry, pipeline)

@@ -1,13 +1,13 @@
 """Utilities to load SchemaModel definitions from files or mappings."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
-from collections.abc import Mapping
 
 from pydantic import ValidationError
 
-from .model import SchemaModel
+from nyctea.schema.model import SchemaModel
 
 try:
     import yaml
@@ -19,6 +19,11 @@ class SchemaLoader:
     """Loads SchemaModel definitions from JSON, YAML, or Python mappings."""
 
     def __init__(self, model_cls: type[SchemaModel] = SchemaModel) -> None:
+        """Initialize loader with a schema model class.
+
+        Args:
+            model_cls: The schema model class to instantiate. Defaults to SchemaModel.
+        """
         self.model_cls = model_cls
 
     def from_mapping(self, data: Mapping[str, Any]) -> SchemaModel:
@@ -49,7 +54,7 @@ class SchemaLoader:
         """
         if isinstance(schema, self.model_cls):
             return schema
-        return self.from_mapping(schema)
+        return self.from_mapping(schema)  # type: ignore[arg-type]
 
     def from_json_str(self, content: str) -> SchemaModel:
         """Load a schema from a JSON string.
@@ -109,9 +114,7 @@ class SchemaLoader:
     def _ensure_yaml() -> None:
         """Raise if PyYAML is unavailable."""
         if yaml is None:
-            raise ImportError(
-                "PyYAML is required for YAML schema loading. Install with `pip install pyyaml`."
-            )
+            raise ImportError("PyYAML is required for YAML schema loading. Install with `pip install pyyaml`.")
 
 
 __all__ = ["SchemaLoader"]

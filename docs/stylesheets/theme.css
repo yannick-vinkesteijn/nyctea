@@ -1,0 +1,136 @@
+/* Nyctea theme — derived from the snowy owl logo palette
+ *
+ * Logo colors:
+ *   Periwinkle blue  #8AAEE0   (background circle)
+ *   Deep blue        #2E72E6   (shadow stripe accent)
+ *   Golden yellow    #F0C020   (eyes)
+ *   Feather grey     #BBC8D4   (wing detail marks)
+ *   Owl white        #F2F5F9   (body)
+ */
+
+/* -------------------------------------------------------------------------
+   Light mode
+   ------------------------------------------------------------------------- */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:        #2E72E6;
+  --md-primary-fg-color--light: #8AAEE0;
+  --md-primary-fg-color--dark:  #1A55B8;
+  --md-primary-bg-color:        #FFFFFF;
+  --md-primary-bg-color--light: #FFFFFF80;
+
+  --md-accent-fg-color:         #F0C020;
+  --md-accent-fg-color--transparent: #F0C02010;
+  --md-accent-bg-color:         #000000DE;
+
+  /* Subtle tint on the page background */
+  --md-default-bg-color:        #F7F9FC;
+
+  /* Typeset links */
+  --md-typeset-a-color:         #2E72E6;
+}
+
+/* -------------------------------------------------------------------------
+   Dark mode — primary experience, blues from the logo
+   ------------------------------------------------------------------------- */
+[data-md-color-scheme="slate"] {
+  /* Header / primary chrome: the deep blue from the logo shadow stripe */
+  --md-primary-fg-color:        #2E72E6;
+  --md-primary-fg-color--light: #8AAEE0;
+  --md-primary-fg-color--dark:  #1A55B8;
+  --md-primary-bg-color:        #FFFFFF;
+  --md-primary-bg-color--light: #FFFFFF60;
+
+  /* Accent: golden yellow (owl eyes) */
+  --md-accent-fg-color:         #F0C020;
+  --md-accent-fg-color--transparent: #F0C02010;
+  --md-accent-bg-color:         #000000DE;
+
+  /* Page background: dark navy, not pure black */
+  --md-default-bg-color:        #0D1117;
+  --md-default-fg-color:        #E6EDF3;
+  --md-default-fg-color--light: #8D96A0;
+  --md-default-fg-color--lighter: #484F58;
+  --md-default-fg-color--lightest: #2D333B;
+
+  /* Links: periwinkle blue so they pop on dark */
+  --md-typeset-a-color:         #8AAEE0;
+
+  /* Code blocks: slightly lighter than the page bg */
+  --md-code-bg-color:           #161B22;
+  --md-code-fg-color:           #E6EDF3;
+
+  /* Sidebar and nav backgrounds */
+  --md-sidebar-bg-color:        #0D1117;
+  --md-nav-item-fg-color--active: #8AAEE0;
+}
+
+/* -------------------------------------------------------------------------
+   Shared — cards, logo accent, header
+   ------------------------------------------------------------------------- */
+
+/* Give the header a slight shadow separation */
+.md-header {
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Logo: keep it sharp at small sizes */
+.md-header__button.md-logo img {
+  height: 32px;
+  width: 32px;
+}
+
+/* Card grid — soften border, add hover lift */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  border: 1px solid var(--md-primary-fg-color--light);
+  border-radius: 6px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > ol > li:hover {
+  box-shadow: 0 4px 16px rgba(46, 114, 230, 0.18);
+  transform: translateY(-2px);
+}
+
+/* -------------------------------------------------------------------------
+   Homepage hero
+   ------------------------------------------------------------------------- */
+.hero {
+  padding: 2.5rem 1rem 2rem;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  margin: 0.5rem 0 0.25rem;
+  letter-spacing: -0.02em;
+}
+
+.hero p {
+  color: var(--md-default-fg-color--light);
+  font-size: 1.1rem;
+  margin: 0 0 1.5rem;
+}
+
+.hero img {
+  margin-bottom: 0.25rem;
+}
+
+/* CTA buttons row spacing */
+.hero .md-button {
+  margin: 0.25rem;
+}
+
+/* Primary button: deep blue background */
+.hero .md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.hero .md-button--primary:hover {
+  background-color: var(--md-primary-fg-color--dark);
+  border-color: var(--md-primary-fg-color--dark);
+}
