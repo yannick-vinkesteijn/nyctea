@@ -8,11 +8,7 @@ from nyctea.plugins.base import Validator, ValidatorMetadata
 def test_plugin_metadata_creation():
     """Test ValidatorMetadata creation with all fields."""
     metadata = ValidatorMetadata(
-        name="test_plugin",
-        description="A test plugin",
-        version="1.0.0",
-        tags=["test", "demo"],
-        author="Test Author"
+        name="test_plugin", description="A test plugin", version="1.0.0", tags=["test", "demo"], author="Test Author"
     )
     assert metadata.name == "test_plugin"
     assert metadata.description == "A test plugin"
@@ -35,7 +31,7 @@ def test_plugin_metadata_immutable():
     """Test that ValidatorMetadata is immutable (frozen dataclass)."""
     metadata = ValidatorMetadata(name="test")
     with pytest.raises(AttributeError):
-        metadata.name = "changed"  # type: ignore
+        metadata.name = "changed"  # type: ignore[misc]
 
 
 def test_plugin_metadata_validates_name():
@@ -64,11 +60,12 @@ def test_plugin_metadata_allows_underscores_hyphens():
 def test_base_plugin_abstract():
     """Test that Validator cannot be instantiated directly."""
     with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-        Validator(ValidatorMetadata(name="test"))  # type: ignore
+        Validator(ValidatorMetadata(name="test"))  # type: ignore[abstract]
 
 
 def test_base_plugin_has_name_property():
     """Test that Validator subclass has name property."""
+
     class TestPlugin(Validator):
         def execute(self, input_data, **kwargs):
             return input_data
@@ -82,6 +79,7 @@ def test_base_plugin_has_name_property():
 
 def test_base_plugin_repr():
     """Test Validator repr shows name and version."""
+
     class TestPlugin(Validator):
         def execute(self, input_data, **kwargs):
             return input_data

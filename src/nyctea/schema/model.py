@@ -27,8 +27,6 @@ Note:
     (e.g., `nullable=False` cannot be combined with `on_failure="null"`).
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -145,7 +143,7 @@ class ColumnSchema(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_on_failure_nullable_consistency(self) -> ColumnSchema:
+    def validate_on_failure_nullable_consistency(self) -> "ColumnSchema":
         """Ensure on_failure='null' requires nullable=True."""
         if self.on_failure == "null" and not self.nullable:
             raise ValueError(
@@ -233,7 +231,7 @@ class SchemaModel(BaseModel):
         return behavior
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> SchemaModel:
+    def from_dict(cls, data: "Mapping[str, Any]") -> "SchemaModel":
         """Load a schema from a dictionary.
 
         Args:
@@ -251,7 +249,7 @@ class SchemaModel(BaseModel):
             raise ValueError(f"Invalid schema configuration: {err}") from err
 
     @classmethod
-    def from_python(cls, schema: SchemaModel | Mapping[str, Any]) -> SchemaModel:
+    def from_python(cls, schema: "SchemaModel | Mapping[str, Any]") -> "SchemaModel":
         """Accept an existing SchemaModel or a dictionary defining one.
 
         Args:
@@ -265,7 +263,7 @@ class SchemaModel(BaseModel):
         return cls.from_dict(schema)  # type: ignore[arg-type]
 
     @classmethod
-    def from_json(cls, content: str) -> SchemaModel:
+    def from_json(cls, content: str) -> "SchemaModel":
         """Load a schema from a JSON string.
 
         Args:
@@ -284,7 +282,7 @@ class SchemaModel(BaseModel):
         return cls.from_dict(data)
 
     @classmethod
-    def from_json_file(cls, path: str | Path) -> SchemaModel:
+    def from_json_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a JSON file.
 
         Args:
@@ -303,7 +301,7 @@ class SchemaModel(BaseModel):
         return cls.from_json(text)
 
     @classmethod
-    def from_yaml(cls, content: str) -> SchemaModel:
+    def from_yaml(cls, content: str) -> "SchemaModel":
         """Load a schema from a YAML string.
 
         Args:
@@ -325,7 +323,7 @@ class SchemaModel(BaseModel):
         return cls.from_dict(data)
 
     @classmethod
-    def from_yaml_file(cls, path: str | Path) -> SchemaModel:
+    def from_yaml_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a YAML file.
 
         Args:
@@ -346,7 +344,7 @@ class SchemaModel(BaseModel):
         return cls.from_yaml(text)
 
     @classmethod
-    def from_file(cls, path: str | Path) -> SchemaModel:
+    def from_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a file, auto-detecting format from extension.
 
         Args:
@@ -375,9 +373,9 @@ class SchemaModel(BaseModel):
     def validate(  # ty: ignore[invalid-method-override]
         self,
         df: pl.DataFrame | pl.LazyFrame,
-        registry: Registry,
+        registry: "Registry",
         **kwargs: Any,
-    ) -> ValidationResult:
+    ) -> "ValidationResult":
         """Validate a DataFrame against this schema.
 
         This is the primary API for validation using the new plugin-based
@@ -410,9 +408,9 @@ class SchemaModel(BaseModel):
 
     def create_validator(
         self,
-        registry: Registry,
-        pipeline: ValidationPipeline | None = None,
-    ) -> SchemaValidator:
+        registry: "Registry",
+        pipeline: "ValidationPipeline | None" = None,
+    ) -> "SchemaValidator":
         """Create a SchemaValidator for this schema.
 
         This factory method allows you to create a validator and customize

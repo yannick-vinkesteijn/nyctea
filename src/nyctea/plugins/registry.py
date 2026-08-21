@@ -4,8 +4,6 @@ This module provides generic registry classes for managing plugins with type saf
 metadata-based discovery, and lifecycle management.
 """
 
-from __future__ import annotations
-
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, model_validator

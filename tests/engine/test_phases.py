@@ -262,7 +262,6 @@ class TestFullPipeline:
         assert len(result.errors) > 0
         assert result.report.columns["age"].check_failures >= 2
 
-    @pytest.mark.skip(reason="Step 5: nullable enforcement not yet in pipeline")
     def test_nullable_false_null_raises(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
         df = pl.DataFrame({"age": [1, None, 3]})

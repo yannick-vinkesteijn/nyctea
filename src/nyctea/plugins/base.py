@@ -5,14 +5,10 @@ base classes that all plugins must inherit from and metadata structures for
 plugin registration and discovery.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from typing import Any, Generic, TypeVar
 
 __all__ = [
     "TInput",

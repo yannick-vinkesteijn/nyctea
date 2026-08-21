@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.18.4"
+__generated_with = "0.20.4"
 app = marimo.App(width="medium")
 
 
@@ -118,8 +118,9 @@ def _(mo):
     mo.md("""
     ## 3. The pipeline
 
-    Under the hood Nyctea builds a lazy pipeline of phases.
-    Everything stays as a Polars `LazyFrame` until the very end.
+    Under the hood Nyctea builds a fully lazy pipeline of phases.
+    Everything stays as a Polars `LazyFrame`. The data is never
+    collected inside the validator unless you set `lazy=False`.
 
     ```
     ColumnResolutionPhase   pid -> patient_id, AGE -> age
@@ -129,12 +130,10 @@ def _(mo):
     CoercionPhase           cast str -> Int64, str -> Float64
           |
     ColumnCheckPhase        between, in_set (boolean masks, no collect)
-          |
-    [collect]               single materialisation at the API boundary
     ```
 
-    Zero intermediate collects. For a schema with 10 columns and 5
-    checks each, the old engine ran ~50 collects. This pipeline runs **one**.
+    Error reporting uses targeted collects of only the columns it
+    needs (mask columns + row indices), never the full dataset.
     """)
     return
 
@@ -331,11 +330,54 @@ def _(dirty, registry, schema):
 @app.cell
 def _(mo):
     mo.md("""
+    ## 8. Error reporting modes
+
+    `ErrorReportConfig` controls the detail level. Three modes are available:
+
+    - **summary** — one row per failing check with a count (default)
+    - **rows** — adds a list of failing row indices
+    - **cells** — one row per failing cell with the actual value
+
+    Use `limit` to cap the number of entries per column+check.
+    """)
+    return
+
+
+@app.cell
+def _(dirty, registry, schema):
+    from nyctea.engine.results import ErrorReportConfig
+
+    result_cells = schema.validate(
+        dirty,
+        registry,
+        lazy=False,
+        error_report_config=ErrorReportConfig(mode="cells", limit=5),
+    )
+    result_cells.errors
+    return
+
+
+@app.cell
+def _(dirty, registry, schema):
+    from nyctea.engine.results import ErrorReportConfig as _ERC
+
+    result_rows = schema.validate(
+        dirty,
+        registry,
+        lazy=False,
+        error_report_config=_ERC(mode="rows"),
+    )
+    result_rows.errors
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
     ## What is next
 
-    Steps 3-6 on the v0.2.0 roadmap will add:
+    Remaining v0.2.0 roadmap steps:
 
-    - **ErrorReportingPhase** — row-level and cell-level error detail
     - **Report generation** — accurate `rows_valid` count using check masks
     - **NullificationPhase** — set failing values to `null` for lenient columns
     - **Frame-level plugins** — whole-frame parsers and checks (e.g. deduplication)
@@ -346,6 +388,7 @@ def _(mo):
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 

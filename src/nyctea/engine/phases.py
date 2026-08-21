@@ -8,18 +8,13 @@ This is a minimal implementation with core phases. Additional phases
 will be added in future iterations.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import polars as pl
 
+from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
-
-if TYPE_CHECKING:
-    from nyctea.engine.context import PipelineContext
+from nyctea.schema.model import SchemaModel
 
 __all__ = [
     "CoercionPhase",
@@ -314,11 +309,13 @@ class ColumnCheckPhase(PipelinePhase):
         schema = context.schema
         registry = context.registry
         lf = context.data
+        current_columns = lf.collect_schema().names()
 
         # Build boolean mask columns for each check (True = passed)
         # No collect here — downstream phases use these masks lazily
         mask_exprs: list[pl.Expr] = []
         check_masks: dict[tuple[str, str], str] = {}
+        notnull_aliases = self._build_notnull_mask_exprs(schema, current_columns, mask_exprs)
 
         for col_name, col_schema in schema.columns.items():
             checks_to_run = list(col_schema.checks) if col_schema.checks else []
@@ -354,7 +351,57 @@ class ColumnCheckPhase(PipelinePhase):
 
         context.check_masks = check_masks
 
+        self._enforce_notnull(context, notnull_aliases)
+
         return context
+
+    @staticmethod
+    def _build_notnull_mask_exprs(
+        schema: SchemaModel,
+        current_columns: list[str],
+        mask_exprs: list[pl.Expr],
+    ) -> dict[str, str]:
+        """Add a not-null mask expression for every nullable=False column present in the data.
+
+        Args:
+            schema: Schema being validated.
+            current_columns: Column names currently present in the data.
+            mask_exprs: Mutable list of mask expressions to append to.
+
+        Returns:
+            Mapping of column name to its not-null mask alias.
+        """
+        notnull_aliases: dict[str, str] = {}
+        for col_name, col_schema in schema.columns.items():
+            if col_name not in current_columns:
+                continue
+            if col_schema.nullable is False:
+                alias = f"__notnull__{col_name}"
+                mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
+                notnull_aliases[col_name] = alias
+        return notnull_aliases
+
+    def _enforce_notnull(self, context: PipelineContext, notnull_aliases: dict[str, str]) -> None:
+        """Raise if any nullable=False column contains a null value, unless on_failure='ignore'.
+
+        Args:
+            context: Pipeline context with the not-null mask columns applied.
+            notnull_aliases: Mapping of column name to its not-null mask alias.
+
+        Raises:
+            PipelineError: If a nullable=False column contains a null value and its
+                resolved on_failure behavior is not 'ignore'.
+        """
+        if not notnull_aliases:
+            return
+
+        notnull_check = context.data.select(list(notnull_aliases.values())).collect()
+        for col_name, alias in notnull_aliases.items():
+            if not notnull_check[alias].all() and context.schema.resolve_on_failure(col_name) != "ignore":
+                raise PipelineError(
+                    f"Column '{col_name}' has nullable=False but contains null values.",
+                    phase=self.name,
+                )
 
     def can_skip(self, context: PipelineContext) -> bool:
         """Skip if no checks are defined in schema.

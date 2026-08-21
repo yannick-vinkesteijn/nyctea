@@ -74,15 +74,17 @@ class TestColumnParserDecorator:
         def trim(column: pl.Expr) -> pl.Expr:
             return column.str.strip_chars()
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "text": {
-                    "dtype": "Utf8",
-                    "parsers": [{"name": "custom_trim"}],
-                    "nullable": False,
-                },
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "text": {
+                        "dtype": "Utf8",
+                        "parsers": [{"name": "custom_trim"}],
+                        "nullable": False,
+                    },
+                }
             }
-        })
+        )
 
         df = pl.DataFrame({"text": ["  hello  ", "  world  "]})
         result = schema.validate(df, registry)
@@ -138,16 +140,18 @@ class TestColumnCheckDecorator:
         def is_positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "value": {
-                    "dtype": "Int64",
-                    "parsers": [{"name": "to_int"}],
-                    "checks": [{"name": "positive"}],
-                    "nullable": False,
-                },
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "value": {
+                        "dtype": "Int64",
+                        "parsers": [{"name": "to_int"}],
+                        "checks": [{"name": "positive"}],
+                        "nullable": False,
+                    },
+                }
             }
-        })
+        )
 
         # Test with valid data
         df_good = pl.DataFrame({"value": ["1", "2", "3"]})
@@ -157,7 +161,7 @@ class TestColumnCheckDecorator:
         # Test with invalid data
         df_bad = pl.DataFrame({"value": ["1", "-2", "3"]})
         result_bad = schema.validate(df_bad, registry)
-        assert result_bad.report.rows_valid < result_bad.report.rows_processed
+        assert len(result_bad.errors) > 0
 
 
 class TestDecoratorEdgeCases:
@@ -173,6 +177,7 @@ class TestDecoratorEdgeCases:
             return column
 
         with pytest.raises(RegistrationError):
+
             @decorators.column_parser(name="duplicate")
             def second(column: pl.Expr) -> pl.Expr:
                 return column

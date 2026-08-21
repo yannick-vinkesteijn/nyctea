@@ -4,13 +4,9 @@ This module provides factory functions for creating validation pipelines
 with common configurations.
 """
 
-from __future__ import annotations
+from collections.abc import Sequence
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
+from nyctea.engine.observability import PipelineObserver
 from nyctea.engine.phases import (
     CoercionPhase,
     ColumnCheckPhase,
@@ -18,10 +14,7 @@ from nyctea.engine.phases import (
     ColumnResolutionPhase,
 )
 from nyctea.engine.pipeline import ValidationPipeline
-
-if TYPE_CHECKING:
-    from nyctea.engine.observability import PipelineObserver
-    from nyctea.schema.model import SchemaModel
+from nyctea.schema.model import SchemaModel
 
 __all__ = [
     "create_minimal_pipeline",

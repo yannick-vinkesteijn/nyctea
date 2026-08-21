@@ -5,19 +5,14 @@ with strict enforcement of single-column purity - plugins can only reference
 the input column and cannot access other columns in the DataFrame.
 """
 
-from __future__ import annotations
-
 import inspect
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import polars as pl
 
 from nyctea.exceptions import RegistrationError, ValidatorExecutionError
-from nyctea.plugins.base import Validator
-
-if TYPE_CHECKING:
-    from nyctea.plugins.base import ValidatorMetadata
+from nyctea.plugins.base import Validator, ValidatorMetadata
 
 __all__ = [
     "ColumnCheck",

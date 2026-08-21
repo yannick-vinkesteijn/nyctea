@@ -4,17 +4,14 @@ This module defines the PipelineContext dataclass, which serves as a shared
 state container passed through all pipeline phases during validation.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import polars as pl
 
-if TYPE_CHECKING:
-    from nyctea.engine.validate import ErrorReportConfig, ValidationReport
-    from nyctea.plugins.registry import Registry
-    from nyctea.schema.model import SchemaModel
+from nyctea.engine.validate import ErrorReportConfig, ValidationReport
+from nyctea.plugins.registry import Registry
+from nyctea.schema.model import SchemaModel
 
 __all__ = ["PipelineContext"]
 

@@ -123,8 +123,6 @@ result = validate(df, schema, registry)
 ```
 """
 
-from __future__ import annotations
-
 import inspect
 import json
 from collections.abc import Callable
@@ -386,7 +384,7 @@ class DecoratorAdapter(Generic[InFunc, OutFunc]):
         func: InFunc | None = None,
         *,
         name: str | None = None,
-    ) -> OutFunc | DecoratorAdapter[InFunc, OutFunc]:
+    ) -> "OutFunc | DecoratorAdapter[InFunc, OutFunc]":
         """Apply registration or return a configured adapter."""
         chosen = name or self._name
         if func is None:

@@ -4,19 +4,14 @@ This module provides base classes for frame-level operations (parsers and checks
 with configurable enforcement of shape preservation constraints.
 """
 
-from __future__ import annotations
-
 import inspect
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import polars as pl
 
 from nyctea.exceptions import RegistrationError, ValidatorExecutionError
-from nyctea.plugins.base import Validator
-
-if TYPE_CHECKING:
-    from nyctea.plugins.base import ValidatorMetadata
+from nyctea.plugins.base import Validator, ValidatorMetadata
 
 __all__ = [
     "FrameCheck",

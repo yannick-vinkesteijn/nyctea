@@ -4,21 +4,17 @@ This module provides the SchemaValidator class, which is the main entry point
 for validation using the new plugin-based pipeline architecture.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
+from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
-
-if TYPE_CHECKING:
-    from nyctea.engine.pipeline import ValidationPipeline
-    from nyctea.plugins.registry import Registry
-    from nyctea.schema.model import SchemaModel
+from nyctea.plugins.registry import Registry
+from nyctea.schema.model import SchemaModel
 
 __all__ = ["SchemaValidator"]
 

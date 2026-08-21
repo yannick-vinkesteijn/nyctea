@@ -85,8 +85,6 @@ def test_parsers_chain():
     df = pl.DataFrame({"col": ["  HELLO  ", "  WORLD  "]}).lazy()
 
     # Chain: strip then lower
-    result = df.select(
-        lower(strip(pl.col("col")))
-    ).collect()
+    result = df.select(lower(strip(pl.col("col")))).collect()
 
     assert result["col"].to_list() == ["hello", "world"]
