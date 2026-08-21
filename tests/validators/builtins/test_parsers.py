@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from nyctea.plugins.builtins.parsers import (
+from nyctea.validators.builtins.parsers import (
     LowerParser,
     StripParser,
     ToFloatParser,

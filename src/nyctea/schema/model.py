@@ -28,6 +28,7 @@ Note:
 """
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -35,12 +36,10 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from nyctea.engine.pipeline import ValidationPipeline
     from nyctea.engine.validate import ValidationResult
-    from nyctea.plugins.registry import Registry
     from nyctea.schema.validator import SchemaValidator
+    from nyctea.validators.registry import Registry
 
 # Type alias for failure handling behavior
 OnFailureBehavior = Literal["raise", "null", "ignore"]
@@ -48,7 +47,7 @@ OnFailureBehavior = Literal["raise", "null", "ignore"]
 try:
     import yaml
 except ImportError:
-    yaml = None  # type: ignore[assignment]
+    yaml = None
 
 
 class Parser(BaseModel):
@@ -231,7 +230,7 @@ class SchemaModel(BaseModel):
         return behavior
 
     @classmethod
-    def from_dict(cls, data: "Mapping[str, Any]") -> "SchemaModel":
+    def from_dict(cls, data: Mapping[str, Any]) -> "SchemaModel":
         """Load a schema from a dictionary.
 
         Args:
@@ -258,9 +257,9 @@ class SchemaModel(BaseModel):
         Returns:
             SchemaModel: Parsed or passed-through schema.
         """
-        if isinstance(schema, cls):
-            return schema
-        return cls.from_dict(schema)  # type: ignore[arg-type]
+        if isinstance(schema, Mapping):
+            return SchemaModel.from_dict(schema)
+        return schema
 
     @classmethod
     def from_json(cls, content: str) -> "SchemaModel":
@@ -378,12 +377,12 @@ class SchemaModel(BaseModel):
     ) -> "ValidationResult":
         """Validate a DataFrame against this schema.
 
-        This is the primary API for validation using the new plugin-based
+        This is the primary API for validation using the new validator-based
         pipeline architecture.
 
         Args:
             df: DataFrame to validate.
-            registry: Plugin registry with parsers and checks.
+            registry: Validator registry with parsers and checks.
             **kwargs: Additional validation options passed to SchemaValidator.
 
         Returns:
@@ -394,10 +393,10 @@ class SchemaModel(BaseModel):
             PipelineError: If pipeline execution fails.
 
         Example:
-            >>> from nyctea.plugins.registry import Registry
+            >>> from nyctea.validators.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
             >>> registry = Registry()
-            >>> # ... register plugins ...
+            >>> # ... register validators ...
             >>> result = schema.validate(df, registry)
             >>> print(result.report.summary())
         """
@@ -417,17 +416,17 @@ class SchemaModel(BaseModel):
         its pipeline before running validation.
 
         Args:
-            registry: Plugin registry with parsers and checks.
+            registry: Validator registry with parsers and checks.
             pipeline: Custom pipeline (if None, creates from schema).
 
         Returns:
             SchemaValidator instance.
 
         Example:
-            >>> from nyctea.plugins.registry import Registry
+            >>> from nyctea.validators.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
             >>> registry = Registry()
-            >>> # ... register plugins ...
+            >>> # ... register validators ...
             >>> validator = schema.create_validator(registry)
             >>> # Customize pipeline
             >>> validator.pipeline.add_phase(MyCustomPhase(), after="column_parsing")

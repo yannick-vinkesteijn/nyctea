@@ -112,7 +112,7 @@ class ColumnParsingPhase(PipelinePhase):
     """Apply column parsers (transformations).
 
     This phase applies all column-level parsers defined in the schema,
-    using the plugin registry to look up parser implementations.
+    using the validator registry to look up parser implementations.
 
     Dependencies: column_resolution (needs resolved names)
     """
@@ -153,7 +153,7 @@ class ColumnParsingPhase(PipelinePhase):
 
             # Chain parsers
             for parser_spec in col_schema.parsers:
-                # Look up parser plugin
+                # Look up parser validator
                 try:
                     parser = registry.column_parsers.get(parser_spec.name)
                 except KeyError as e:

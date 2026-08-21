@@ -1,10 +1,27 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `plugins` → `validators`
+
+Before the first public release, the extensibility system was renamed from "plugin" to "validator" terminology, to match the existing `Validator`/`ValidatorMetadata` base classes and avoid confusion with unrelated plugin-based projects.
+
+| Old (pre-release) | New |
+| --- | --- |
+| `nyctea.plugins` (module) | `nyctea.validators` |
+| `ColumnPlugin` | `ColumnValidator` |
+| `FramePlugin` | `FrameValidator` |
+| `PluginRegistry` | `ValidatorRegistry` |
+| `RegistrationError(plugin_name=..., plugin_type=...)` | `RegistrationError(validator_name=..., validator_type=...)` |
+| `ValidatorExecutionError(plugin_name=..., plugin_type=...)` | `ValidatorExecutionError(validator_name=..., validator_type=...)` |
+
+`ColumnParser`, `ColumnCheck`, `FrameParser`, `FrameCheck`, `Registry`, `ValidatorMetadata`, and `ValidatorDecorator` are unchanged, they never used "plugin" in their names.
+
+**Migration:** update any `from nyctea.plugins...` import to `from nyctea.validators...`, and rename `ColumnPlugin`/`FramePlugin`/`PluginRegistry` usages to their `*Validator` equivalents.
+
 ## v0.1.0 → v0.2.0
 
 ### Summary
 
-v0.2.0 introduces the OOP plugin system with a clean `Registry` class alongside the existing `FunctionRegistry`. The core `SchemaModel` is unchanged. No public API symbols that were exported in v0.1.0 have been removed.
+v0.2.0 introduces the OOP validator system with a clean `Registry` class alongside the existing `FunctionRegistry`. The core `SchemaModel` is unchanged. No public API symbols that were exported in v0.1.0 have been removed.
 
 The documented entry point shifted significantly. If you followed the v0.1.0 README or guides, you will need to update your code.
 
@@ -28,7 +45,7 @@ def trim(col: pl.Expr) -> pl.Expr:
     return col.str.strip_chars()
 ```
 
-v0.2.0 introduces `Registry` with OOP plugin classes and a `register_builtins()` shortcut:
+v0.2.0 introduces `Registry` with OOP validator classes and a `register_builtins()` shortcut:
 
 ```python
 from nyctea import Registry, register_builtins
@@ -45,7 +62,7 @@ register_builtins(registry)  # registers built-in parsers and checks
 
 The alias will be removed in v0.3.0.
 
-**Migration:** replace `FunctionRegistry` with `Registry`. Re-register custom functions using either OOP plugins or the `ValidatorDecorator` functional API.
+**Migration:** replace `FunctionRegistry` with `Registry`. Re-register custom functions using either OOP validator classes or the `ValidatorDecorator` functional API.
 
 #### Validation entry point
 
@@ -93,5 +110,5 @@ This is **additive**. No existing imports break.
 - [ ] Replace `FunctionRegistry` with `Registry`
 - [ ] Replace `validate(df, schema, registry)` with `schema.validate(df, registry)`
 - [ ] Call `register_builtins(registry)` to load built-in parsers/checks
-- [ ] Re-register custom parsers/checks using `Registry` plugin API (OOP or `ValidatorDecorator` style)
+- [ ] Re-register custom parsers/checks using `Registry` validator API (OOP or `ValidatorDecorator` style)
 - [ ] Update imports: `from nyctea import Registry, register_builtins`

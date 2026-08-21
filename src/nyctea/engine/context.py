@@ -10,8 +10,8 @@ from typing import Any
 import polars as pl
 
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport
-from nyctea.plugins.registry import Registry
 from nyctea.schema.model import SchemaModel
+from nyctea.validators.registry import Registry
 
 __all__ = ["PipelineContext"]
 
@@ -26,7 +26,7 @@ class PipelineContext:
     Attributes:
         data: The DataFrame/LazyFrame being validated (mutated by phases).
         schema: The schema definition.
-        registry: Plugin registry for lookups.
+        registry: Validator registry for lookups.
         error_report_config: Configuration for error reporting detail.
         original_nulls: Null counts before validation (set by NullCountingPhase).
         coercion_failures: Tracking coercion failures per column.

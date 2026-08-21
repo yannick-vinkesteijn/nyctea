@@ -24,3 +24,8 @@ MD041: false
 
 # MkDocs admonitions and tabs use fenced blocks without a language
 MD040: false
+
+# mdformat-mkdocs indents nested list items by 4 spaces, matching the
+# python-markdown parser MkDocs uses (not the 2-space CommonMark default)
+MD007:
+  indent: 4

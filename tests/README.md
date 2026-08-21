@@ -33,12 +33,12 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 ### Test Files
 
 - **test_validation_minimal.py** - Core validation functionality tests
-  - Schema loading
-  - Plugin registry
-  - Parser application
-  - Check execution
-  - Validation reports
-  - Error handling
+    - Schema loading
+    - Plugin registry
+    - Parser application
+    - Check execution
+    - Validation reports
+    - Error handling
 
 ## Coverage by Module
 
@@ -58,13 +58,15 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 
 ```python
 import pytest
-from nyctea import SchemaModel, MasterRegistry, register_builtins
+from nyctea import SchemaModel, Registry, register_builtins
+
 
 @pytest.fixture
 def registry():
-    reg = MasterRegistry()
+    reg = Registry()
     register_builtins(reg)
     return reg
+
 
 def test_my_feature(registry):
     # Your test code

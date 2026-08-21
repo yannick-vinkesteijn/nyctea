@@ -7,7 +7,7 @@ validation phases with dependency validation and observability hooks.
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.observability import PhaseMetrics, PipelineObserver
@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 
-class PhaseType(str, Enum):
+class PhaseType(StrEnum):
     """Types of pipeline phases."""
 
     RESOLUTION = "resolution"  # Column name resolution

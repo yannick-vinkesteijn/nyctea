@@ -5,10 +5,10 @@
 ## Installation & Setup
 
 ```python
-from nyctea import SchemaModel, MasterRegistry, register_builtins
+from nyctea import SchemaModel, Registry, register_builtins
 
 schema = SchemaModel.from_yaml("schema.yaml")
-registry = MasterRegistry()
+registry = Registry()
 register_builtins(registry)
 ```
 
@@ -227,7 +227,7 @@ print(validator.pipeline)  # Summary
 
 ```python
 schema = SchemaModel.from_yaml("schema.yaml")
-registry = MasterRegistry()
+registry = Registry()
 register_builtins(registry)
 result = schema.validate(df, registry)
 ```

@@ -1,4 +1,4 @@
-"""Frame-level plugin classes with shape preservation.
+"""Frame-level validator classes with shape preservation.
 
 This module provides base classes for frame-level operations (parsers and checks)
 with configurable enforcement of shape preservation constraints.
@@ -11,19 +11,19 @@ from typing import Any
 import polars as pl
 
 from nyctea.exceptions import RegistrationError, ValidatorExecutionError
-from nyctea.plugins.base import Validator, ValidatorMetadata
+from nyctea.validators.base import Validator, ValidatorMetadata
 
 __all__ = [
     "FrameCheck",
     "FrameParser",
-    "FramePlugin",
+    "FrameValidator",
 ]
 
 
-class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
-    """Abstract base class for all frame-level plugins.
+class FrameValidator(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
+    """Abstract base class for all frame-level validators.
 
-    Frame plugins operate on entire DataFrames and can optionally enforce
+    Frame validators operate on entire DataFrames and can optionally enforce
     shape preservation constraints:
     - preserve_columns: Output must have the same columns as input
     - preserve_rows: Output must have the same number of rows as input
@@ -46,10 +46,10 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         preserve_columns: bool = True,
         preserve_rows: bool = True,
     ) -> None:
-        """Initialize frame plugin with metadata and constraints.
+        """Initialize frame validator with metadata and constraints.
 
         Args:
-            metadata: Plugin metadata.
+            metadata: Validator metadata.
             preserve_columns: If True, enforce column preservation.
             preserve_rows: If True, enforce row count preservation.
 
@@ -63,11 +63,11 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
 
     @abstractmethod
     def execute(self, frame: pl.LazyFrame, **kwargs: Any) -> pl.LazyFrame:  # ty: ignore[invalid-method-override]
-        """Execute the plugin logic on a LazyFrame.
+        """Execute the validator logic on a LazyFrame.
 
         Args:
             frame: The input LazyFrame.
-            **kwargs: Plugin-specific arguments.
+            **kwargs: Validator-specific arguments.
 
         Returns:
             Transformed LazyFrame.
@@ -94,30 +94,30 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         # Check first parameter
         if not params or params[0].name != "frame":
             raise RegistrationError(
-                f"Plugin '{self.name}' execute() must have 'frame' as first parameter",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' execute() must have 'frame' as first parameter",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
             )
 
         # Check that parameter is annotated as pl.LazyFrame
         first_param = params[0]
         if first_param.annotation not in (pl.LazyFrame, inspect.Parameter.empty):
             raise RegistrationError(
-                f"Plugin '{self.name}' execute() 'frame' parameter must be "
+                f"Validator '{self.name}' execute() 'frame' parameter must be "
                 f"annotated as pl.LazyFrame, got {first_param.annotation}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
             )
 
     def __call__(self, frame: pl.LazyFrame, **kwargs: Any) -> pl.LazyFrame:  # ty: ignore[invalid-method-override]  # noqa: C901
-        """Execute plugin with shape validation.
+        """Execute validator with shape validation.
 
         This method wraps execute() to enforce shape preservation constraints
         if configured.
 
         Args:
             frame: Input LazyFrame.
-            **kwargs: Plugin-specific arguments.
+            **kwargs: Validator-specific arguments.
 
         Returns:
             Output LazyFrame.
@@ -128,7 +128,7 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         """
         # Type check
         if not isinstance(frame, pl.LazyFrame):
-            raise TypeError(f"Plugin '{self.name}' expected pl.LazyFrame, got {type(frame).__name__}")
+            raise TypeError(f"Validator '{self.name}' expected pl.LazyFrame, got {type(frame).__name__}")
 
         # Capture input shape for validation
         input_columns = frame.collect_schema().names() if self.preserve_columns else None
@@ -143,23 +143,23 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
         # Validate arguments
         self.validate_args(**kwargs)
 
-        # Execute plugin
+        # Execute validator
         try:
             result = self.execute(frame, **kwargs)
         except Exception as e:
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' execution failed: {e}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' execution failed: {e}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
                 original_error=e,
             ) from e
 
         # Type check output
         if not isinstance(result, pl.LazyFrame):
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' must return pl.LazyFrame, got {type(result).__name__}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' must return pl.LazyFrame, got {type(result).__name__}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
             )
 
         # Validate column preservation
@@ -175,9 +175,9 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
                 if extra:
                     error_parts.append(f"extra columns: {sorted(extra)}")
                 raise ValidatorExecutionError(
-                    f"Plugin '{self.name}' violated column preservation: {', '.join(error_parts)}",
-                    plugin_name=self.name,
-                    plugin_type=self.__class__.__name__,
+                    f"Validator '{self.name}' violated column preservation: {', '.join(error_parts)}",
+                    validator_name=self.name,
+                    validator_type=self.__class__.__name__,
                 )
 
         # Validate row count preservation
@@ -187,16 +187,16 @@ class FramePlugin(Validator[pl.LazyFrame, pl.LazyFrame], ABC):
             output_row_count = _out_count[0, 0]
             if output_row_count != input_row_count:
                 raise ValidatorExecutionError(
-                    f"Plugin '{self.name}' violated row preservation: "
+                    f"Validator '{self.name}' violated row preservation: "
                     f"input had {input_row_count} rows, output has {output_row_count}",
-                    plugin_name=self.name,
-                    plugin_type=self.__class__.__name__,
+                    validator_name=self.name,
+                    validator_type=self.__class__.__name__,
                 )
 
         return result
 
 
-class FrameParser(FramePlugin):
+class FrameParser(FrameValidator):
     """Base class for frame parsers (transformations).
 
     Frame parsers transform entire DataFrames. Common examples: add computed
@@ -206,7 +206,7 @@ class FrameParser(FramePlugin):
     This can be configured via preserve_columns and preserve_rows flags.
 
     Example:
-        >>> from nyctea.plugins.base import ValidatorMetadata
+        >>> from nyctea.validators.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class DeduplicateParser(FrameParser):
@@ -234,7 +234,7 @@ class FrameParser(FramePlugin):
         """Initialize frame parser.
 
         Args:
-            metadata: Plugin metadata.
+            metadata: Validator metadata.
             preserve_columns: If True, enforce column preservation (default: True).
             preserve_rows: If True, enforce row preservation (default: False).
         """
@@ -245,7 +245,7 @@ class FrameParser(FramePlugin):
         )
 
 
-class FrameCheck(FramePlugin):
+class FrameCheck(FrameValidator):
     """Base class for frame checks (validations).
 
     Frame checks validate entire DataFrames and return a boolean expression
@@ -254,7 +254,7 @@ class FrameCheck(FramePlugin):
     Frame checks always preserve both columns and rows.
 
     Example:
-        >>> from nyctea.plugins.base import ValidatorMetadata
+        >>> from nyctea.validators.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class MinRowsCheck(FrameCheck):
@@ -282,7 +282,7 @@ class FrameCheck(FramePlugin):
         Frame checks always preserve both columns and rows.
 
         Args:
-            metadata: Plugin metadata.
+            metadata: Validator metadata.
         """
         super().__init__(
             metadata,

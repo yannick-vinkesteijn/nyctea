@@ -6,8 +6,8 @@ import pytest
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
 from nyctea.exceptions import PipelineError
-from nyctea.plugins.registry import Registry
 from nyctea.schema.model import SchemaModel
+from nyctea.validators.registry import Registry
 
 
 class SimplePhase(PipelinePhase):

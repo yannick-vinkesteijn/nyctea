@@ -12,7 +12,7 @@ from nyctea.schema.model import SchemaModel
 try:
     import yaml
 except ImportError:
-    yaml = None  # type: ignore[assignment]
+    yaml = None
 
 
 class SchemaLoader:
@@ -52,9 +52,9 @@ class SchemaLoader:
         Returns:
             SchemaModel: Parsed or passed-through schema.
         """
-        if isinstance(schema, self.model_cls):
-            return schema
-        return self.from_mapping(schema)  # type: ignore[arg-type]
+        if isinstance(schema, Mapping):
+            return self.from_mapping(schema)
+        return schema
 
     def from_json_str(self, content: str) -> SchemaModel:
         """Load a schema from a JSON string.

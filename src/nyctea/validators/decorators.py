@@ -1,8 +1,8 @@
-"""Decorator adapters for functional-style plugin registration.
+"""Decorator adapters for functional-style validator registration.
 
-This module provides decorators that allow functions to be registered as plugins
-without explicitly creating plugin classes. This maintains the ergonomic
-functional API while leveraging the OOP plugin system internally.
+This module provides decorators that allow functions to be registered as validators
+without explicitly creating validator classes. This maintains the ergonomic
+functional API while leveraging the OOP validator system internally.
 """
 
 from collections.abc import Callable, Sequence
@@ -10,10 +10,10 @@ from typing import Any
 
 import polars as pl
 
-from nyctea.plugins.base import ValidatorMetadata
-from nyctea.plugins.column import ColumnCheck, ColumnParser
-from nyctea.plugins.frame import FrameCheck, FrameParser
-from nyctea.plugins.registry import Registry
+from nyctea.validators.base import ValidatorMetadata
+from nyctea.validators.column import ColumnCheck, ColumnParser
+from nyctea.validators.frame import FrameCheck, FrameParser
+from nyctea.validators.registry import Registry
 
 __all__ = [
     "ValidatorDecorator",
@@ -27,7 +27,7 @@ class ValidatorDecorator:
     classes and register them automatically.
 
     Example:
-        >>> from nyctea.plugins.registry import Registry
+        >>> from nyctea.validators.registry import Registry
         >>> import polars as pl
         >>>
         >>> registry = Registry()
@@ -61,11 +61,11 @@ class ValidatorDecorator:
         """Decorator to register a function as a column parser.
 
         Args:
-            name: Unique plugin name.
+            name: Unique validator name.
             description: Human-readable description.
-            version: Plugin version.
+            version: Validator version.
             tags: Optional tags for discovery.
-            author: Plugin author.
+            author: Validator author.
 
         Returns:
             Decorator function.
@@ -77,7 +77,7 @@ class ValidatorDecorator:
         """
 
         def decorator(func: Callable[[pl.Expr], pl.Expr]) -> Callable[[pl.Expr], pl.Expr]:
-            # Create anonymous plugin class wrapping the function
+            # Create anonymous validator class wrapping the function
             class FunctionColumnParser(ColumnParser):
                 def __init__(self) -> None:
                     metadata = ValidatorMetadata(
@@ -93,12 +93,12 @@ class ValidatorDecorator:
                     return func(column, **kwargs)
 
                 def validate_args(self, **kwargs: Any) -> None:
-                    # No additional validation for function-based plugins
+                    # No additional validation for function-based validators
                     pass
 
             # Create instance and register
-            plugin = FunctionColumnParser()
-            self.registry.register_column_parser(plugin)
+            validator = FunctionColumnParser()
+            self.registry.register_column_parser(validator)
 
             # Return original function for use
             return func
@@ -116,11 +116,11 @@ class ValidatorDecorator:
         """Decorator to register a function as a column check.
 
         Args:
-            name: Unique plugin name.
+            name: Unique validator name.
             description: Human-readable description.
-            version: Plugin version.
+            version: Validator version.
             tags: Optional tags for discovery.
-            author: Plugin author.
+            author: Validator author.
 
         Returns:
             Decorator function.
@@ -132,7 +132,7 @@ class ValidatorDecorator:
         """
 
         def decorator(func: Callable[[pl.Expr], pl.Expr]) -> Callable[[pl.Expr], pl.Expr]:
-            # Create anonymous plugin class wrapping the function
+            # Create anonymous validator class wrapping the function
             class FunctionColumnCheck(ColumnCheck):
                 def __init__(self) -> None:
                     metadata = ValidatorMetadata(
@@ -148,12 +148,12 @@ class ValidatorDecorator:
                     return func(column, **kwargs)
 
                 def validate_args(self, **kwargs: Any) -> None:
-                    # No additional validation for function-based plugins
+                    # No additional validation for function-based validators
                     pass
 
             # Create instance and register
-            plugin = FunctionColumnCheck()
-            self.registry.register_column_check(plugin)
+            validator = FunctionColumnCheck()
+            self.registry.register_column_check(validator)
 
             # Return original function for use
             return func
@@ -173,11 +173,11 @@ class ValidatorDecorator:
         """Decorator to register a function as a frame parser.
 
         Args:
-            name: Unique plugin name.
+            name: Unique validator name.
             description: Human-readable description.
-            version: Plugin version.
+            version: Validator version.
             tags: Optional tags for discovery.
-            author: Plugin author.
+            author: Validator author.
             preserve_columns: If True, enforce column preservation.
             preserve_rows: If True, enforce row preservation.
 
@@ -193,7 +193,7 @@ class ValidatorDecorator:
         def decorator(
             func: Callable[[pl.LazyFrame], pl.LazyFrame],
         ) -> Callable[[pl.LazyFrame], pl.LazyFrame]:
-            # Create anonymous plugin class wrapping the function
+            # Create anonymous validator class wrapping the function
             class FunctionFrameParser(FrameParser):
                 def __init__(self) -> None:
                     metadata = ValidatorMetadata(
@@ -213,12 +213,12 @@ class ValidatorDecorator:
                     return func(frame, **kwargs)
 
                 def validate_args(self, **kwargs: Any) -> None:
-                    # No additional validation for function-based plugins
+                    # No additional validation for function-based validators
                     pass
 
             # Create instance and register
-            plugin = FunctionFrameParser()
-            self.registry.register_frame_parser(plugin)
+            validator = FunctionFrameParser()
+            self.registry.register_frame_parser(validator)
 
             # Return original function for use
             return func
@@ -236,11 +236,11 @@ class ValidatorDecorator:
         """Decorator to register a function as a frame check.
 
         Args:
-            name: Unique plugin name.
+            name: Unique validator name.
             description: Human-readable description.
-            version: Plugin version.
+            version: Validator version.
             tags: Optional tags for discovery.
-            author: Plugin author.
+            author: Validator author.
 
         Returns:
             Decorator function.
@@ -257,7 +257,7 @@ class ValidatorDecorator:
         def decorator(
             func: Callable[[pl.LazyFrame], pl.LazyFrame],
         ) -> Callable[[pl.LazyFrame], pl.LazyFrame]:
-            # Create anonymous plugin class wrapping the function
+            # Create anonymous validator class wrapping the function
             class FunctionFrameCheck(FrameCheck):
                 def __init__(self) -> None:
                     metadata = ValidatorMetadata(
@@ -273,12 +273,12 @@ class ValidatorDecorator:
                     return func(frame, **kwargs)
 
                 def validate_args(self, **kwargs: Any) -> None:
-                    # No additional validation for function-based plugins
+                    # No additional validation for function-based validators
                     pass
 
             # Create instance and register
-            plugin = FunctionFrameCheck()
-            self.registry.register_frame_check(plugin)
+            validator = FunctionFrameCheck()
+            self.registry.register_frame_check(validator)
 
             # Return original function for use
             return func

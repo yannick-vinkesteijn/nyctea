@@ -268,6 +268,26 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="nullable=False"):
             schema.validate(df, registry)
 
+    def test_nullable_false_does_not_leak_internal_columns(self, registry):
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
+        df = pl.DataFrame({"age": [1, 2, 3]})
+        result = schema.validate(df, registry)
+        assert result.data.collect_schema().names() == ["age"]
+
+    def test_nullable_false_skips_missing_optional_column(self, registry):
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False, "required": False}}})
+        df = pl.DataFrame({"other": [1, 2, 3]})
+        result = schema.validate(df, registry)
+        assert "age" not in result.data.collect_schema().names()
+
+    def test_nullable_false_on_failure_ignore_does_not_raise(self, registry):
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": False, "on_failure": "ignore"}}}
+        )
+        df = pl.DataFrame({"age": [1, None, 3]})
+        result = schema.validate(df, registry)
+        assert result.data.collect_schema().names() == ["age"]
+
     def test_column_resolution_via_synonym(self, registry):
         schema = SchemaModel.from_dict(
             {

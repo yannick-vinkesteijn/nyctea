@@ -1,7 +1,7 @@
-"""Column-level plugin classes with purity enforcement.
+"""Column-level validator classes with purity enforcement.
 
 This module provides base classes for column-level operations (parsers and checks)
-with strict enforcement of single-column purity - plugins can only reference
+with strict enforcement of single-column purity - validators can only reference
 the input column and cannot access other columns in the DataFrame.
 """
 
@@ -12,19 +12,19 @@ from typing import Any
 import polars as pl
 
 from nyctea.exceptions import RegistrationError, ValidatorExecutionError
-from nyctea.plugins.base import Validator, ValidatorMetadata
+from nyctea.validators.base import Validator, ValidatorMetadata
 
 __all__ = [
     "ColumnCheck",
     "ColumnParser",
-    "ColumnPlugin",
+    "ColumnValidator",
 ]
 
 
-class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
-    """Abstract base class for all column-level plugins.
+class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
+    """Abstract base class for all column-level validators.
 
-    Column plugins operate on a single column (Polars expression) and must
+    Column validators operate on a single column (Polars expression) and must
     maintain "column purity" - they can only reference the input column
     and cannot access other columns in the DataFrame.
 
@@ -37,10 +37,10 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
     """
 
     def __init__(self, metadata: ValidatorMetadata) -> None:
-        """Initialize column plugin with metadata.
+        """Initialize column validator with metadata.
 
         Args:
-            metadata: Plugin metadata.
+            metadata: Validator metadata.
 
         Raises:
             RegistrationError: If the execute() method signature is invalid.
@@ -50,11 +50,11 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
 
     @abstractmethod
     def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:  # ty: ignore[invalid-method-override]
-        """Execute the plugin logic on a single column expression.
+        """Execute the validator logic on a single column expression.
 
         Args:
             column: The input column expression.
-            **kwargs: Plugin-specific arguments.
+            **kwargs: Validator-specific arguments.
 
         Returns:
             Transformed or validated column expression.
@@ -81,19 +81,19 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         # Check first parameter
         if not params or params[0].name != "column":
             raise RegistrationError(
-                f"Plugin '{self.name}' execute() must have 'column' as first parameter",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' execute() must have 'column' as first parameter",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
             )
 
         # Check that parameter is annotated as pl.Expr
         first_param = params[0]
         if first_param.annotation not in (pl.Expr, inspect.Parameter.empty):
             raise RegistrationError(
-                f"Plugin '{self.name}' execute() 'column' parameter must be "
+                f"Validator '{self.name}' execute() 'column' parameter must be "
                 f"annotated as pl.Expr, got {first_param.annotation}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
             )
 
     def _validate_purity(self, expr: pl.Expr, context: str) -> None:
@@ -112,33 +112,33 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
 
             if len(root_names) == 0:
                 raise ValidatorExecutionError(
-                    f"Plugin '{self.name}' {context} expression references no columns. "
-                    "Column plugins must reference exactly one column.",
-                    plugin_name=self.name,
-                    plugin_type=self.__class__.__name__,
+                    f"Validator '{self.name}' {context} expression references no columns. "
+                    "Column validators must reference exactly one column.",
+                    validator_name=self.name,
+                    validator_type=self.__class__.__name__,
                 )
 
             if len(root_names) > 1:
                 raise ValidatorExecutionError(
-                    f"Plugin '{self.name}' {context} expression references multiple "
-                    f"columns: {root_names}. Column plugins must only reference "
+                    f"Validator '{self.name}' {context} expression references multiple "
+                    f"columns: {root_names}. Column validators must only reference "
                     "the input column (single-column purity).",
-                    plugin_name=self.name,
-                    plugin_type=self.__class__.__name__,
+                    validator_name=self.name,
+                    validator_type=self.__class__.__name__,
                 )
         except Exception as e:
             if isinstance(e, ValidatorExecutionError):
                 raise
             # If meta.root_names() fails for any reason, raise an error
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' failed to validate {context} expression: {e}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' failed to validate {context} expression: {e}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
                 original_error=e,
             ) from e
 
     def __call__(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:  # ty: ignore[invalid-method-override]
-        """Execute plugin with purity validation.
+        """Execute validator with purity validation.
 
         This method wraps execute() to enforce column purity constraints.
         It validates that both input and output expressions reference exactly
@@ -146,7 +146,7 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
 
         Args:
             column: Input column expression.
-            **kwargs: Plugin-specific arguments.
+            **kwargs: Validator-specific arguments.
 
         Returns:
             Output column expression.
@@ -157,7 +157,7 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         """
         # Type check
         if not isinstance(column, pl.Expr):
-            raise TypeError(f"Plugin '{self.name}' expected pl.Expr, got {type(column).__name__}")
+            raise TypeError(f"Validator '{self.name}' expected pl.Expr, got {type(column).__name__}")
 
         # Validate input purity
         self._validate_purity(column, "input")
@@ -166,14 +166,14 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         # Validate arguments
         self.validate_args(**kwargs)
 
-        # Execute plugin
+        # Execute validator
         try:
             result = self.execute(column, **kwargs)
         except Exception as e:
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' execution failed: {e}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' execution failed: {e}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
                 column=input_column,
                 original_error=e,
             ) from e
@@ -181,9 +181,9 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         # Type check output
         if not isinstance(result, pl.Expr):
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' must return pl.Expr, got {type(result).__name__}",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"Validator '{self.name}' must return pl.Expr, got {type(result).__name__}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
                 column=input_column,
             )
 
@@ -194,18 +194,18 @@ class ColumnPlugin(Validator[pl.Expr, pl.Expr], ABC):
         # Ensure input and output reference the same column
         if input_column != output_column:
             raise ValidatorExecutionError(
-                f"Plugin '{self.name}' violated purity constraint: "
+                f"Validator '{self.name}' violated purity constraint: "
                 f"input references '{input_column}' but output references "
-                f"'{output_column}'. Column plugins must preserve the column reference.",
-                plugin_name=self.name,
-                plugin_type=self.__class__.__name__,
+                f"'{output_column}'. Column validators must preserve the column reference.",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
                 column=input_column,
             )
 
         return result
 
 
-class ColumnParser(ColumnPlugin):
+class ColumnParser(ColumnValidator):
     """Base class for column parsers (transformations).
 
     Column parsers transform column values while maintaining the column structure.
@@ -214,7 +214,7 @@ class ColumnParser(ColumnPlugin):
     Parsers are executed before type coercion and checks in the validation pipeline.
 
     Example:
-        >>> from nyctea.plugins.base import ValidatorMetadata
+        >>> from nyctea.validators.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class TrimParser(ColumnParser):
@@ -229,7 +229,7 @@ class ColumnParser(ColumnPlugin):
     """
 
 
-class ColumnCheck(ColumnPlugin):
+class ColumnCheck(ColumnValidator):
     """Base class for column checks (validations).
 
     Column checks validate column values and return a boolean expression
@@ -238,7 +238,7 @@ class ColumnCheck(ColumnPlugin):
     Checks are executed after parsing and type coercion in the validation pipeline.
 
     Example:
-        >>> from nyctea.plugins.base import ValidatorMetadata
+        >>> from nyctea.validators.base import ValidatorMetadata
         >>> import polars as pl
         >>>
         >>> class PositiveCheck(ColumnCheck):

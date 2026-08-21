@@ -1,11 +1,11 @@
-"""Built-in column check plugins."""
+"""Built-in column check validators."""
 
 from typing import Any
 
 import polars as pl
 
-from nyctea.plugins.base import ValidatorMetadata
-from nyctea.plugins.column import ColumnCheck
+from nyctea.validators.base import ValidatorMetadata
+from nyctea.validators.column import ColumnCheck
 
 __all__ = [
     "BetweenCheck",
