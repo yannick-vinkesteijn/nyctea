@@ -1,4 +1,4 @@
-<img align="center" width="150" height="150" src="docs/logo.png" alt="Nyctea logo">
+<img align="center" width="150" height="150" src="docs/assets/logo-nyctea.png" alt="Nyctea logo">
 
 # Nyctea
 
