@@ -371,7 +371,10 @@ class ColumnCheckPhase(PipelinePhase):
                         phase=self.name,
                     ) from e
 
-                alias = f"__check__{col_name}__{check_spec.name}"
+                # Index, not "{col}__{check}": the latter is ambiguous, since a column named
+                # 'a__b' with check 'c' and a column 'a' with check 'b__c' both produce
+                # '__check__a__b__c'. Nothing parses these aliases; they are opaque handles.
+                alias = f"__check__{len(check_masks)}"
                 _reject_alias_collision(
                     alias,
                     current_columns,

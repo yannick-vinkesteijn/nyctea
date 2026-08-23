@@ -400,13 +400,42 @@ class TestFullPipeline:
             {
                 "columns": {
                     "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]},
-                    "__check__age__min_value": {"dtype": "Int64", "nullable": True},
+                    "__check__0": {"dtype": "Int64", "nullable": True},
                 }
             }
         )
-        df = pl.DataFrame({"age": [1, 2], "__check__age__min_value": [9, 9]})
+        df = pl.DataFrame({"age": [1, 2], "__check__0": [9, 9]})
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
+
+    def test_check_mask_aliases_are_unambiguous(self, registry):
+        """Column and check names containing '__' must not produce a shared alias.
+
+        Column 'a' with check 'b__c' and column 'a__b' with check 'c' both mapped to
+        '__check__a__b__c' under the old naming, which crashed polars.
+        """
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="b__c", tags=[])
+        def positive(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        @decorators.column_check(name="c", tags=[])
+        def over_thousand(column: pl.Expr) -> pl.Expr:
+            return column > 1000
+
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "a": {"dtype": "Int64", "nullable": True, "checks": [{"name": "b__c"}]},
+                    "a__b": {"dtype": "Int64", "nullable": True, "checks": [{"name": "c"}]},
+                }
+            }
+        )
+        result = schema.validate(pl.DataFrame({"a": [5, -1], "a__b": [1, 2]}), registry)
+        errors = result.errors
+        assert errors.filter((pl.col("column") == "a") & (pl.col("check") == "b__c"))["count"].item() == 1
+        assert errors.filter((pl.col("column") == "a__b") & (pl.col("check") == "c"))["count"].item() == 2
 
     def test_column_resolution_via_synonym(self, registry):
         schema = SchemaModel.from_dict(
