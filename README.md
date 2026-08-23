@@ -147,12 +147,12 @@ CI runs linting, type checking, and the test suite on Python 3.11 through 3.14 f
 
 ## Documentation
 
-- **[Quickstart](docs/guides/quickstart.md)**: getting started guide
-- **[Features](docs/guides/features.md)**: schema syntax and validator capabilities
-- **[Registry guide](docs/guides/registry.md)**: registering and discovering validators
+- **[Quickstart](docs/user-guide/quickstart.md)**: getting started guide
+- **[Features](docs/user-guide/features.md)**: schema syntax and validator capabilities
+- **[Registry guide](docs/user-guide/registry.md)**: registering and discovering validators
 - **[API reference](docs/api/index.md)**: full public API
 - **[Roadmap](docs/development/roadmap.md)**: what's implemented and what's next
-- **[Breaking changes](docs/development/breaking-changes.md)**: migrating between versions
+- **[Breaking changes](docs/releases/breaking-changes.md)**: migrating between versions
 
 ## Contributing
 

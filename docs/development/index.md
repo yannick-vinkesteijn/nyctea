@@ -27,7 +27,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     What changed between v0.1.0 and v0.2.0, and how to migrate.
 
-    [:octicons-arrow-right-24: Breaking Changes](breaking-changes.md)
+    [:octicons-arrow-right-24: Breaking Changes](../releases/breaking-changes.md)
 
 -   :material-floor-plan:{ .lg .middle } **ADR: Pipeline Design**
 

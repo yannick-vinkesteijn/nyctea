@@ -1,4 +1,4 @@
-# Nyctea Documentation
+# Writing documentation
 
 This directory contains the source files for Nyctea's documentation, built with [Zensical](https://zensical.org/).
 
@@ -56,7 +56,7 @@ docs/
 │   ├── registry.md       # Function registry
 │   ├── schema.md         # Schema models
 │   └── ingest.md         # Data ingestion
-└── guides/               # User guides (manually written)
+└── user-guide/               # User guides (manually written)
     ├── index.md
     ├── quickstart.md
     ├── registry.md

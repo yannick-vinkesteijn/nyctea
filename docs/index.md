@@ -11,7 +11,7 @@ icon: lucide/home
 
 **Polars-native data validation with a composable validator pipeline.**
 
-[Get started :octicons-arrow-right-24:](guides/quickstart.md){ .md-button .md-button--primary }
+[Get started :octicons-arrow-right-24:](user-guide/quickstart.md){ .md-button .md-button--primary }
 [View on GitHub :octicons-mark-github-16:](https://github.com/yourusername/nyctea){ .md-button }
 
 </div>
@@ -123,7 +123,7 @@ result.errors                   # (2)!
 
     Get up and running. Learn schemas, parsers, checks, and the registry.
 
-    [:octicons-arrow-right-24: Guides](guides/index.md)
+    [:octicons-arrow-right-24: Guides](user-guide/index.md)
 
 -   :material-code-braces:{ .lg .middle } **API Reference**
 
