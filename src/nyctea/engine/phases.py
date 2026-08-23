@@ -16,6 +16,30 @@ from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.schema.model import SchemaModel
 
+NOT_NULL_CHECK = "not_null"
+"""Check name reported for a nullable=False column that contains nulls."""
+
+
+def _reject_alias_collision(alias: str, current_columns: list[str], phase: str, what: str) -> None:
+    """Raise if a generated internal column would overwrite a real input column.
+
+    Args:
+        alias: Generated internal column name.
+        current_columns: Column names currently present in the data.
+        phase: Phase name, for the error.
+        what: Human description of what the alias is for.
+
+    Raises:
+        PipelineError: If the alias collides with an existing column.
+    """
+    if alias in current_columns:
+        raise PipelineError(
+            f"Cannot build {what}: the input data already contains a column named "
+            f"'{alias}'. Rename it before validating.",
+            phase=phase,
+        )
+
+
 __all__ = [
     "CoercionPhase",
     "ColumnCheckPhase",
@@ -260,7 +284,12 @@ class CoercionPhase(PipelinePhase):
         # Snapshot null state before casting so coercion-introduced nulls
         # can be detected at collect time.
         cols_to_cast = [expr.meta.output_name() for expr in cast_exprs]
+        for c in cols_to_cast:
+            _reject_alias_collision(
+                f"__pre_null__{c}", current_dtypes.names(), self.name, f"the pre-null snapshot for column '{c}'"
+            )
         pre_null_exprs = [pl.col(c).is_null().alias(f"__pre_null__{c}") for c in cols_to_cast]
+        context.internal_columns.update(f"__pre_null__{c}" for c in cols_to_cast)
         context.data = lf.with_columns(pre_null_exprs).with_columns(cast_exprs)
 
         return context
@@ -343,11 +372,31 @@ class ColumnCheckPhase(PipelinePhase):
                     ) from e
 
                 alias = f"__check__{col_name}__{check_spec.name}"
+                _reject_alias_collision(
+                    alias,
+                    current_columns,
+                    self.name,
+                    f"the mask for check '{check_spec.name}' on column '{col_name}'",
+                )
                 mask_exprs.append(check_expr.alias(alias))
                 check_masks[(col_name, check_spec.name)] = alias
 
         if mask_exprs:
             context.data = lf.with_columns(mask_exprs)
+            context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
+
+        # Register the not-null masks as checks so they appear in the error report.
+        # Without this, on_failure='ignore' would swallow the null entirely.
+        for col_name, alias in notnull_aliases.items():
+            key = (col_name, NOT_NULL_CHECK)
+            if key in check_masks:
+                raise PipelineError(
+                    f"Column '{col_name}' is nullable=False and also has a check named "
+                    f"'{NOT_NULL_CHECK}'. The name is reserved for the built-in not-null "
+                    f"constraint. Rename the check.",
+                    phase=self.name,
+                )
+            check_masks[key] = alias
 
         context.check_masks = check_masks
 
@@ -377,6 +426,9 @@ class ColumnCheckPhase(PipelinePhase):
                 continue
             if col_schema.nullable is False:
                 alias = f"__notnull__{col_name}"
+                _reject_alias_collision(
+                    alias, current_columns, "column_checks", f"the not-null mask for column '{col_name}'"
+                )
                 mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
                 notnull_aliases[col_name] = alias
         return notnull_aliases
@@ -395,9 +447,12 @@ class ColumnCheckPhase(PipelinePhase):
         if not notnull_aliases:
             return
 
-        notnull_check = context.data.select(list(notnull_aliases.values())).collect()
+        # Aggregate first: collects a single row, not one boolean per input row.
+        notnull_check = context.data.select(
+            [pl.col(alias).all().alias(alias) for alias in notnull_aliases.values()]
+        ).collect()
         for col_name, alias in notnull_aliases.items():
-            if not notnull_check[alias].all() and context.schema.resolve_on_failure(col_name) != "ignore":
+            if not notnull_check[alias].item() and context.schema.resolve_on_failure(col_name) != "ignore":
                 raise PipelineError(
                     f"Column '{col_name}' has nullable=False but contains null values.",
                     phase=self.name,

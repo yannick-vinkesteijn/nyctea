@@ -118,9 +118,11 @@ def _(mo):
     mo.md("""
     ## 3. The pipeline
 
-    Under the hood Nyctea builds a fully lazy pipeline of phases.
-    Everything stays as a Polars `LazyFrame`. The data is never
-    collected inside the validator unless you set `lazy=False`.
+    Under the hood Nyctea builds a pipeline of phases. Your data stays a
+    Polars `LazyFrame` and its rows are only materialised if you set
+    `lazy=False`. The validator does run a few targeted collects on the
+    way, for the not-null constraint, the error report and the row count,
+    but those are aggregates over the query, not the data itself.
 
     ```
     ColumnResolutionPhase   pid -> patient_id, AGE -> age

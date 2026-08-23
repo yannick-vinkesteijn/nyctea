@@ -1,5 +1,29 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `nullable: false` is now enforced
+
+`ColumnSchema.nullable` defaults to `false`. Until now the not-null constraint was never applied,
+so nulls passed validation in every column that did not declare `nullable: true`. That gap is
+closed. A column that does not say `nullable: true` now fails validation when it contains a null.
+
+This is a behavior change, not only a bug fix. Schemas that relied on the previous silence will
+start raising.
+
+**Migration:** add `nullable: true` to every column that legitimately contains nulls. Columns that
+should reject nulls need no change; they are now enforced as always intended.
+
+Failure handling follows the column's resolved `on_failure`:
+
+| `on_failure` | Behavior on a null in a `nullable: false` column |
+| --- | --- |
+| `raise` (default) | Raises `PipelineError` |
+| `ignore` | Passes the value through and reports it in `errors` under check name `not_null` |
+
+Note that `on_failure: "null"` cannot apply here. `SchemaModel.resolve_on_failure` downgrades it
+to `raise` for any non-nullable column, and since `nullable` defaults to `false` that covers most
+columns. This silent downgrade is tracked separately; it should become a schema validation error
+rather than a substitution.
+
 ## Within v0.2.0 pre-release: `plugins` → `validators`
 
 Before the first public release, the extensibility system was renamed from "plugin" to "validator" terminology, to match the existing `Validator`/`ValidatorMetadata` base classes and avoid confusion with unrelated plugin-based projects.

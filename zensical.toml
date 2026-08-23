@@ -88,11 +88,11 @@ link = "https://pypi.org/project/nyctea"
 # ----------------------------------------------------------------------------
 # mkdocstrings configuration for API documentation
 # ----------------------------------------------------------------------------
-[project.plugins.mkdocstrings.handlers.python]
+[project.validators.mkdocstrings.handlers.python]
 inventories = ["https://docs.python.org/3/objects.inv"]
 paths = ["src"]
 
-[project.plugins.mkdocstrings.handlers.python.options]
+[project.validators.mkdocstrings.handlers.python.options]
 docstring_style = "google"
 inherited_members = true
 show_source = true

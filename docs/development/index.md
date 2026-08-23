@@ -7,7 +7,7 @@ icon: lucide/git-branch
 Architecture decisions, roadmap, migration notes, and contributor docs.
 
 !!! info "Current version: v0.2.0"
-    The plugin system and core pipeline are in place. Several pipeline phases are still stubs. See the [roadmap](roadmap.md) for what's next.
+    The validator system and core pipeline are in place. Several pipeline phases are still stubs. See the [roadmap](roadmap.md) for what's next.
 
 ---
 

@@ -258,7 +258,7 @@ class SchemaModel(BaseModel):
             SchemaModel: Parsed or passed-through schema.
         """
         if isinstance(schema, Mapping):
-            return SchemaModel.from_dict(schema)
+            return cls.from_dict(schema)
         return schema
 
     @classmethod

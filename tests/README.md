@@ -34,7 +34,7 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 
 - **test_validation_minimal.py** - Core validation functionality tests
     - Schema loading
-    - Plugin registry
+    - Validator registry
     - Parser application
     - Check execution
     - Validation reports
@@ -42,15 +42,15 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 
 ## Coverage by Module
 
-| Module                        | Coverage | Notes                     |
-| ----------------------------- | -------- | ------------------------- |
-| `__init__.py`                 | 100%     | Main exports              |
-| `schema/validator.py`         | 95%      | SchemaValidator           |
-| `plugins/builtins/parsers.py` | 84%      | Built-in parsers          |
-| `plugins/registry.py`         | 81%      | Plugin registration       |
-| `engine/phases.py`            | 83%      | Pipeline phases           |
-| `engine/pipeline.py`          | 59%      | Pipeline orchestration    |
-| `engine/validate.py`          | 14%      | Legacy (to be deprecated) |
+| Module                           | Coverage | Notes                     |
+| -------------------------------- | -------- | ------------------------- |
+| `__init__.py`                    | 100%     | Main exports              |
+| `schema/validator.py`            | 95%      | SchemaValidator           |
+| `validators/builtins/parsers.py` | 84%      | Built-in parsers          |
+| `validators/registry.py`         | 81%      | Validator registration    |
+| `engine/phases.py`               | 83%      | Pipeline phases           |
+| `engine/pipeline.py`             | 59%      | Pipeline orchestration    |
+| `engine/validate.py`             | 14%      | Legacy (to be deprecated) |
 
 ## Adding New Tests
 
@@ -79,7 +79,7 @@ Tests run automatically on:
 
 - Every push to `main`
 - Every pull request
-- Multiple Python versions (3.10, 3.11, 3.12)
+- Multiple Python versions (3.11, 3.12, 3.13, 3.14)
 
 See `.github/workflows/ci.yml` for CI configuration.
 
@@ -90,6 +90,6 @@ See `.github/workflows/ci.yml` for CI configuration.
 - [ ] Error reporting tests (rows/cells mode)
 - [ ] Pipeline customization tests
 - [ ] Observability tests (logging, metrics)
-- [ ] Plugin validation tests (purity, shape)
+- [ ] Validator tests (purity, shape)
 - [ ] Integration tests with Titanic example
 - [ ] Performance benchmarks

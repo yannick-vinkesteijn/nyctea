@@ -29,13 +29,13 @@ print(result.errors)      # Error summary
 ## Custom Column Parser
 
 ```python
-from nyctea.plugins.column import ColumnParser
-from nyctea.plugins.base import PluginMetadata
+from nyctea.validators.column import ColumnParser
+from nyctea.validators.base import ValidatorMetadata
 import polars as pl
 
 class MyParser(ColumnParser):
     def __init__(self):
-        super().__init__(PluginMetadata(name="my_parser"))
+        super().__init__(ValidatorMetadata(name="my_parser"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         # Your transformation logic
@@ -51,13 +51,13 @@ registry.register_column_parser(MyParser())
 ## Custom Column Check
 
 ```python
-from nyctea.plugins.column import ColumnCheck
-from nyctea.plugins.base import PluginMetadata
+from nyctea.validators.column import ColumnCheck
+from nyctea.validators.base import ValidatorMetadata
 import polars as pl
 
 class MyCheck(ColumnCheck):
     def __init__(self):
-        super().__init__(PluginMetadata(name="my_check"))
+        super().__init__(ValidatorMetadata(name="my_check"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         # Return boolean expression
@@ -69,13 +69,13 @@ class MyCheck(ColumnCheck):
 registry.register_column_check(MyCheck())
 ```
 
-## Decorator-Style Plugin
+## Decorator-Style Validator
 
 ```python
-from nyctea.plugins.decorators import PluginDecorator
+from nyctea.validators.decorators import ValidatorDecorator
 import polars as pl
 
-decorators = PluginDecorator(registry)
+decorators = ValidatorDecorator(registry)
 
 @decorators.column_parser(name="trim", tags=["string"])
 def trim(column: pl.Expr) -> pl.Expr:
@@ -162,7 +162,7 @@ columns:
     nullable: false
 ```
 
-## Built-in Plugins
+## Built-in Validators
 
 ### Parsers
 - `strip` - Remove whitespace
@@ -197,14 +197,14 @@ except PipelineError as e:
 
 ```python
 # Check what's registered
-print(registry.get_plugin_counts())
+print(registry.get_validator_counts())
 # {'column_parsers': 5, 'column_checks': 4, ...}
 
-# List all plugins
+# List all validators
 print(registry.column_parsers.list_names())
 # ['strip', 'to_int', 'to_float', 'lower', 'upper']
 
-# Get plugin by name
+# Get validator by name
 parser = registry.column_parsers.get("strip")
 print(parser.metadata)
 ```
@@ -232,12 +232,12 @@ register_builtins(registry)
 result = schema.validate(df, registry)
 ```
 
-### Custom Plugin + Use
+### Custom Validator + Use
 
 ```python
 class EmailValidator(ColumnCheck):
     def __init__(self):
-        super().__init__(PluginMetadata(name="email"))
+        super().__init__(ValidatorMetadata(name="email"))
 
     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
         return column.str.contains(r'^.+@.+\..+$')
@@ -258,10 +258,10 @@ result = validator.validate(df)
 
 ## Troubleshooting
 
-### Plugin Not Found
+### Validator Not Found
 ```python
-# Error: KeyError: "No plugin named 'my_parser' registered"
-# Solution: Register the plugin before validating
+# Error: KeyError: "No validator named 'my_parser' registered"
+# Solution: Register the validator before validating
 registry.register_column_parser(MyParser())
 ```
 
@@ -280,8 +280,8 @@ class MyPhase(PipelinePhase):
 
 ### Purity Violation
 ```python
-# Error: PluginExecutionError: "references multiple columns"
-# Solution: Column plugins can only reference the input column
+# Error: ValidatorError: "references multiple columns"
+# Solution: Column validators can only reference the input column
 def bad_parser(column: pl.Expr) -> pl.Expr:
     return column / pl.col("total")  # ❌ References 'total'
 
@@ -295,13 +295,13 @@ def good_parser(column: pl.Expr) -> pl.Expr:
 src/nyctea/
 ├── __init__.py              # Main exports
 ├── exceptions.py            # Exception classes
-├── plugins/
-│   ├── base.py             # BasePlugin
-│   ├── column.py           # Column plugin classes
-│   ├── frame.py            # Frame plugin classes
+├── validators/
+│   ├── base.py             # Validator
+│   ├── column.py           # Column validator classes
+│   ├── frame.py            # Frame validator classes
 │   ├── registry.py         # Registry classes
 │   ├── decorators.py       # Decorator API
-│   └── builtins/           # Built-in plugins
+│   └── builtins/           # Built-in validators
 │       ├── parsers.py
 │       ├── checks.py
 │       └── register.py
@@ -323,5 +323,5 @@ src/nyctea/
 1. Read [REFACTOR_SUMMARY.md](REFACTOR_SUMMARY.md) for complete details
 2. Read [README_v0.2.md](README_v0.2.md) for user guide
 3. Run `test_minimal.py` to see it working
-4. Create your own custom plugins
+4. Create your own custom validators
 5. Experiment with pipeline customization

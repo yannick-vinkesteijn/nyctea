@@ -1,6 +1,6 @@
 # Claude Instructions for Nyctea
 
-Nyctea is a Polars-based data validation library with a plugin architecture. Source lives in `src/nyctea/`.
+Nyctea is a Polars-based data validation library with a validator architecture. Source lives in `src/nyctea/`.
 
 ## Common mistakes to avoid
 - Do NOT call `.collect()` prematurely. Keep frames lazy until the final step or when an operation strictly requires it.
@@ -13,7 +13,7 @@ Nyctea is a Polars-based data validation library with a plugin architecture. Sou
 
 ## Design
 
-- Nyctea uses OOP: inheritance for the plugin hierarchy (`BasePlugin` -> `ColumnPlugin` -> `ColumnParser`/`ColumnCheck`), composition for the pipeline (`ValidationPipeline` containing `PipelinePhase` objects). Follow these patterns for new code.
+- Nyctea uses OOP: inheritance for the validator hierarchy (`Validator` -> `ColumnValidator` -> `ColumnParser`/`ColumnCheck`), composition for the pipeline (`ValidationPipeline` containing `PipelinePhase` objects). Follow these patterns for new code.
 - Classes define structure and interface via inheritance, but methods should be functionally pure -- pass data via arguments and return values, don't store intermediate state on `self`.
 
 ## Polars
@@ -55,9 +55,22 @@ Nyctea is a Polars-based data validation library with a plugin architecture. Sou
 - Test files mirror the source structure under `tests/`.
 - Keep tests simple and focused on one behavior per test.
 
+## Agent documents
+
+Agent-authored working documents do not go in `docs/`. `docs/` is the deployed site.
+They go in `.agents/`, following the layout used in `plugin-healthcare/wingman`:
+
+- `.agents/design/` design docs. Finalized ADRs still go to `docs/development/decisions/`.
+- `.agents/plan/` plans and execution plans.
+- `.agents/review/` code and maturity reviews.
+- `.agents/memory/` freeform session notes and handover scratch. Gitignored.
+
+Name each file `YYYYMMDDHHMM_<short-descriptive-title>.md`. Every folder has an `index.md`
+with a `Date | File | Summary` table, newest first. Add a row when you add a document.
+
 ## Documentation
 
-- Update `docs/guides/` when changing user-facing behaviour (public API, plugin interface, schema syntax).
+- Update `docs/guides/` when changing user-facing behaviour (public API, validator interface, schema syntax).
 - Update `docs/api/` when adding, removing, or renaming public classes or functions.
 - The `docs/development/` folder is for developer and contributor documentation (contributing guide, roadmap, releasing). Update it when development processes change.
 - Write documentation that is concise and direct. Use short sentences. Avoid filler phrases and decorative punctuation such as em dashes.

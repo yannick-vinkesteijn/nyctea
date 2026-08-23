@@ -6,7 +6,7 @@ Helper scripts for local development and CI simulation.
 
 ### `test-all-versions.sh`
 
-Tests the package across all supported Python versions (3.10-3.14), mimicking the GitHub Actions test matrix.
+Tests the package across all supported Python versions (3.11-3.14), mimicking the GitHub Actions test matrix.
 
 ```bash
 ./scripts/test-all-versions.sh
@@ -73,7 +73,7 @@ just validate       # Clean + setup + CI + build
 ## Requirements
 
 - `uv` - Python package manager
-- Python 3.10-3.14 (automatically installed by uv)
+- Python 3.11-3.14 (automatically installed by uv)
 - `just` (optional, for using the justfile)
 
 Install just: `brew install just` (macOS) or see <https://github.com/casey/just>

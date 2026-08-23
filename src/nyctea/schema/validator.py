@@ -134,11 +134,10 @@ class SchemaValidator:
         # Build report (targeted collect of row count only)
         report = self._build_report(context)
 
-        # Strip internal columns (lazy)
+        # Strip only the helper columns this run generated. Prefix matching would also
+        # drop a legitimate user column that happens to start with one of the prefixes.
         internal_cols = [
-            c
-            for c in context.data.collect_schema().names()
-            if c.startswith(("__check__", "__pre_null__", "__row_index__", "__notnull__"))
+            c for c in context.data.collect_schema().names() if c == "__row_index__" or c in context.internal_columns
         ]
         clean = context.data.drop(internal_cols)
 

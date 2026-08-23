@@ -2,15 +2,15 @@
 
 # Nyctea
 
-Polars-based data validation library with an extensible OOP plugin architecture.
+Polars-based data validation library with an extensible OOP validator architecture.
 
 ## Features
 
-### Plugin system
+### Validator system
 
 - **Extensible**: create custom parsers and checks by inheriting from base classes
-- **Type-safe**: generic plugin classes with runtime validation
-- **Discoverable**: tag-based plugin discovery and registration
+- **Type-safe**: generic validator classes with runtime validation
+- **Discoverable**: tag-based validator discovery and registration
 
 ### Customizable pipeline
 
@@ -55,7 +55,7 @@ schema = SchemaModel.from_dict({
     }
 })
 
-# Register built-in plugins
+# Register built-in validators
 registry = Registry()
 register_builtins(registry)
 
@@ -68,14 +68,14 @@ print(result.report.summary())
 print(result.data.collect())
 ```
 
-## Creating custom plugins
+## Creating custom validators
 
 ### Custom parser (OOP)
 
 ```python
 import polars as pl
-from nyctea.plugins.base import ValidatorMetadata
-from nyctea.plugins.column import ColumnParser
+from nyctea.validators.base import ValidatorMetadata
+from nyctea.validators.column import ColumnParser
 
 
 class TrimParser(ColumnParser):
@@ -100,7 +100,7 @@ registry.register_column_parser(TrimParser())
 
 ```python
 import polars as pl
-from nyctea.plugins.decorators import ValidatorDecorator
+from nyctea.validators.decorators import ValidatorDecorator
 
 decorators = ValidatorDecorator(registry)
 
@@ -114,18 +114,18 @@ def is_positive(column: pl.Expr) -> pl.Expr:
 
 ```text
 Validator[TInput, TOutput]
-├── ColumnPlugin[pl.Expr, pl.Expr]
+├── ColumnValidator[pl.Expr, pl.Expr]
 │   ├── ColumnParser (transformations)
 │   └── ColumnCheck (validations)
-└── FramePlugin[pl.LazyFrame, pl.LazyFrame]
+└── FrameValidator[pl.LazyFrame, pl.LazyFrame]
     ├── FrameParser (transformations)
     └── FrameCheck (validations)
 
 Registry
-├── column_parsers: PluginRegistry[ColumnParser]
-├── column_checks: PluginRegistry[ColumnCheck]
-├── frame_parsers: PluginRegistry[FrameParser]
-└── frame_checks: PluginRegistry[FrameCheck]
+├── column_parsers: ValidatorRegistry[ColumnParser]
+├── column_checks: ValidatorRegistry[ColumnCheck]
+├── frame_parsers: ValidatorRegistry[FrameParser]
+└── frame_checks: ValidatorRegistry[FrameCheck]
 
 ValidationPipeline
 ├── ColumnResolutionPhase (synonyms)
@@ -148,8 +148,8 @@ CI runs linting, type checking, and the test suite on Python 3.11 through 3.14 f
 ## Documentation
 
 - **[Quickstart](docs/guides/quickstart.md)**: getting started guide
-- **[Features](docs/guides/features.md)**: schema syntax and plugin capabilities
-- **[Registry guide](docs/guides/registry.md)**: registering and discovering plugins
+- **[Features](docs/guides/features.md)**: schema syntax and validator capabilities
+- **[Registry guide](docs/guides/registry.md)**: registering and discovering validators
 - **[API reference](docs/api/index.md)**: full public API
 - **[Roadmap](docs/development/roadmap.md)**: what's implemented and what's next
 - **[Breaking changes](docs/development/breaking-changes.md)**: migrating between versions
@@ -160,7 +160,7 @@ Contributions are welcome. Please open an issue or pull request.
 
 Guidelines:
 
-1. Follow the OOP plugin architecture patterns
+1. Follow the OOP validator architecture patterns
 2. Add tests mirroring the `src/` structure
 3. Ensure Ruff linting and `ty` type checking pass
 4. Follow Google-style docstrings

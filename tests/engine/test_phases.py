@@ -13,6 +13,7 @@ from nyctea.engine.phases import (
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
 from nyctea.exceptions import PipelineError
+from nyctea.validators.decorators import ValidatorDecorator
 
 
 @pytest.fixture
@@ -287,6 +288,125 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": [1, None, 3]})
         result = schema.validate(df, registry)
         assert result.data.collect_schema().names() == ["age"]
+
+    def test_nullable_false_on_failure_ignore_reports_the_null(self, registry):
+        """on_failure='ignore' must report the null, not swallow it."""
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": False, "on_failure": "ignore"}}}
+        )
+        df = pl.DataFrame({"age": [1, None, 3]})
+        result = schema.validate(df, registry)
+        assert result.errors.filter(pl.col("check") == "not_null")["count"].item() == 1
+
+    def test_notnull_mask_alias_collision_raises(self, registry):
+        """A real column named like the generated mask must error, not be silently dropped."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False},
+                    "__notnull__age": {"dtype": "Int64", "nullable": True},
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [1, 2], "__notnull__age": [9, 9]})
+        with pytest.raises(PipelineError, match="already contains a column named"):
+            schema.validate(df, registry)
+
+    def test_from_python_preserves_subclass(self):
+        """from_python must honour the receiving class, not hardcode SchemaModel."""
+
+        class MySchema(SchemaModel):
+            pass
+
+        result = MySchema.from_python({"columns": {"age": {"dtype": "Int64"}}})
+        assert isinstance(result, MySchema)
+
+    def test_user_columns_with_internal_prefixes_are_preserved(self, registry):
+        """Only columns this run generated are stripped, not everything matching a prefix."""
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
+        df = pl.DataFrame({"age": [1, 2], "__notnull__zzz": [7, 8], "__check__foo": [1, 2]})
+        result = schema.validate(df, registry)
+        assert result.data.collect_schema().names() == ["age", "__notnull__zzz", "__check__foo"]
+
+    def test_generated_masks_are_still_stripped(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                }
+            }
+        )
+        result = schema.validate(pl.DataFrame({"age": [1, 2]}), registry)
+        assert result.data.collect_schema().names() == ["age"]
+
+    def test_pre_null_mask_alias_collision_raises(self, registry):
+        """Same guard for the coercion pre-null snapshot."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True},
+                    "__pre_null__age": {"dtype": "Int64", "nullable": True},
+                }
+            }
+        )
+        df = pl.DataFrame({"age": ["1", "2"], "__pre_null__age": [9, 9]})
+        with pytest.raises(PipelineError, match="already contains a column named"):
+            schema.validate(df, registry)
+
+    def test_not_null_check_name_is_reserved_on_non_nullable_column(self, registry):
+        """A user check named not_null must not silently replace the built-in constraint."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="not_null", tags=[])
+        def over_hundred(column: pl.Expr) -> pl.Expr:
+            return column > 100
+
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": False, "checks": [{"name": "not_null"}]}}}
+        )
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
+
+    def test_not_null_check_name_allowed_on_nullable_column(self, registry):
+        """The reservation only applies where the built-in constraint is generated."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="not_null", tags=[])
+        def over_hundred(column: pl.Expr) -> pl.Expr:
+            return column > 100
+
+        schema = SchemaModel.from_dict(
+            {"columns": {"age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "not_null"}]}}}
+        )
+        result = schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
+        assert result.errors.filter(pl.col("check") == "not_null")["count"].item() == 1
+
+    @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
+    def test_not_null_reported_in_every_error_mode(self, registry, mode):
+        """Registering not-null masks must not break any error report mode."""
+        schema = SchemaModel.from_dict(
+            {"on_failure": "ignore", "columns": {"age": {"dtype": "Int64", "nullable": False}}}
+        )
+        result = schema.validate(
+            pl.DataFrame({"age": [1, None, 3]}),
+            registry,
+            error_report_config=ErrorReportConfig(mode=mode),
+        )
+        assert result.errors.filter(pl.col("check") == "not_null").height == 1
+
+    def test_check_mask_alias_collision_raises(self, registry):
+        """Same guard for check masks."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]},
+                    "__check__age__min_value": {"dtype": "Int64", "nullable": True},
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [1, 2], "__check__age__min_value": [9, 9]})
+        with pytest.raises(PipelineError, match="already contains a column named"):
+            schema.validate(df, registry)
 
     def test_column_resolution_via_synonym(self, registry):
         schema = SchemaModel.from_dict(
