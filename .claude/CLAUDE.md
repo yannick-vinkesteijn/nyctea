@@ -63,10 +63,15 @@ They go in `.agents/`, following the layout used in `plugin-healthcare/wingman`:
 - `.agents/design/` design docs. Finalized ADRs still go to `docs/development/decisions/`.
 - `.agents/plan/` plans and execution plans.
 - `.agents/review/` code and maturity reviews.
-- `.agents/memory/` freeform session notes and handover scratch. Gitignored.
+- `.agents/memory/` freeform session notes and handover scratch.
 
 Name each file `YYYYMMDDHHMM_<short-descriptive-title>.md`. Every folder has an `index.md`
 with a `Date | File | Summary` table, newest first. Add a row when you add a document.
+
+**`.agents/` is gitignored and stays local. Never commit it and never suggest committing it.**
+This repository is public. Agent working notes include adversarial audits and unshipped design
+drafts that do not belong in a public history. Anything that should be public goes in an issue,
+or in `docs/development/decisions/` as a dated ADR once the decision is implemented.
 
 ## Documentation
 
