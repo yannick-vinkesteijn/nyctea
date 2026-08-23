@@ -16,6 +16,7 @@ nav = [
     { "User Guides" = [
         { "Overview" = "guides/index.md" },
         { "Quick Start" = "guides/quickstart.md" },
+        { "Features" = "guides/features.md" },
         { "Validator Registry" = "guides/registry.md" },
     ]},
     { "API Reference" = [
@@ -28,6 +29,11 @@ nav = [
     { "Development" = [
         { "Overview" = "development/index.md" },
         { "Roadmap" = "development/roadmap.md" },
+        { "Decisions" = [
+            { "on_failure" = "development/decisions/adr-on-failure.md" },
+            { "Pipeline design" = "development/decisions/adr-pipeline-design.md" },
+            { "Validation API" = "development/decisions/adr-validation-api.md" },
+        ]},
         { "Breaking Changes" = "development/breaking-changes.md" },
         { "ADR: Pipeline Design" = "development/adr-pipeline-design.md" },
         { "ADR: Validation API" = "development/adr-validation-api.md" },

@@ -176,7 +176,3 @@ schema = SchemaModel.from_dict({
 ```
 
 ## Next Steps
-
-- Understand the [validation pipeline](pipeline.md)
-- Write [custom functions](custom-functions.md)
-- Explore [examples](examples.md)

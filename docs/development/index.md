@@ -35,7 +35,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     Why we replaced the monolithic `validate()` function with a composable phase pipeline.
 
-    [:octicons-arrow-right-24: Pipeline ADR](adr-pipeline-design.md)
+    [:octicons-arrow-right-24: Pipeline ADR](decisions/adr-pipeline-design.md)
 
 -   :material-scale-balance:{ .lg .middle } **ADR: Validation API & Library Comparison**
 
@@ -43,7 +43,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     Design rationale for `schema.validate(df, registry)`. Comparison with Pandera, Patito, and Dataframely.
 
-    [:octicons-arrow-right-24: API ADR](adr-validation-api.md)
+    [:octicons-arrow-right-24: API ADR](decisions/adr-validation-api.md)
 
 -   :material-tag-outline:{ .lg .middle } **Releasing**
 
@@ -59,10 +59,4 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
 ## About this project
 
-Nyctea started as a "vibe code" experiment to explore transferring software engineering knowledge to Claude Code for production Python development. The development history, sprint notes, and lessons learned are documented below.
-
-??? note "Sprint and refactor history"
-    - [Sprint 1 Summary](SPRINT_1_COMPLETE.md)
-    - [Refactor Summary](REFACTOR_SUMMARY.md)
-    - [Type Checking Notes](TYPE_CHECKING_NOTES.md)
-    - [Original Refactor Plan](nyctea-refactor-plan.md)
+Nyctea is a Polars-native validation library. This section holds contributor documentation: the roadmap, release process, architecture decisions, and breaking changes.

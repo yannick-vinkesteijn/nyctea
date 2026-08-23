@@ -173,4 +173,4 @@ Verified against Pandera 0.29.0 · Patito 0.8.6 · Dataframely 2.7.0 · Great Ex
 
     Great Expectations 1.15 has no Polars support. The community request was closed as "not planned" in August 2024.
 
-[Full comparison and citations :octicons-arrow-right-24:](development/adr-validation-api.md){ .md-button }
+[Full comparison and citations :octicons-arrow-right-24:](development/decisions/adr-validation-api.md){ .md-button }

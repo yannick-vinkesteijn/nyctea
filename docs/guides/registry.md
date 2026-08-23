@@ -312,7 +312,3 @@ def positive(col: pl.Expr) -> pl.Expr:
 1. **Use type hints** - Always provide complete type annotations
 
 ## Next Steps
-
-- Learn about [column parsers](column-parsers.md) in detail
-- Explore [column checks](column-checks.md) patterns
-- See [custom functions](custom-functions.md) for advanced examples
