@@ -57,4 +57,4 @@ jobs:
 
       - name: Smoke test wheel
         run: |
-          uv run --isolated --no-project --with dist/*.whl python -c "from nyctea import SchemaModel, MasterRegistry, register_builtins; print('✅ Import successful')"
+          uv run --isolated --no-project --with dist/*.whl python -c "from nyctea import SchemaModel, Registry, register_builtins; print('✅ Import successful')"

@@ -53,7 +53,7 @@ uv pip install dist/*.whl
 
 echo ""
 echo "Testing import..."
-python -c "from nyctea import SchemaModel, MasterRegistry, register_builtins; print('✅ Import successful')"
+python -c "from nyctea import SchemaModel, Registry, register_builtins; print('✅ Import successful')"
 
 deactivate
 

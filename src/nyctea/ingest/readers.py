@@ -106,7 +106,7 @@ def read_csv(
 
 
 def read_parquet(
-    path: str | Path | list[str | Path],
+    path: str | Path | list[str] | list[Path],
     schema: SchemaModel,
     lazy: bool | None = None,
 ) -> pl.DataFrame | pl.LazyFrame:
@@ -122,8 +122,8 @@ def read_parquet(
     """
     use_lazy = schema.lazy if lazy is None else lazy
     if use_lazy:
-        return pl.scan_parquet(path)  # type: ignore[arg-type]
-    return pl.read_parquet(path)  # type: ignore[arg-type]
+        return pl.scan_parquet(path)
+    return pl.read_parquet(path)
 
 
 __all__ = ["read_csv", "read_parquet"]

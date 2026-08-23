@@ -23,9 +23,9 @@ def test_nyctea_error_is_base():
 
 def test_plugin_error_with_context():
     """Test ValidatorError stores context."""
-    error = ValidatorError("Test error", plugin_name="test_plugin", plugin_type="ColumnParser")
-    assert error.plugin_name == "test_plugin"
-    assert error.plugin_type == "ColumnParser"
+    error = ValidatorError("Test error", validator_name="test_validator", validator_type="ColumnParser")
+    assert error.validator_name == "test_validator"
+    assert error.validator_type == "ColumnParser"
     assert str(error) == "Test error"
 
 
@@ -33,17 +33,19 @@ def test_registration_error_inherits_plugin_error():
     """Test RegistrationError is a ValidatorError."""
     assert issubclass(RegistrationError, ValidatorError)
 
-    error = RegistrationError("Registration failed", plugin_name="bad_plugin")
-    assert error.plugin_name == "bad_plugin"
+    error = RegistrationError("Registration failed", validator_name="bad_plugin")
+    assert error.validator_name == "bad_plugin"
 
 
 def test_plugin_execution_error_with_column():
     """Test ValidatorExecutionError stores column and original error."""
     original = ValueError("Bad value")
-    error = ValidatorExecutionError("Execution failed", plugin_name="my_parser", column="age", original_error=original)
+    error = ValidatorExecutionError(
+        "Execution failed", validator_name="my_parser", column="age", original_error=original
+    )
     assert error.column == "age"
     assert error.original_error is original
-    assert error.plugin_name == "my_parser"
+    assert error.validator_name == "my_parser"
 
 
 def test_validation_error_with_details():

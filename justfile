@@ -73,7 +73,7 @@ typecheck-path PATH:
 
 # Run security vulnerability scan
 secure:
-    uv run uv-secure
+    uv audit
 
 # === GitHub Actions Simulation ===
 

@@ -4,15 +4,12 @@ This module provides observer protocols and implementations for monitoring
 pipeline execution, collecting metrics, and logging phase activity.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from nyctea.engine.context import PipelineContext
+from nyctea.engine.context import PipelineContext
 
 __all__ = [
     "LoggingObserver",

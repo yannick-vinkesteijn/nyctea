@@ -8,18 +8,37 @@ This is a minimal implementation with core phases. Additional phases
 will be added in future iterations.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
 import polars as pl
 
+from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
+from nyctea.schema.model import SchemaModel
 
-if TYPE_CHECKING:
-    from nyctea.engine.context import PipelineContext
+NOT_NULL_CHECK = "not_null"
+"""Check name reported for a nullable=False column that contains nulls."""
+
+
+def _reject_alias_collision(alias: str, current_columns: list[str], phase: str, what: str) -> None:
+    """Raise if a generated internal column would overwrite a real input column.
+
+    Args:
+        alias: Generated internal column name.
+        current_columns: Column names currently present in the data.
+        phase: Phase name, for the error.
+        what: Human description of what the alias is for.
+
+    Raises:
+        PipelineError: If the alias collides with an existing column.
+    """
+    if alias in current_columns:
+        raise PipelineError(
+            f"Cannot build {what}: the input data already contains a column named "
+            f"'{alias}'. Rename it before validating.",
+            phase=phase,
+        )
+
 
 __all__ = [
     "CoercionPhase",
@@ -117,7 +136,7 @@ class ColumnParsingPhase(PipelinePhase):
     """Apply column parsers (transformations).
 
     This phase applies all column-level parsers defined in the schema,
-    using the plugin registry to look up parser implementations.
+    using the validator registry to look up parser implementations.
 
     Dependencies: column_resolution (needs resolved names)
     """
@@ -158,7 +177,7 @@ class ColumnParsingPhase(PipelinePhase):
 
             # Chain parsers
             for parser_spec in col_schema.parsers:
-                # Look up parser plugin
+                # Look up parser validator
                 try:
                     parser = registry.column_parsers.get(parser_spec.name)
                 except KeyError as e:
@@ -265,7 +284,12 @@ class CoercionPhase(PipelinePhase):
         # Snapshot null state before casting so coercion-introduced nulls
         # can be detected at collect time.
         cols_to_cast = [expr.meta.output_name() for expr in cast_exprs]
+        for c in cols_to_cast:
+            _reject_alias_collision(
+                f"__pre_null__{c}", current_dtypes.names(), self.name, f"the pre-null snapshot for column '{c}'"
+            )
         pre_null_exprs = [pl.col(c).is_null().alias(f"__pre_null__{c}") for c in cols_to_cast]
+        context.internal_columns.update(f"__pre_null__{c}" for c in cols_to_cast)
         context.data = lf.with_columns(pre_null_exprs).with_columns(cast_exprs)
 
         return context
@@ -314,11 +338,13 @@ class ColumnCheckPhase(PipelinePhase):
         schema = context.schema
         registry = context.registry
         lf = context.data
+        current_columns = lf.collect_schema().names()
 
         # Build boolean mask columns for each check (True = passed)
         # No collect here — downstream phases use these masks lazily
         mask_exprs: list[pl.Expr] = []
         check_masks: dict[tuple[str, str], str] = {}
+        notnull_aliases = self._build_notnull_mask_exprs(schema, current_columns, mask_exprs)
 
         for col_name, col_schema in schema.columns.items():
             checks_to_run = list(col_schema.checks) if col_schema.checks else []
@@ -345,16 +371,95 @@ class ColumnCheckPhase(PipelinePhase):
                         phase=self.name,
                     ) from e
 
-                alias = f"__check__{col_name}__{check_spec.name}"
+                # Index, not "{col}__{check}": the latter is ambiguous, since a column named
+                # 'a__b' with check 'c' and a column 'a' with check 'b__c' both produce
+                # '__check__a__b__c'. Nothing parses these aliases; they are opaque handles.
+                alias = f"__check__{len(check_masks)}"
+                _reject_alias_collision(
+                    alias,
+                    current_columns,
+                    self.name,
+                    f"the mask for check '{check_spec.name}' on column '{col_name}'",
+                )
                 mask_exprs.append(check_expr.alias(alias))
                 check_masks[(col_name, check_spec.name)] = alias
 
         if mask_exprs:
             context.data = lf.with_columns(mask_exprs)
+            context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
+
+        # Register the not-null masks as checks so they appear in the error report.
+        # Without this, on_failure='ignore' would swallow the null entirely.
+        for col_name, alias in notnull_aliases.items():
+            key = (col_name, NOT_NULL_CHECK)
+            if key in check_masks:
+                raise PipelineError(
+                    f"Column '{col_name}' is nullable=False and also has a check named "
+                    f"'{NOT_NULL_CHECK}'. The name is reserved for the built-in not-null "
+                    f"constraint. Rename the check.",
+                    phase=self.name,
+                )
+            check_masks[key] = alias
 
         context.check_masks = check_masks
 
+        self._enforce_notnull(context, notnull_aliases)
+
         return context
+
+    @staticmethod
+    def _build_notnull_mask_exprs(
+        schema: SchemaModel,
+        current_columns: list[str],
+        mask_exprs: list[pl.Expr],
+    ) -> dict[str, str]:
+        """Add a not-null mask expression for every nullable=False column present in the data.
+
+        Args:
+            schema: Schema being validated.
+            current_columns: Column names currently present in the data.
+            mask_exprs: Mutable list of mask expressions to append to.
+
+        Returns:
+            Mapping of column name to its not-null mask alias.
+        """
+        notnull_aliases: dict[str, str] = {}
+        for col_name, col_schema in schema.columns.items():
+            if col_name not in current_columns:
+                continue
+            if col_schema.nullable is False:
+                alias = f"__notnull__{col_name}"
+                _reject_alias_collision(
+                    alias, current_columns, "column_checks", f"the not-null mask for column '{col_name}'"
+                )
+                mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
+                notnull_aliases[col_name] = alias
+        return notnull_aliases
+
+    def _enforce_notnull(self, context: PipelineContext, notnull_aliases: dict[str, str]) -> None:
+        """Raise if any nullable=False column contains a null value, unless on_failure='ignore'.
+
+        Args:
+            context: Pipeline context with the not-null mask columns applied.
+            notnull_aliases: Mapping of column name to its not-null mask alias.
+
+        Raises:
+            PipelineError: If a nullable=False column contains a null value and its
+                resolved on_failure behavior is not 'ignore'.
+        """
+        if not notnull_aliases:
+            return
+
+        # Aggregate first: collects a single row, not one boolean per input row.
+        notnull_check = context.data.select(
+            [pl.col(alias).all().alias(alias) for alias in notnull_aliases.values()]
+        ).collect()
+        for col_name, alias in notnull_aliases.items():
+            if not notnull_check[alias].item() and context.schema.resolve_on_failure(col_name) != "ignore":
+                raise PipelineError(
+                    f"Column '{col_name}' has nullable=False but contains null values.",
+                    phase=self.name,
+                )
 
     def can_skip(self, context: PipelineContext) -> bool:
         """Skip if no checks are defined in schema.

@@ -4,7 +4,9 @@ This folder contains documentation about the development process and architectur
 
 ## Claude Code Experiment
 
-Nyctea v0.2 was developed as a **"vibe code" experiment** to explore how software engineering knowledge and best practices can be effectively transferred to Claude Code for building production-quality Python packages.
+Nyctea v0.2 was developed as a **"vibe code" experiment** to explore how software engineering
+knowledge and best practices can be effectively transferred to Claude Code for building
+production-quality Python packages.
 
 ### Experiment Goals
 
@@ -47,6 +49,7 @@ The development followed an **agile sprint methodology**:
 ## Sprint 1 Results
 
 **Delivered in ~1 working day**:
+
 - 18 new core implementation files
 - 7 comprehensive test files (61 tests, 52% coverage)
 - 6 documentation files
@@ -54,6 +57,7 @@ The development followed an **agile sprint methodology**:
 - Full CI/CD pipeline
 
 **Quality metrics**:
+
 - ✅ All 61 tests passing
 - ✅ Ruff linting passed
 - ✅ Type hints throughout
@@ -87,6 +91,7 @@ The development followed an **agile sprint methodology**:
 See [nyctea-refactor-plan.md](nyctea-refactor-plan.md) for the complete roadmap.
 
 **Sprint 2 priorities**:
+
 - Frame parser/check support
 - Remaining pipeline phases
 - Titanic example validation
@@ -102,11 +107,15 @@ If you're interested in the Claude Code development process:
 
 ## Acknowledgments
 
-This experiment demonstrates that with proper guidance and quality gates, AI-assisted development can produce production-quality code while maintaining high standards for testing, documentation, and maintainability.
+This experiment demonstrates that with proper guidance and quality gates, AI-assisted development
+can produce production-quality code while maintaining high standards for testing, documentation,
+and maintainability.
 
 **Human architect**: Design, review, decision-making
 **Claude Code**: Implementation, testing, documentation
 
----
+______________________________________________________________________
 
-*Last updated: Sprint 1 Complete*
+### Last updated
+
+Sprint 1 Complete

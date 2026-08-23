@@ -1,4 +1,4 @@
-"""Test suite for minimal validation functionality with new plugin architecture."""
+"""Test suite for minimal validation functionality with new validator architecture."""
 
 import polars as pl
 import pytest
@@ -63,7 +63,7 @@ def sample_schema():
 
 @pytest.fixture
 def registry():
-    """Create and populate a registry with built-in plugins."""
+    """Create and populate a registry with built-in validators."""
     reg = Registry()
     register_builtins(reg)
     return reg
@@ -78,8 +78,8 @@ def test_schema_loads_successfully(sample_schema):
 
 
 def test_registry_has_plugins(registry):
-    """Test that registry has expected built-in plugins."""
-    counts = registry.get_plugin_counts()
+    """Test that registry has expected built-in validators."""
+    counts = registry.get_validator_counts()
     assert counts["column_parsers"] == 5
     assert counts["column_checks"] == 4
     assert counts["frame_parsers"] == 0

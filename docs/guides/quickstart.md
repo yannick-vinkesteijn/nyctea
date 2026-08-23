@@ -22,12 +22,12 @@ Let's validate a simple DataFrame:
 import polars as pl
 from nyctea import SchemaModel, Registry, register_builtins
 
-# 1. Create a plugin registry
+# 1. Create a validator registry
 registry = Registry()
 register_builtins(registry)
 
 # 2. Register a custom validation check (using ValidatorDecorator)
-from nyctea.plugins.decorators import ValidatorDecorator
+from nyctea.validators.decorators import ValidatorDecorator
 decorators = ValidatorDecorator(registry)
 
 @decorators.column_check(name="positive")

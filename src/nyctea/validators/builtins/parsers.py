@@ -1,11 +1,11 @@
-"""Built-in column parser plugins."""
+"""Built-in column parser validators."""
 
 from typing import Any
 
 import polars as pl
 
-from nyctea.plugins.base import ValidatorMetadata
-from nyctea.plugins.column import ColumnParser
+from nyctea.validators.base import ValidatorMetadata
+from nyctea.validators.column import ColumnParser
 
 __all__ = [
     "LowerParser",
