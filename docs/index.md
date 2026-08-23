@@ -9,7 +9,7 @@ icon: lucide/home
 
 # Nyctea
 
-**Polars-native data validation with a composable plugin pipeline.**
+**Polars-native data validation with a composable validator pipeline.**
 
 [Get started :octicons-arrow-right-24:](guides/quickstart.md){ .md-button .md-button--primary }
 [View on GitHub :octicons-mark-github-16:](https://github.com/yourusername/nyctea){ .md-button }
@@ -43,7 +43,7 @@ icon: lucide/home
 
     Add, remove, or reorder validation phases. Inject custom logic anywhere without forking the library.
 
--   :material-puzzle-outline:{ .lg .middle } **Plugin registry**
+-   :material-puzzle-outline:{ .lg .middle } **Validator registry**
 
     ---
 
@@ -162,7 +162,7 @@ Verified against Pandera 0.29.0 · Patito 0.8.6 · Dataframely 2.7.0 · Great Ex
 | Polars-native | :material-check: | Partial (multi-backend) | :material-check: | :material-check: (Polars-only) |
 | LazyFrame accepted | :material-check: | Partial¹ | Partial | :material-check: (`eager=False`) |
 | True out-of-core / streaming | :material-check: | :material-close: | :material-close: | :material-close: (deferred²) |
-| Plugin registry (Polars) | :material-check: | :material-close: (pandas only) | :material-close: | :material-close: |
+| Validator registry (Polars) | :material-check: | :material-close: (pandas only) | :material-close: | :material-close: |
 | Composable pipeline phases | :material-check: | :material-close: | :material-close: | :material-close: |
 | Parsers on Polars backend | :material-check: | :material-close: (pandas only) | :material-close: | :material-close: |
 

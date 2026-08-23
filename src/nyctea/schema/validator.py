@@ -1,24 +1,20 @@
 """Schema validator for orchestrating validation.
 
 This module provides the SchemaValidator class, which is the main entry point
-for validation using the new plugin-based pipeline architecture.
+for validation using the new validator-based pipeline architecture.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
+from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
-
-if TYPE_CHECKING:
-    from nyctea.engine.pipeline import ValidationPipeline
-    from nyctea.plugins.registry import Registry
-    from nyctea.schema.model import SchemaModel
+from nyctea.schema.model import SchemaModel
+from nyctea.validators.registry import Registry
 
 __all__ = ["SchemaValidator"]
 
@@ -36,23 +32,23 @@ def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
 
 
 class SchemaValidator:
-    """Validates data against a schema using the plugin pipeline.
+    """Validates data against a schema using the validator pipeline.
 
     This class orchestrates the validation process, managing the pipeline
     and providing a clean API for validation.
 
     Attributes:
         schema: Schema definition.
-        registry: Plugin registry.
+        registry: Validator registry.
         pipeline: Validation pipeline.
 
     Example:
         >>> from nyctea.schema.model import SchemaModel
-        >>> from nyctea.plugins.registry import Registry
+        >>> from nyctea.validators.registry import Registry
         >>>
         >>> schema = SchemaModel.from_yaml("schema.yaml")
         >>> registry = Registry()
-        >>> # ... register plugins ...
+        >>> # ... register validators ...
         >>>
         >>> validator = SchemaValidator(schema, registry)
         >>> result = validator.validate(df)
@@ -68,7 +64,7 @@ class SchemaValidator:
 
         Args:
             schema: Schema definition.
-            registry: Plugin registry with parsers and checks.
+            registry: Validator registry with parsers and checks.
             pipeline: Custom pipeline (if None, creates from schema).
         """
         self.schema = schema
@@ -138,11 +134,10 @@ class SchemaValidator:
         # Build report (targeted collect of row count only)
         report = self._build_report(context)
 
-        # Strip internal columns (lazy)
+        # Strip only the helper columns this run generated. Prefix matching would also
+        # drop a legitimate user column that happens to start with one of the prefixes.
         internal_cols = [
-            c
-            for c in context.data.collect_schema().names()
-            if c.startswith(("__check__", "__pre_null__", "__row_index__"))
+            c for c in context.data.collect_schema().names() if c == "__row_index__" or c in context.internal_columns
         ]
         clean = context.data.drop(internal_cols)
 

@@ -6,7 +6,7 @@ icon: lucide/map
 
 !!! info "v0.2.0 status"
 
-    The OOP plugin system and pipeline scaffolding are in place.
+    The OOP validator system and pipeline scaffolding are in place.
     Three phases are working (`ColumnResolutionPhase`, `ColumnParsingPhase`, `ColumnCheckPhase`).
     The remaining work below completes the pipeline and stabilises the public API.
 
@@ -94,7 +94,7 @@ Set failing values to null for columns with `on_failure='null'`. Depends on coer
 
 **Status:** :material-clock-outline: Pending
 
-Frame-level plugin execution. Required to complete the plugin hierarchy and unblock the Titanic example.
+Frame-level validator execution. Required to complete the validator hierarchy and unblock the Titanic example.
 
 ---
 
@@ -122,7 +122,7 @@ Critical paths currently uncovered:
 - [x] on_failure resolution (schema default, column override, nullable guard)
 - [ ] Lenient nullification (`on_failure='null'` for check failures)
 - [x] Error reporting modes — summary, rows, cells
-- [ ] Frame-level plugins
+- [ ] Frame-level validators
 - [ ] Schema loading from YAML
 - [ ] Edge cases — empty DataFrames, missing columns, ambiguous synonyms
 - [ ] Pipeline observer notifications
@@ -146,7 +146,7 @@ The biggest wins come from reducing premature `.collect()` calls that break Pola
 | Batch null counting           | Per-column loops → 1 `select`           |
 | Batch check failure counting  | N×M collects → 1 collect                |
 | Defer row counting            | After every phase → end only            |
-| Frame plugin shape validation | Always → only when `preserve_rows=True` |
+| Frame validator shape validation | Always → only when `preserve_rows=True` |
 
 For a schema with 10 columns and 3 checks each, this reduces from ~68 collects to ~5.
 

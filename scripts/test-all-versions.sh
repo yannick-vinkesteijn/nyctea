@@ -9,7 +9,7 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-VERSIONS=("3.10" "3.11" "3.12" "3.13" "3.14")
+VERSIONS=("3.11" "3.12" "3.13" "3.14")
 
 echo -e "${BLUE}=== Testing Python Versions ===${NC}"
 echo ""

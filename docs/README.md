@@ -171,10 +171,10 @@ Zensical will automatically extract docstrings, signatures, and type annotations
 ## Tips
 
 1. **Keep docstrings updated** - They're the source of truth for API docs
-1. **Use examples** - Code examples in docstrings appear in the API reference
-1. **Link liberally** - Link to related pages and API docs
-1. **Test locally** - Always preview with `zensical serve` before committing
-1. **Check links** - Zensical will warn about broken internal links
+2. **Use examples** - Code examples in docstrings appear in the API reference
+3. **Link liberally** - Link to related pages and API docs
+4. **Test locally** - Always preview with `zensical serve` before committing
+5. **Check links** - Zensical will warn about broken internal links
 
 ## Configuration
 
@@ -190,8 +190,8 @@ Documentation configuration is in `zensical.toml` at the project root. Key setti
 When adding new modules or functions:
 
 1. Add Google-style docstrings to the code
-1. Add the module to `docs/api/` if needed
-1. Update navigation in `zensical.toml`
-1. Add user guide pages for major features
-1. Test locally with `zensical serve`
-1. Submit PR with both code and docs
+2. Add the module to `docs/api/` if needed
+3. Update navigation in `zensical.toml`
+4. Add user guide pages for major features
+5. Test locally with `zensical serve`
+6. Submit PR with both code and docs

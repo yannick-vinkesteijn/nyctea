@@ -24,11 +24,11 @@ Complete reference for Nyctea's public API.
 
     [:octicons-arrow-right-24: Schema](schema.md)
 
--   :lucide-plug:{ .lg .middle } **Plugin Registry**
+-   :lucide-plug:{ .lg .middle } **Validator Registry**
 
     ---
 
-    `Registry`, `PluginRegistry`, `ColumnParser`, `ColumnCheck`, `FrameParser`, `FrameCheck`.
+    `Registry`, `ValidatorRegistry`, `ColumnParser`, `ColumnCheck`, `FrameParser`, `FrameCheck`.
 
     [:octicons-arrow-right-24: Registry](registry.md)
 
@@ -51,14 +51,14 @@ Everything importable directly from `nyctea`:
 ```python
 from nyctea import (
     SchemaModel,          # schema definition
-    Registry,       # plugin registry
+    Registry,       # validator registry
     register_builtins,    # register built-in parsers/checks
     ValidationResult,     # result of a validation run
     ValidationReport,     # per-column statistics
     ErrorReportConfig,    # error reporting mode (summary/rows/cells)
     NycteaError,          # base exception
     ValidationError,      # column/pipeline validation failure
-    ValidatorError,          # plugin registration or execution failure
+    ValidatorError,          # validator registration or execution failure
     PipelineError,        # pipeline phase failure
 )
 ```

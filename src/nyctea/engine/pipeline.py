@@ -4,20 +4,14 @@ This module provides the core pipeline infrastructure for orchestrating
 validation phases with dependency validation and observability hooks.
 """
 
-from __future__ import annotations
-
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from enum import Enum
-from typing import TYPE_CHECKING
+from enum import StrEnum
 
-from nyctea.engine.observability import PhaseMetrics
+from nyctea.engine.context import PipelineContext
+from nyctea.engine.observability import PhaseMetrics, PipelineObserver
 from nyctea.exceptions import PipelineError
-
-if TYPE_CHECKING:
-    from nyctea.engine.context import PipelineContext
-    from nyctea.engine.observability import PipelineObserver
 
 __all__ = [
     "PhaseType",
@@ -26,7 +20,7 @@ __all__ = [
 ]
 
 
-class PhaseType(str, Enum):
+class PhaseType(StrEnum):
     """Types of pipeline phases."""
 
     RESOLUTION = "resolution"  # Column name resolution
@@ -172,8 +166,7 @@ class ValidationPipeline:
                 self.phases.insert(idx + 1, phase)
             except KeyError as e:
                 raise PipelineError(
-                    f"Cannot insert phase '{phase.name}' after '{after}': "
-                    f"phase '{after}' not found",
+                    f"Cannot insert phase '{phase.name}' after '{after}': phase '{after}' not found",
                     phase=phase.name,
                 ) from e
         else:
@@ -183,8 +176,7 @@ class ValidationPipeline:
                 self.phases.insert(idx, phase)
             except KeyError as e:
                 raise PipelineError(
-                    f"Cannot insert phase '{phase.name}' before '{before}': "
-                    f"phase '{before}' not found",
+                    f"Cannot insert phase '{phase.name}' before '{before}': phase '{before}' not found",
                     phase=phase.name,
                 ) from e
 
@@ -255,8 +247,7 @@ class ValidationPipeline:
             for dep in phase.dependencies:
                 if dep not in phase_names:
                     raise PipelineError(
-                        f"Phase '{phase.name}' depends on '{dep}', "
-                        f"but '{dep}' is not in the pipeline",
+                        f"Phase '{phase.name}' depends on '{dep}', but '{dep}' is not in the pipeline",
                         phase=phase.name,
                     )
 
@@ -297,38 +288,14 @@ class ValidationPipeline:
 
             # Execute each phase
             for phase in self.phases:
-                # Check if phase can be skipped
-                if phase.can_skip(context):
-                    continue
+                context = self._execute_phase(phase, context)
 
-                # Notify observers: phase start
-                for observer in self.observers:
-                    observer.on_phase_start(phase.name, context)
-
-                # Execute phase with timing
-                phase_start = time.time()
-                try:
-                    context = phase.execute(context)
-                except Exception as e:
-                    raise PipelineError(
-                        f"Phase '{phase.name}' failed: {e}",
-                        phase=phase.name,
-                    ) from e
-                phase_duration = time.time() - phase_start
-
-                # Collect metrics
-                metrics = PhaseMetrics(
-                    phase_name=phase.name,
-                    duration_seconds=phase_duration,
-                    rows_processed=context.data.select("__row_index__").collect().height
-                    if "__row_index__" in context.data.collect_schema().names()
-                    else 0,
-                )
-
-                # Notify observers: phase end
-                for observer in self.observers:
-                    observer.on_phase_end(phase.name, context, metrics)
-
+        except Exception as e:
+            # Notify observers of error
+            for observer in self.observers:
+                observer.on_pipeline_error(context, e)
+            raise
+        else:
             # Calculate total duration
             total_duration = time.time() - start_time
 
@@ -337,15 +304,51 @@ class ValidationPipeline:
                 observer.on_pipeline_complete(context, total_duration)
 
             return context
-
-        except Exception as e:
-            # Notify observers of error
-            for observer in self.observers:
-                observer.on_pipeline_error(context, e)
-            raise
         finally:
             # Unlock pipeline after execution
             self._locked = False
+
+    def _execute_phase(self, phase: PipelinePhase, context: PipelineContext) -> PipelineContext:
+        """Run a single phase, notifying observers and collecting metrics.
+
+        Args:
+            phase: Phase to execute.
+            context: Current pipeline context.
+
+        Returns:
+            Updated pipeline context.
+
+        Raises:
+            PipelineError: If the phase's execute() raises.
+        """
+        if phase.can_skip(context):
+            return context
+
+        for observer in self.observers:
+            observer.on_phase_start(phase.name, context)
+
+        phase_start = time.time()
+        try:
+            context = phase.execute(context)
+        except Exception as e:
+            raise PipelineError(
+                f"Phase '{phase.name}' failed: {e}",
+                phase=phase.name,
+            ) from e
+        phase_duration = time.time() - phase_start
+
+        metrics = PhaseMetrics(
+            phase_name=phase.name,
+            duration_seconds=phase_duration,
+            rows_processed=context.data.select("__row_index__").collect().height
+            if "__row_index__" in context.data.collect_schema().names()
+            else 0,
+        )
+
+        for observer in self.observers:
+            observer.on_phase_end(phase.name, context, metrics)
+
+        return context
 
     def list_phases(self) -> list[str]:
         """Get ordered list of phase names.

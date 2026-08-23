@@ -27,9 +27,8 @@ Note:
     (e.g., `nullable=False` cannot be combined with `on_failure="null"`).
 """
 
-from __future__ import annotations
-
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -37,12 +36,10 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from nyctea.engine.pipeline import ValidationPipeline
     from nyctea.engine.validate import ValidationResult
-    from nyctea.plugins.registry import Registry
     from nyctea.schema.validator import SchemaValidator
+    from nyctea.validators.registry import Registry
 
 # Type alias for failure handling behavior
 OnFailureBehavior = Literal["raise", "null", "ignore"]
@@ -50,7 +47,7 @@ OnFailureBehavior = Literal["raise", "null", "ignore"]
 try:
     import yaml
 except ImportError:
-    yaml = None  # type: ignore[assignment]
+    yaml = None
 
 
 class Parser(BaseModel):
@@ -145,7 +142,7 @@ class ColumnSchema(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_on_failure_nullable_consistency(self) -> ColumnSchema:
+    def validate_on_failure_nullable_consistency(self) -> "ColumnSchema":
         """Ensure on_failure='null' requires nullable=True."""
         if self.on_failure == "null" and not self.nullable:
             raise ValueError(
@@ -233,7 +230,7 @@ class SchemaModel(BaseModel):
         return behavior
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> SchemaModel:
+    def from_dict(cls, data: Mapping[str, Any]) -> "SchemaModel":
         """Load a schema from a dictionary.
 
         Args:
@@ -251,7 +248,7 @@ class SchemaModel(BaseModel):
             raise ValueError(f"Invalid schema configuration: {err}") from err
 
     @classmethod
-    def from_python(cls, schema: SchemaModel | Mapping[str, Any]) -> SchemaModel:
+    def from_python(cls, schema: "SchemaModel | Mapping[str, Any]") -> "SchemaModel":
         """Accept an existing SchemaModel or a dictionary defining one.
 
         Args:
@@ -260,12 +257,12 @@ class SchemaModel(BaseModel):
         Returns:
             SchemaModel: Parsed or passed-through schema.
         """
-        if isinstance(schema, cls):
-            return schema
-        return cls.from_dict(schema)  # type: ignore[arg-type]
+        if isinstance(schema, Mapping):
+            return cls.from_dict(schema)
+        return schema
 
     @classmethod
-    def from_json(cls, content: str) -> SchemaModel:
+    def from_json(cls, content: str) -> "SchemaModel":
         """Load a schema from a JSON string.
 
         Args:
@@ -284,7 +281,7 @@ class SchemaModel(BaseModel):
         return cls.from_dict(data)
 
     @classmethod
-    def from_json_file(cls, path: str | Path) -> SchemaModel:
+    def from_json_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a JSON file.
 
         Args:
@@ -303,7 +300,7 @@ class SchemaModel(BaseModel):
         return cls.from_json(text)
 
     @classmethod
-    def from_yaml(cls, content: str) -> SchemaModel:
+    def from_yaml(cls, content: str) -> "SchemaModel":
         """Load a schema from a YAML string.
 
         Args:
@@ -325,7 +322,7 @@ class SchemaModel(BaseModel):
         return cls.from_dict(data)
 
     @classmethod
-    def from_yaml_file(cls, path: str | Path) -> SchemaModel:
+    def from_yaml_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a YAML file.
 
         Args:
@@ -346,7 +343,7 @@ class SchemaModel(BaseModel):
         return cls.from_yaml(text)
 
     @classmethod
-    def from_file(cls, path: str | Path) -> SchemaModel:
+    def from_file(cls, path: str | Path) -> "SchemaModel":
         """Load a schema from a file, auto-detecting format from extension.
 
         Args:
@@ -375,17 +372,17 @@ class SchemaModel(BaseModel):
     def validate(  # ty: ignore[invalid-method-override]
         self,
         df: pl.DataFrame | pl.LazyFrame,
-        registry: Registry,
+        registry: "Registry",
         **kwargs: Any,
-    ) -> ValidationResult:
+    ) -> "ValidationResult":
         """Validate a DataFrame against this schema.
 
-        This is the primary API for validation using the new plugin-based
+        This is the primary API for validation using the new validator-based
         pipeline architecture.
 
         Args:
             df: DataFrame to validate.
-            registry: Plugin registry with parsers and checks.
+            registry: Validator registry with parsers and checks.
             **kwargs: Additional validation options passed to SchemaValidator.
 
         Returns:
@@ -396,10 +393,10 @@ class SchemaModel(BaseModel):
             PipelineError: If pipeline execution fails.
 
         Example:
-            >>> from nyctea.plugins.registry import Registry
+            >>> from nyctea.validators.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
             >>> registry = Registry()
-            >>> # ... register plugins ...
+            >>> # ... register validators ...
             >>> result = schema.validate(df, registry)
             >>> print(result.report.summary())
         """
@@ -410,26 +407,26 @@ class SchemaModel(BaseModel):
 
     def create_validator(
         self,
-        registry: Registry,
-        pipeline: ValidationPipeline | None = None,
-    ) -> SchemaValidator:
+        registry: "Registry",
+        pipeline: "ValidationPipeline | None" = None,
+    ) -> "SchemaValidator":
         """Create a SchemaValidator for this schema.
 
         This factory method allows you to create a validator and customize
         its pipeline before running validation.
 
         Args:
-            registry: Plugin registry with parsers and checks.
+            registry: Validator registry with parsers and checks.
             pipeline: Custom pipeline (if None, creates from schema).
 
         Returns:
             SchemaValidator instance.
 
         Example:
-            >>> from nyctea.plugins.registry import Registry
+            >>> from nyctea.validators.registry import Registry
             >>> schema = SchemaModel.from_yaml("schema.yaml")
             >>> registry = Registry()
-            >>> # ... register plugins ...
+            >>> # ... register validators ...
             >>> validator = schema.create_validator(registry)
             >>> # Customize pipeline
             >>> validator.pipeline.add_phase(MyCustomPhase(), after="column_parsing")

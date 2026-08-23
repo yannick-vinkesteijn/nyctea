@@ -30,7 +30,7 @@ Validation runs through ordered phases. Each phase receives a `PipelineContext` 
 
 Phases can be added, removed, or reordered.
 
-## Plugin registry
+## Validator registry
 
 Parsers and checks are registered by name in a `Registry`. One registry can be shared across many schemas.
 
@@ -41,10 +41,10 @@ registry = Registry()
 register_builtins(registry)  # strip, lower, upper, to_int, to_float, min_value, between, in_set, unique
 ```
 
-Custom plugins can be added via OOP classes or the decorator API:
+Custom validators can be added via OOP classes or the decorator API:
 
 ```python
-from nyctea.plugins.decorators import ValidatorDecorator
+from nyctea.validators.decorators import ValidatorDecorator
 
 decorators = ValidatorDecorator(registry)
 

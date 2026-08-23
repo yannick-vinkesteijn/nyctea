@@ -1,32 +1,32 @@
-"""Helper functions to register built-in plugins."""
+"""Helper functions to register built-in validators."""
 
-from nyctea.plugins.builtins.checks import (
+from nyctea.validators.builtins.checks import (
     BetweenCheck,
     InSetCheck,
     MinValueCheck,
     UniqueCheck,
 )
-from nyctea.plugins.builtins.parsers import (
+from nyctea.validators.builtins.parsers import (
     LowerParser,
     StripParser,
     ToFloatParser,
     ToIntParser,
     UpperParser,
 )
-from nyctea.plugins.registry import Registry
+from nyctea.validators.registry import Registry
 
-__all__ = ["register_builtins", "register_titanic_plugins"]
+__all__ = ["register_builtins", "register_titanic_validators"]
 
 
 def register_builtins(registry: Registry) -> None:
-    """Register all built-in plugins.
+    """Register all built-in validators.
 
     Args:
-        registry: Master registry to register plugins in.
+        registry: Master registry to register validators in.
 
     Example:
-        >>> from nyctea.plugins.registry import Registry
-        >>> from nyctea.plugins.builtins.register import register_builtins
+        >>> from nyctea.validators.registry import Registry
+        >>> from nyctea.validators.builtins.register import register_builtins
         >>> registry = Registry()
         >>> register_builtins(registry)
     """
@@ -44,27 +44,27 @@ def register_builtins(registry: Registry) -> None:
     registry.register_column_check(UniqueCheck())
 
 
-def register_titanic_plugins(registry: Registry) -> None:
-    """Register plugins needed for the Titanic example.
+def register_titanic_validators(registry: Registry) -> None:
+    """Register validators needed for the Titanic example.
 
-    This registers the built-in plugins plus Titanic-specific checks.
+    This registers the built-in validators plus Titanic-specific checks.
 
     Args:
-        registry: Master registry to register plugins in.
+        registry: Master registry to register validators in.
 
     Example:
-        >>> from nyctea.plugins.registry import Registry
-        >>> from nyctea.plugins.builtins.register import register_titanic_plugins
+        >>> from nyctea.validators.registry import Registry
+        >>> from nyctea.validators.builtins.register import register_titanic_validators
         >>> registry = Registry()
-        >>> register_titanic_plugins(registry)
+        >>> register_titanic_validators(registry)
     """
     # Register all builtins first
     register_builtins(registry)
 
-    # Import decorator for functional-style plugins
+    # Import decorator for functional-style validators
     import polars as pl
 
-    from nyctea.plugins.decorators import ValidatorDecorator
+    from nyctea.validators.decorators import ValidatorDecorator
 
     decorators = ValidatorDecorator(registry)
 

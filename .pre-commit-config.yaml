@@ -18,14 +18,10 @@ repos:
       - id: no-commit-to-branch
       - id: check-merge-conflict
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.24
+    rev: 0.12.5
     hooks:
       - id: uv-lock
-  - repo: https://github.com/owenlamont/uv-secure
-    rev: 0.15.4
-    hooks:
-      - id: uv-secure
-        args: [--aliases, --desc]
+      - id: uv-audit
   - repo: local
     hooks:
       - id: ty
@@ -36,7 +32,7 @@ repos:
         always_run: true
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.11
+    rev: v0.16.4
     hooks:
       - id: ruff-format
       - id: ruff-check
@@ -51,8 +47,9 @@ repos:
     rev: 1.0.0
     hooks:
       - id: mdformat
+        args: [--number]
         additional_dependencies:
-          - mdformat-mkdocs==5.0.0
+          - mdformat-mkdocs==5.3.0
           - mdformat-footnote==0.1.2
         files: "README\\.md"
   - repo: https://github.com/igorshubovych/markdownlint-cli

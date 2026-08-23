@@ -1,11 +1,11 @@
-"""Tests for decorator-based plugin registration."""
+"""Tests for decorator-based validator registration."""
 
 import polars as pl
 import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.exceptions import RegistrationError
-from nyctea.plugins.decorators import ValidatorDecorator
+from nyctea.validators.decorators import ValidatorDecorator
 
 
 class TestColumnParserDecorator:
@@ -20,12 +20,12 @@ class TestColumnParserDecorator:
         def trim(column: pl.Expr) -> pl.Expr:
             return column.str.strip_chars()
 
-        # Verify plugin was registered
+        # Verify validator was registered
         assert "test_trim" in registry.column_parsers.list_names()
 
         # Verify we can retrieve it
-        plugin = registry.column_parsers.get("test_trim")
-        assert plugin.name == "test_trim"
+        validator = registry.column_parsers.get("test_trim")
+        assert validator.name == "test_trim"
 
     def test_with_metadata(self):
         """Test parser with full metadata."""
@@ -42,13 +42,13 @@ class TestColumnParserDecorator:
         def to_upper(column: pl.Expr) -> pl.Expr:
             return column.str.to_uppercase()
 
-        plugin = registry.column_parsers.get("uppercase")
-        assert plugin.metadata.name == "uppercase"
-        assert plugin.metadata.description == "Convert to uppercase"
-        assert plugin.metadata.version == "2.0.0"
-        assert "string" in plugin.metadata.tags
-        assert "formatting" in plugin.metadata.tags
-        assert plugin.metadata.author == "Test Author"
+        validator = registry.column_parsers.get("uppercase")
+        assert validator.metadata.name == "uppercase"
+        assert validator.metadata.description == "Convert to uppercase"
+        assert validator.metadata.version == "2.0.0"
+        assert "string" in validator.metadata.tags
+        assert "formatting" in validator.metadata.tags
+        assert validator.metadata.author == "Test Author"
 
     def test_functional_usage(self):
         """Test that decorated function still works as a function."""
@@ -74,15 +74,17 @@ class TestColumnParserDecorator:
         def trim(column: pl.Expr) -> pl.Expr:
             return column.str.strip_chars()
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "text": {
-                    "dtype": "Utf8",
-                    "parsers": [{"name": "custom_trim"}],
-                    "nullable": False,
-                },
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "text": {
+                        "dtype": "Utf8",
+                        "parsers": [{"name": "custom_trim"}],
+                        "nullable": False,
+                    },
+                }
             }
-        })
+        )
 
         df = pl.DataFrame({"text": ["  hello  ", "  world  "]})
         result = schema.validate(df, registry)
@@ -101,12 +103,12 @@ class TestColumnCheckDecorator:
         def is_positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
-        # Verify plugin was registered
+        # Verify validator was registered
         assert "test_positive" in registry.column_checks.list_names()
 
         # Verify we can retrieve it
-        plugin = registry.column_checks.get("test_positive")
-        assert plugin.name == "test_positive"
+        validator = registry.column_checks.get("test_positive")
+        assert validator.name == "test_positive"
 
     def test_with_metadata(self):
         """Test check with full metadata."""
@@ -122,11 +124,11 @@ class TestColumnCheckDecorator:
         def check_not_empty(column: pl.Expr) -> pl.Expr:
             return column.str.len_chars() > 0
 
-        plugin = registry.column_checks.get("not_empty")
-        assert plugin.metadata.name == "not_empty"
-        assert plugin.metadata.description == "Check string not empty"
-        assert plugin.metadata.version == "1.5.0"
-        assert "string" in plugin.metadata.tags
+        validator = registry.column_checks.get("not_empty")
+        assert validator.metadata.name == "not_empty"
+        assert validator.metadata.description == "Check string not empty"
+        assert validator.metadata.version == "1.5.0"
+        assert "string" in validator.metadata.tags
 
     def test_integration_with_schema(self):
         """Test decorator-registered check works in schema validation."""
@@ -138,16 +140,18 @@ class TestColumnCheckDecorator:
         def is_positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
-        schema = SchemaModel.from_dict({
-            "columns": {
-                "value": {
-                    "dtype": "Int64",
-                    "parsers": [{"name": "to_int"}],
-                    "checks": [{"name": "positive"}],
-                    "nullable": False,
-                },
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "value": {
+                        "dtype": "Int64",
+                        "parsers": [{"name": "to_int"}],
+                        "checks": [{"name": "positive"}],
+                        "nullable": False,
+                    },
+                }
             }
-        })
+        )
 
         # Test with valid data
         df_good = pl.DataFrame({"value": ["1", "2", "3"]})
@@ -157,7 +161,7 @@ class TestColumnCheckDecorator:
         # Test with invalid data
         df_bad = pl.DataFrame({"value": ["1", "-2", "3"]})
         result_bad = schema.validate(df_bad, registry)
-        assert result_bad.report.rows_valid < result_bad.report.rows_processed
+        assert len(result_bad.errors) > 0
 
 
 class TestDecoratorEdgeCases:
@@ -173,6 +177,7 @@ class TestDecoratorEdgeCases:
             return column
 
         with pytest.raises(RegistrationError):
+
             @decorators.column_parser(name="duplicate")
             def second(column: pl.Expr) -> pl.Expr:
                 return column
@@ -187,5 +192,5 @@ class TestDecoratorEdgeCases:
             """This is the docstring."""
             return column
 
-        plugin = registry.column_parsers.get("documented")
-        assert plugin.metadata.description == "This is the docstring."
+        validator = registry.column_parsers.get("documented")
+        assert validator.metadata.description == "This is the docstring."

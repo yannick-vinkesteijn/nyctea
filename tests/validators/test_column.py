@@ -1,11 +1,11 @@
-"""Tests for column plugins."""
+"""Tests for column validators."""
 
 import polars as pl
 import pytest
 
 from nyctea.exceptions import RegistrationError
-from nyctea.plugins.base import ValidatorMetadata
-from nyctea.plugins.column import ColumnCheck, ColumnParser
+from nyctea.validators.base import ValidatorMetadata
+from nyctea.validators.column import ColumnCheck, ColumnParser
 
 
 class SimpleParser(ColumnParser):

@@ -1,20 +1,20 @@
-"""Plugin system for extending Nyctea validation.
+"""Validator system for extending Nyctea validation.
 
-This package provides the foundation for Nyctea's plugin architecture, allowing
+This package provides the foundation for Nyctea's validator architecture, allowing
 users to extend validation capabilities through custom parsers and checks.
 
 Base Classes:
     - Validator: Abstract base for all validators
-    - ColumnPlugin: Base for column-level operations
+    - ColumnValidator: Base for column-level operations
     - ColumnParser: Column transformations
     - ColumnCheck: Column validations
-    - FramePlugin: Base for frame-level operations
+    - FrameValidator: Base for frame-level operations
     - FrameParser: Frame transformations
     - FrameCheck: Frame validations
 
 Example:
-    >>> from nyctea.plugins.column import ColumnParser
-    >>> from nyctea.plugins.base import ValidatorMetadata
+    >>> from nyctea.validators.column import ColumnParser
+    >>> from nyctea.validators.base import ValidatorMetadata
     >>> import polars as pl
     >>>
     >>> class TrimParser(ColumnParser):
@@ -28,17 +28,17 @@ Example:
     ...         pass
 """
 
-from nyctea.plugins.base import Validator, ValidatorMetadata
-from nyctea.plugins.column import ColumnCheck, ColumnParser, ColumnPlugin
-from nyctea.plugins.frame import FrameCheck, FrameParser, FramePlugin
+from nyctea.validators.base import Validator, ValidatorMetadata
+from nyctea.validators.column import ColumnCheck, ColumnParser, ColumnValidator
+from nyctea.validators.frame import FrameCheck, FrameParser, FrameValidator
 
 __all__ = [
     "ColumnCheck",
     "ColumnParser",
-    "ColumnPlugin",
+    "ColumnValidator",
     "FrameCheck",
     "FrameParser",
-    "FramePlugin",
+    "FrameValidator",
     "Validator",
     "ValidatorMetadata",
 ]

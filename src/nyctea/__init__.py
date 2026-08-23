@@ -1,12 +1,12 @@
 """Nyctea: Polars-based data validation library.
 
 Nyctea provides a declarative schema-based validation system for Polars DataFrames
-with an extensible plugin architecture.
+with an extensible validator architecture.
 
 Quick Start:
     >>> from nyctea.schema.model import SchemaModel
-    >>> from nyctea.plugins.registry import Registry
-    >>> from nyctea.plugins.builtins.register import register_builtins
+    >>> from nyctea.validators.registry import Registry
+    >>> from nyctea.validators.builtins.register import register_builtins
     >>>
     >>> # Load schema and register validators
     >>> schema = SchemaModel.from_yaml("schema.yaml")
@@ -31,9 +31,9 @@ from nyctea.exceptions import (
     ValidationError,
     ValidatorError,
 )
-from nyctea.plugins.builtins.register import register_builtins, register_titanic_plugins
-from nyctea.plugins.registry import Registry
 from nyctea.schema.model import SchemaModel
+from nyctea.validators.builtins.register import register_builtins, register_titanic_validators
+from nyctea.validators.registry import Registry
 
 __all__ = [
     "ErrorReportConfig",
@@ -47,7 +47,7 @@ __all__ = [
     "ValidatorError",
     "configure_logging",
     "register_builtins",
-    "register_titanic_plugins",
+    "register_titanic_validators",
 ]
 
 

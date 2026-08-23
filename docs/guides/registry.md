@@ -1,4 +1,4 @@
-# Plugin Registry
+# Validator Registry
 
 The Registry is the heart of Nyctea's extensibility. It allows you to register custom parsers and validation
 checks that are used during the validation pipeline.

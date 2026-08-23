@@ -16,12 +16,12 @@ nav = [
     { "User Guides" = [
         { "Overview" = "guides/index.md" },
         { "Quick Start" = "guides/quickstart.md" },
-        { "Plugin Registry" = "guides/registry.md" },
+        { "Validator Registry" = "guides/registry.md" },
     ]},
     { "API Reference" = [
         { "Overview" = "api/index.md" },
         { "Validation Engine" = "api/engine.md" },
-        { "Plugin Registry" = "api/registry.md" },
+        { "Validator Registry" = "api/registry.md" },
         { "Schema Models" = "api/schema.md" },
         { "Data Ingestion" = "api/ingest.md" },
     ]},

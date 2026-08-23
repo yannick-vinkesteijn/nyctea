@@ -1,21 +1,21 @@
 """Tests for validation pipeline."""
 
+import polars as pl
 import pytest
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
 from nyctea.exceptions import PipelineError
+from nyctea.schema.model import SchemaModel
+from nyctea.validators.registry import Registry
 
 
 class SimplePhase(PipelinePhase):
     """Simple phase for testing."""
 
     def __init__(self, name="simple", dependencies=None):
-        super().__init__(
-            name=name,
-            phase_type=PhaseType.CHECKING,
-            dependencies=dependencies or []
-        )
+        """Initialize the test phase."""
+        super().__init__(name=name, phase_type=PhaseType.CHECKING, dependencies=dependencies or [])
         self.executed = False
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -35,9 +35,9 @@ def test_pipeline_phase_can_skip_default():
     """Test that phases don't skip by default."""
     phase = SimplePhase()
     context = PipelineContext(
-        data=None,  # type: ignore
-        schema=None,  # type: ignore
-        registry=None,  # type: ignore
+        data=pl.LazyFrame(),
+        schema=SchemaModel(columns={}),
+        registry=Registry(),
     )
     assert phase.can_skip(context) is False
 

@@ -227,3 +227,7 @@ __marimo__/
 
 ## macOS
 .DS_Store
+
+# Agent working documents (plans, reviews, design notes, handovers).
+# Local only, never committed. See .claude/CLAUDE.md.
+.agents/

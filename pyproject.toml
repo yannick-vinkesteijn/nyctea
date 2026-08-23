@@ -1,7 +1,7 @@
 [project]
 name = "nyctea"
 version = "0.2.0"
-description = "Polars-based data validation library with an extensible OOP plugin architecture"
+description = "Polars-based data validation library with an extensible OOP validator architecture"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -38,7 +38,7 @@ build-backend = "uv_build"
 
 [project.optional-dependencies]
 nb = [
-    "marimo>=0.20.4",
+    "marimo>=0.23.0",
     "pyzmq>=27.1.0",
 ]
 
@@ -46,16 +46,12 @@ nb = [
 dev = [
     "pre-commit>=4.5.0",
     { include-group = "lint" },
-    { include-group = "security" },
     { include-group = "test" },
     { include-group = "docs" },
 ]
 lint = [
     "ruff>=0.14.8",
     "ty>=0.0.15",
-]
-security = [
-    "uv-secure>=0.15.4",
 ]
 test = [
     "pytest>=9.0.2",
@@ -99,8 +95,10 @@ ignore = [
     "S101",    # Use of assert — used for type narrowing
     "PLC0415", # Import not at top level — allowed for circular import prevention
     "ARG002",  # Unused method argument — intentional for interface conformance
-    "PLR0913", # Too many function arguments — acceptable for plugin decorators
+    "PLR0913", # Too many function arguments — acceptable for validator decorators
+    "PLR0917", # Too many positional arguments — same, validator decorators
     "TC002",   # Move third-party import to TYPE_CHECKING — kept at runtime for clarity
+    "CPY001",  # Missing copyright notice — not used, LICENSE file covers this
 ]
 fixable = ["ALL"]
 unfixable = []
@@ -220,8 +218,3 @@ invalid-argument-type = "error"
 division-by-zero = "error"
 redundant-cast = "warn"
 invalid-method-override = "warn"
-
-[tool.uv-secure.maintainability_criteria]
-forbid_yanked = true
-forbid_archived = true
-forbid_quarantined = true

@@ -1,7 +1,7 @@
 """Exception hierarchy for Nyctea validation library.
 
 This module defines a comprehensive exception hierarchy for all error conditions
-that can occur during schema validation, plugin registration, and pipeline execution.
+that can occur during schema validation, validator registration, and pipeline execution.
 """
 
 import polars as pl
@@ -26,66 +26,66 @@ class NycteaError(Exception):
 
 
 class ValidatorError(NycteaError):
-    """Base exception for plugin-related errors."""
+    """Base exception for validator-related errors."""
 
     def __init__(
         self,
         message: str,
         *,
-        plugin_name: str | None = None,
-        plugin_type: str | None = None,
+        validator_name: str | None = None,
+        validator_type: str | None = None,
     ) -> None:
-        """Initialize plugin error with context.
+        """Initialize validator error with context.
 
         Args:
             message: Error description.
-            plugin_name: Name of the plugin that caused the error.
-            plugin_type: Type of plugin (e.g., "ColumnParser", "FrameCheck").
+            validator_name: Name of the validator that caused the error.
+            validator_type: Type of validator (e.g., "ColumnParser", "FrameCheck").
         """
         super().__init__(message)
-        self.plugin_name = plugin_name
-        self.plugin_type = plugin_type
+        self.validator_name = validator_name
+        self.validator_type = validator_type
 
 
 class RegistrationError(ValidatorError):
-    """Raised when plugin registration fails.
+    """Raised when validator registration fails.
 
     This occurs when:
-    - A plugin with the same name is already registered
-    - Plugin validation fails (invalid signature, missing methods, etc.)
-    - Plugin metadata is invalid
+    - A validator with the same name is already registered
+    - Validator validation fails (invalid signature, missing methods, etc.)
+    - Validator metadata is invalid
     """
 
 
 class ValidatorExecutionError(ValidatorError):
-    """Raised when plugin execution fails.
+    """Raised when validator execution fails.
 
     This occurs when:
-    - Plugin execute() method raises an exception
-    - Plugin violates purity constraints (column plugins)
-    - Plugin violates shape constraints (frame plugins)
-    - Plugin arguments are invalid
+    - Validator execute() method raises an exception
+    - Validator violates purity constraints (column validators)
+    - Validator violates shape constraints (frame validators)
+    - Validator arguments are invalid
     """
 
     def __init__(
         self,
         message: str,
         *,
-        plugin_name: str | None = None,
-        plugin_type: str | None = None,
+        validator_name: str | None = None,
+        validator_type: str | None = None,
         column: str | None = None,
         original_error: Exception | None = None,
     ) -> None:
-        """Initialize plugin execution error with context.
+        """Initialize validator execution error with context.
 
         Args:
             message: Error description.
-            plugin_name: Name of the plugin that failed.
-            plugin_type: Type of plugin.
-            column: Column name (for column plugins).
+            validator_name: Name of the validator that failed.
+            validator_type: Type of validator.
+            column: Column name (for column validators).
             original_error: The underlying exception that caused this error.
         """
-        super().__init__(message, plugin_name=plugin_name, plugin_type=plugin_type)
+        super().__init__(message, validator_name=validator_name, validator_type=validator_type)
         self.column = column
         self.original_error = original_error
 
