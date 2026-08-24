@@ -4,7 +4,7 @@
 site_name = "Nyctea Documentation"
 site_description = "Polars-optimized data validation library with Pydantic schemas"
 site_author = "Nyctea Contributors"
-# site_url = "https://nyctea.readthedocs.io"
+site_url = "https://nyctea.vinkesteijn.io/"
 
 copyright = """
 Copyright &copy; 2025 Nyctea Contributors. MIT License.

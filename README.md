@@ -1,4 +1,4 @@
-<img align="center" width="150" height="150" src="docs/assets/logo-nyctea.png" alt="Nyctea logo">
+<img align="center" width="150" height="150" src="https://nyctea.vinkesteijn.io/assets/logo-nyctea.png" alt="Nyctea logo">
 
 # Nyctea
 
@@ -147,16 +147,16 @@ CI runs linting, type checking, and the test suite on Python 3.11 through 3.14 f
 
 ## Documentation
 
-- **[Quickstart](docs/user-guide/quickstart.md)**: getting started guide
-- **[Features](docs/user-guide/features.md)**: schema syntax and validator capabilities
-- **[Registry guide](docs/user-guide/registry.md)**: registering and discovering validators
-- **[API reference](docs/api/index.md)**: full public API
-- **[Breaking changes](docs/releases/breaking-changes.md)**: migrating between versions
+- **[Quickstart](https://nyctea.vinkesteijn.io/user-guide/quickstart/)**: getting started guide
+- **[Features](https://nyctea.vinkesteijn.io/user-guide/features/)**: schema syntax and validator capabilities
+- **[Registry guide](https://nyctea.vinkesteijn.io/user-guide/registry/)**: registering and discovering validators
+- **[API reference](https://nyctea.vinkesteijn.io/api/)**: full public API
+- **[Breaking changes](https://nyctea.vinkesteijn.io/releases/breaking-changes/)**: migrating between versions
 
 ## Contributing
 
 Contributions are welcome. Open an issue before starting anything beyond a trivial fix; see
-[docs/development/contributing.md](docs/development/contributing.md) for the full workflow
+[docs/development/contributing.md](https://nyctea.vinkesteijn.io/development/contributing/) for the full workflow
 (issue-first, branch and PR conventions, CI overview) and
 [DEVELOPMENT.md](DEVELOPMENT.md) for local setup.
 
