@@ -1,16 +1,9 @@
 # Markdownlint configuration
 # https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.yaml
 
-# MD013/line-length
-MD013:
-  line_length: 120
-  heading_line_length: 120
-  code_block_line_length: 120
-  code_blocks: false
-  tables: false
-  headings: true
-  strict: false
-  stern: false
+# MD013/line-length: off. House style is sentence-per-line, not character-wrapped, so a
+# long sentence or a long URL on one line is expected, not a defect.
+MD013: false
 
 # Allow HTML needed by MkDocs Material (grids, admonitions)
 MD033:
