@@ -1,6 +1,6 @@
 [project]
 name = "nyctea"
-version = "0.2.0b1"
+version = "0.2.0b2"
 description = "Polars-based data validation library with an extensible OOP validator architecture"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,8 +29,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/yannick-vinkesteijn/nyctea"
+Documentation = "https://nyctea.vinkesteijn.io/"
 Repository = "https://github.com/yannick-vinkesteijn/nyctea"
 Issues = "https://github.com/yannick-vinkesteijn/nyctea/issues"
+Changelog = "https://github.com/yannick-vinkesteijn/nyctea/releases"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

@@ -2,6 +2,11 @@
 
 # Nyctea
 
+[![PyPI](https://img.shields.io/pypi/v/nyctea.svg)](https://pypi.org/project/nyctea/)
+[![Python versions](https://img.shields.io/pypi/pyversions/nyctea.svg)](https://pypi.org/project/nyctea/)
+[![License](https://img.shields.io/pypi/l/nyctea.svg)](https://github.com/yannick-vinkesteijn/nyctea/blob/main/LICENSE)
+[![CI](https://github.com/yannick-vinkesteijn/nyctea/actions/workflows/ci.yaml/badge.svg)](https://github.com/yannick-vinkesteijn/nyctea/actions/workflows/ci.yaml)
+
 Polars-based data validation library with an extensible OOP validator architecture.
 
 ## Features
