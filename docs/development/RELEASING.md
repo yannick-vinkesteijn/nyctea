@@ -18,9 +18,6 @@ A tag push does not publish anything by itself; a human always reviews a draft f
 5. Review the draft. This is the point to edit the notes if the auto-generated summary needs a human pass, not a step to skip. Click **Publish**.
 6. Publishing the release fires **`Publish to PyPI`** (`pypi-publish.yaml`). It builds the package and uploads it to PyPI through trusted publishing, with no token and no manual `uv publish`.
 
-To test against TestPyPI first, run `Publish to PyPI` manually through `workflow_dispatch`.
-Its `publish-to-testpypi` job only runs on manual trigger.
-
 There is no maintained `CHANGELOG.md`. The GitHub Release for each tag is the changelog, the same
 way Polars does it. Label PRs correctly (`bug`, `enhancement`, `documentation`, `breaking`) so
 `.github/release.yml` sorts them into the right section automatically.
@@ -50,7 +47,7 @@ context for a migration.
 
 ## Prerequisites, one-time
 
-- A PyPI trusted publisher registered at pypi.org and test.pypi.org for this repo, workflow `pypi-publish.yaml`, environments `release` and `test-release`. See PyPI's [trusted publishing docs](https://docs.pypi.org/trusted-publishers/) if this ever needs re-registering; a repo rename or workflow rename invalidates it.
+- A PyPI trusted publisher registered at pypi.org for this repo, workflow `pypi-publish.yaml`, environment `release`. See PyPI's [trusted publishing docs](https://docs.pypi.org/trusted-publishers/) if this ever needs re-registering; a repo rename or workflow rename invalidates it.
 - The `Development Status` classifier in `pyproject.toml` should track reality: `3 - Alpha` now, `4 - Beta` once the API stabilizes, `5 - Production/Stable` at 1.0.0.
 
 ## Troubleshooting
