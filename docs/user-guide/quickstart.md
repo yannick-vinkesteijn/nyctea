@@ -5,13 +5,13 @@ Get started with Nyctea in 5 minutes.
 ## Installation
 
 ```bash
-pip install nyctea
+uv add nyctea
 ```
 
-Or with uv:
+Or with pip:
 
 ```bash
-uv add nyctea
+pip install nyctea
 ```
 
 ## Basic Example

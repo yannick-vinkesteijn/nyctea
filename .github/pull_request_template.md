@@ -13,10 +13,6 @@
 - [ ] Refactoring (no functional changes)
 - [ ] Test additions/improvements
 
-## Sprint/Milestone
-
-<!-- Which sprint or milestone does this belong to? -->
-
 ## Changes Made
 
 <!-- List the key changes made in this PR -->

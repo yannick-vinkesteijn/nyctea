@@ -4,22 +4,22 @@ icon: lucide/git-branch
 
 # Development
 
-Architecture decisions, roadmap, migration notes, and contributor docs.
+Architecture decisions, migration notes, and contributor docs.
 
 !!! info "Current version: v0.2.0"
-    The validator system and core pipeline are in place. Several pipeline phases are still stubs. See the [roadmap](roadmap.md) for what's next.
+    The validator system and core pipeline are in place. See the [open issues](https://github.com/yannick-vinkesteijn/nyctea/issues) for what's next.
 
 ---
 
 <div class="grid cards" markdown>
 
--   :material-map-outline:{ .lg .middle } **Roadmap**
+-   :material-source-pull:{ .lg .middle } **Contributing**
 
     ---
 
-    v0.2.0 backlog, planned pipeline phases, and test coverage targets.
+    Issue-first workflow, branch and PR conventions, local dev setup, CI overview.
 
-    [:octicons-arrow-right-24: Roadmap](roadmap.md)
+    [:octicons-arrow-right-24: Contributing](contributing.md)
 
 -   :material-alert-decagram-outline:{ .lg .middle } **Breaking Changes**
 
@@ -59,4 +59,4 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
 ## About this project
 
-Nyctea is a Polars-native validation library. This section holds contributor documentation: the roadmap, release process, architecture decisions, and breaking changes.
+Nyctea is a Polars-native validation library. This section holds contributor documentation: how to contribute, the release process, and architecture decisions. Work is tracked as [GitHub issues](https://github.com/yannick-vinkesteijn/nyctea/issues), not a roadmap page.

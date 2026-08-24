@@ -75,7 +75,18 @@ or in `docs/development/decisions/` as a dated ADR once the decision is implemen
 
 ## Documentation
 
-- Update `docs/guides/` when changing user-facing behaviour (public API, validator interface, schema syntax).
+- Update `docs/user-guide/` when changing user-facing behaviour (public API, validator interface, schema syntax).
 - Update `docs/api/` when adding, removing, or renaming public classes or functions.
-- The `docs/development/` folder is for developer and contributor documentation (contributing guide, roadmap, releasing). Update it when development processes change.
-- Write documentation that is concise and direct. Use short sentences. Avoid filler phrases and decorative punctuation such as em dashes.
+- The `docs/development/` folder is for developer and contributor documentation (contributing guide, releasing). Update it when development processes change.
+- Write documentation that is concise and direct. Use full sentences, not sentence fragments
+  glued together with commas or dashes. Prose should read as if someone thought it through and
+  said it plainly, not as a string of short clauses.
+- No em dashes as a default habit. A comma, a colon, or splitting into two sentences almost
+  always does the job better. Reach for one only in the rare case none of those work.
+- Hard-wrap markdown source one sentence per line, not at a character column. A sentence that
+  runs long stays on one line. This keeps diffs to the sentence that actually changed instead of
+  reflowing an entire paragraph. Exception: skills and agent-only instruction files can wrap at a
+  character column instead, since that helps a reader estimate token cost at a glance.
+- Do not collapse a sentence into a colon followed by a noun-phrase fragment (`X: a direction,
+  not a task, something that...`). Write it as a full sentence instead. This construction is a
+  distinctive AI writing tell and reads as evasive even when the content is fine.

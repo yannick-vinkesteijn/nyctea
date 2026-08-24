@@ -137,17 +137,9 @@ result.errors                   # (2)!
 
     ---
 
-    Architecture decisions, roadmap, and breaking change notes.
+    Architecture decisions, contributing, and release notes.
 
     [:octicons-arrow-right-24: Development](development/index.md)
-
--   :material-map-outline:{ .lg .middle } **Roadmap**
-
-    ---
-
-    What's planned for v0.2.0: pipeline phases, test coverage, and the path to main.
-
-    [:octicons-arrow-right-24: Roadmap](development/roadmap.md)
 
 </div>
 

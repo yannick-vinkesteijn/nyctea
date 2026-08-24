@@ -28,7 +28,7 @@ nav = [
     ]},
     { "Development" = [
         { "Overview" = "development/index.md" },
-        { "Roadmap" = "development/roadmap.md" },
+        { "Contributing" = "development/contributing.md" },
         { "Writing docs" = "development/writing-docs.md" },
         { "Releasing" = "development/RELEASING.md" },
         { "Decisions" = [
