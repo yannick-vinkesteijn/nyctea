@@ -136,7 +136,7 @@ A rule that just restates what the linter already enforces doesn't need to be th
 
 ## CI
 
-Runs on every PR and every push to `main`:
+`CI` and `Build` run on every PR and every push to `main`. `Pre-commit` runs on the PR only, not on push, so it never fails the way it did before: rerunning `no-commit-to-branch` against a commit that is already on `main` fails by definition, since the commit reviewed on the PR is the same one that lands on `main`, there is nothing new to check on push.
 
 | Workflow | Job(s) | What it checks |
 | --- | --- | --- |
