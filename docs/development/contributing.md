@@ -54,7 +54,7 @@ just docs-build
 
 The template covers what's expected.
 Link the issue it closes, note any breaking changes, and list what was tested.
-Label the PR (`bug`, `enhancement`, `documentation`) so it lands in the right section of the release notes; see [Releasing](RELEASING.md#the-actual-flow) for how those get generated.
+Label the PR (`bug`, `enhancement`, `documentation`, `breaking`) so it lands in the right section of the release notes; see [Releasing](RELEASING.md#the-actual-flow) for how those get generated.
 For breaking changes, also add one to `docs/releases/breaking-changes.md`.
 
 Copilot's automated review runs on push.
