@@ -427,8 +427,8 @@ class TestFullPipeline:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "a": {"dtype": "Int64", "nullable": True, "checks": [{"name": "b__c"}]},
-                    "a__b": {"dtype": "Int64", "nullable": True, "checks": [{"name": "c"}]},
+                    "a": {"dtype": "Int64", "nullable": True, "on_failure": "ignore", "checks": [{"name": "b__c"}]},
+                    "a__b": {"dtype": "Int64", "nullable": True, "on_failure": "ignore", "checks": [{"name": "c"}]},
                 }
             }
         )
@@ -531,7 +531,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -547,7 +552,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -562,7 +572,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -577,7 +592,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -589,7 +609,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -603,7 +628,12 @@ class TestErrorReporting:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -619,6 +649,7 @@ class TestErrorReporting:
                     "age": {
                         "dtype": "Int64",
                         "nullable": True,
+                        "on_failure": "ignore",
                         "checks": [
                             {"name": "min_value", "args": {"min": 0}},
                             {"name": "between", "args": {"min": 0, "max": 100}},
@@ -646,7 +677,12 @@ class TestValidationReportSummary:
         schema = SchemaModel.from_dict(
             {
                 "columns": {
-                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
                 }
             }
         )
@@ -811,3 +847,102 @@ class TestOnFailure:
         result = schema.validate(df, registry)
         assert result.report.on_failure == "null"
         assert "on_failure: null" in result.report.summary()
+
+    def test_check_raise_on_failure(self, registry):
+        """on_failure=raise + a failing check raises PipelineError, not just a recorded error."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "raise",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [1, -5, 3]})
+        with pytest.raises(PipelineError, match="Check failed for column 'age'"):
+            schema.validate(df, registry)
+
+    def test_check_ignore_on_failure_does_not_raise(self, registry):
+        """on_failure=ignore records the failure but does not raise or nullify."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [1, -5, 3]})
+        result = schema.validate(df, registry)
+        assert result.data.collect()["age"].to_list() == [1, -5, 3]
+        assert result.errors["count"].item() == 1
+
+    def test_check_null_on_failure_nullifies_failing_values(self, registry):
+        """on_failure=null nulls out values that failed a check, keeps passing values."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [10, -1, 5, -3]})
+        result = schema.validate(df, registry)
+        assert result.data.collect()["age"].to_list() == [10, None, 5, None]
+
+    def test_check_null_on_failure_error_report_keeps_original_value(self, registry):
+        """The error report reflects the original failing value, not the post-nullification null."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [10, -1]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="cells"))
+        assert result.errors["value"].to_list() == ["-1"]
+
+    def test_check_null_on_failure_only_nullifies_own_column(self, registry):
+        """Nullifying a failing on_failure=null column does not affect an unrelated raise column."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "null",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    },
+                    "score": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "on_failure": "ignore",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    },
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [-1, 5], "score": [-1, 5]})
+        result = schema.validate(df, registry)
+        data = result.data.collect()
+        assert data["age"].to_list() == [None, 5]
+        assert data["score"].to_list() == [-1, 5]
