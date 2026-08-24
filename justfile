@@ -78,7 +78,7 @@ secure:
 # === GitHub Actions Simulation ===
 
 # Simulate GitHub Actions CI locally
-ci: ci-lint ci-test ci-typecheck
+ci: pre-commit test-all ci-build
     @echo "✓ All CI checks passed!"
 
 # Simulate CI: Lint job
@@ -126,7 +126,7 @@ install-local:
 docs-build:
     @echo "Building documentation..."
     uv run --group docs zensical build
-    @echo "✓ Documentation built to public/"
+    @echo "✓ Documentation built to site/"
 
 # Serve documentation locally
 docs-serve:

@@ -13,25 +13,33 @@ Copyright &copy; 2025 Nyctea Contributors. MIT License.
 # Define navigation structure
 nav = [
     { "Home" = "index.md" },
-    { "User Guides" = [
-        { "Overview" = "guides/index.md" },
-        { "Quick Start" = "guides/quickstart.md" },
-        { "Validator Registry" = "guides/registry.md" },
+    { "User guide" = [
+        { "Overview" = "user-guide/index.md" },
+        { "Getting started" = "user-guide/quickstart.md" },
+        { "Features" = "user-guide/features.md" },
+        { "Validator registry" = "user-guide/registry.md" },
     ]},
-    { "API Reference" = [
+    { "API" = [
         { "Overview" = "api/index.md" },
-        { "Validation Engine" = "api/engine.md" },
-        { "Validator Registry" = "api/registry.md" },
-        { "Schema Models" = "api/schema.md" },
-        { "Data Ingestion" = "api/ingest.md" },
+        { "Validation engine" = "api/engine.md" },
+        { "Validator registry" = "api/registry.md" },
+        { "Schema models" = "api/schema.md" },
+        { "Data ingestion" = "api/ingest.md" },
     ]},
     { "Development" = [
         { "Overview" = "development/index.md" },
-        { "Roadmap" = "development/roadmap.md" },
-        { "Breaking Changes" = "development/breaking-changes.md" },
-        { "ADR: Pipeline Design" = "development/adr-pipeline-design.md" },
-        { "ADR: Validation API" = "development/adr-validation-api.md" },
+        { "Contributing" = "development/contributing.md" },
+        { "Writing docs" = "development/writing-docs.md" },
         { "Releasing" = "development/RELEASING.md" },
+        { "Decisions" = [
+            { "on_failure" = "development/decisions/adr-on-failure.md" },
+            { "Pipeline design" = "development/decisions/adr-pipeline-design.md" },
+            { "Validation API" = "development/decisions/adr-validation-api.md" },
+        ]},
+    ]},
+    { "Releases" = [
+        { "Overview" = "releases/index.md" },
+        { "Breaking changes" = "releases/breaking-changes.md" },
     ]},
 ]
 

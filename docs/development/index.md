@@ -4,22 +4,22 @@ icon: lucide/git-branch
 
 # Development
 
-Architecture decisions, roadmap, migration notes, and contributor docs.
+Architecture decisions, migration notes, and contributor docs.
 
 !!! info "Current version: v0.2.0"
-    The validator system and core pipeline are in place. Several pipeline phases are still stubs. See the [roadmap](roadmap.md) for what's next.
+    The validator system and core pipeline are in place. See the [open issues](https://github.com/yannick-vinkesteijn/nyctea/issues) for what's next.
 
 ---
 
 <div class="grid cards" markdown>
 
--   :material-map-outline:{ .lg .middle } **Roadmap**
+-   :material-source-pull:{ .lg .middle } **Contributing**
 
     ---
 
-    v0.2.0 backlog, planned pipeline phases, and test coverage targets.
+    Issue-first workflow, branch and PR conventions, local dev setup, CI overview.
 
-    [:octicons-arrow-right-24: Roadmap](roadmap.md)
+    [:octicons-arrow-right-24: Contributing](contributing.md)
 
 -   :material-alert-decagram-outline:{ .lg .middle } **Breaking Changes**
 
@@ -27,7 +27,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     What changed between v0.1.0 and v0.2.0, and how to migrate.
 
-    [:octicons-arrow-right-24: Breaking Changes](breaking-changes.md)
+    [:octicons-arrow-right-24: Breaking Changes](../releases/breaking-changes.md)
 
 -   :material-floor-plan:{ .lg .middle } **ADR: Pipeline Design**
 
@@ -35,7 +35,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     Why we replaced the monolithic `validate()` function with a composable phase pipeline.
 
-    [:octicons-arrow-right-24: Pipeline ADR](adr-pipeline-design.md)
+    [:octicons-arrow-right-24: Pipeline ADR](decisions/adr-pipeline-design.md)
 
 -   :material-scale-balance:{ .lg .middle } **ADR: Validation API & Library Comparison**
 
@@ -43,7 +43,7 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
     Design rationale for `schema.validate(df, registry)`. Comparison with Pandera, Patito, and Dataframely.
 
-    [:octicons-arrow-right-24: API ADR](adr-validation-api.md)
+    [:octicons-arrow-right-24: API ADR](decisions/adr-validation-api.md)
 
 -   :material-tag-outline:{ .lg .middle } **Releasing**
 
@@ -59,10 +59,4 @@ Architecture decisions, roadmap, migration notes, and contributor docs.
 
 ## About this project
 
-Nyctea started as a "vibe code" experiment to explore transferring software engineering knowledge to Claude Code for production Python development. The development history, sprint notes, and lessons learned are documented below.
-
-??? note "Sprint and refactor history"
-    - [Sprint 1 Summary](SPRINT_1_COMPLETE.md)
-    - [Refactor Summary](REFACTOR_SUMMARY.md)
-    - [Type Checking Notes](TYPE_CHECKING_NOTES.md)
-    - [Original Refactor Plan](nyctea-refactor-plan.md)
+Nyctea is a Polars-native validation library. This section holds contributor documentation: how to contribute, the release process, and architecture decisions. Work is tracked as [GitHub issues](https://github.com/yannick-vinkesteijn/nyctea/issues), not a roadmap page.

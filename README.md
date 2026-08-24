@@ -147,23 +147,18 @@ CI runs linting, type checking, and the test suite on Python 3.11 through 3.14 f
 
 ## Documentation
 
-- **[Quickstart](docs/guides/quickstart.md)**: getting started guide
-- **[Features](docs/guides/features.md)**: schema syntax and validator capabilities
-- **[Registry guide](docs/guides/registry.md)**: registering and discovering validators
+- **[Quickstart](docs/user-guide/quickstart.md)**: getting started guide
+- **[Features](docs/user-guide/features.md)**: schema syntax and validator capabilities
+- **[Registry guide](docs/user-guide/registry.md)**: registering and discovering validators
 - **[API reference](docs/api/index.md)**: full public API
-- **[Roadmap](docs/development/roadmap.md)**: what's implemented and what's next
-- **[Breaking changes](docs/development/breaking-changes.md)**: migrating between versions
+- **[Breaking changes](docs/releases/breaking-changes.md)**: migrating between versions
 
 ## Contributing
 
-Contributions are welcome. Please open an issue or pull request.
-
-Guidelines:
-
-1. Follow the OOP validator architecture patterns
-2. Add tests mirroring the `src/` structure
-3. Ensure Ruff linting and `ty` type checking pass
-4. Follow Google-style docstrings
+Contributions are welcome. Open an issue before starting anything beyond a trivial fix; see
+[docs/development/contributing.md](docs/development/contributing.md) for the full workflow
+(issue-first, branch and PR conventions, CI overview) and
+[DEVELOPMENT.md](DEVELOPMENT.md) for local setup.
 
 ## License
 

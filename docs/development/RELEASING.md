@@ -1,170 +1,59 @@
-# Release Guide
+# Releasing
 
-This document describes how to release Nyctea to PyPI.
+How to cut a Nyctea release, and how the automation behind it works.
 
-## Automated Release (Recommended)
+## The actual flow
 
-Nyctea uses GitHub Actions to automatically publish to PyPI when you create a GitHub release.
+Release publishing runs on trusted publishing (OIDC) since PR #18 and #22.
+There is no `PYPI_API_TOKEN`, and there should not be one.
+A tag push does not publish anything by itself; a human always reviews a draft first.
 
-### Prerequisites
-
-1. PyPI account at [pypi.org](https://pypi.org)
-2. PyPI API token added to GitHub secrets as `PYPI_API_TOKEN`
-   - Create at [pypi.org/manage/account/token/](https://pypi.org/manage/account/token/)
-   - Add to [GitHub repo secrets](https://github.com/yannick-vinkesteijn/nyctea/settings/secrets/actions)
-
-### Release Process
-
-1. **Update version** in `pyproject.toml`:
-   ```toml
-   version = "0.2.0"
-   ```
-
-2. **Commit and push**:
+1. Bump `version` in `pyproject.toml`.
+2. Commit and merge to `main` via PR, the same as any other change.
+3. Tag the merge commit and push the tag:
    ```bash
-   git add pyproject.toml
-   git commit -m "Bump version to 0.2.0"
-   git push origin main
+   git tag vx.y.z && git push origin vx.y.z
    ```
+4. **`Draft Release`** (`release-notes.yaml`) fires on the tag push and creates a draft GitHub Release with generated notes, grouped by PR label according to `.github/release.yml`. Nothing is published yet.
+5. Review the draft. This is the point to edit the notes if the auto-generated summary needs a human pass, not a step to skip. Click **Publish**.
+6. Publishing the release fires **`Publish to PyPI`** (`pypi-publish.yaml`). It builds the package and uploads it to PyPI through trusted publishing, with no token and no manual `uv publish`.
 
-3. **Create GitHub release**:
-   - Go to [Releases](https://github.com/yannick-vinkesteijn/nyctea/releases/new)
-   - Click "Choose a tag" → Create new tag: `v0.2.0`
-   - Set release title: `v0.2.0`
-   - Add release notes
-   - Click "Publish release"
+There is no maintained `CHANGELOG.md`. The GitHub Release for each tag is the changelog, the same
+way Polars does it. Label PRs correctly (`bug`, `enhancement`, `documentation`, `breaking`) so
+`.github/release.yml` sorts them into the right section automatically.
 
-4. **GitHub Actions will automatically**:
-   - Build the package
-   - Verify version matches tag
-   - Publish to PyPI
-   - Upload artifacts
+## `scripts/release.sh` is superseded, do not use it
 
-5. **Verify**:
-   - Check [Actions tab](https://github.com/yannick-vinkesteijn/nyctea/actions)
-   - Verify on [PyPI](https://pypi.org/project/nyctea/)
-
-## Manual Release (Alternative)
-
-If you prefer manual control or want to test first:
-
-## Quick Release with Script
-
-The easiest way to release:
-
-```bash
-./scripts/release.sh 0.2.0
-```
-
-This script will:
-1. Update version in `pyproject.toml`
-2. Run tests
-3. Build the package
-4. Optionally publish to TestPyPI for testing
-5. Publish to PyPI
-6. Create git tag
-7. Guide you through creating GitHub release
-
-## Manual Release Process
-
-If you prefer to do it manually:
-
-### 1. Update Version
-
-Edit `pyproject.toml`:
-```toml
-version = "0.2.0"
-```
-
-### 2. Run Tests
-
-```bash
-uv run pytest tests/ -v
-```
-
-### 3. Build Package
-
-```bash
-rm -rf dist/
-uv build
-```
-
-### 4. Test on TestPyPI (Recommended)
-
-```bash
-# Publish to TestPyPI
-uv publish --index https://test.pypi.org/legacy/ dist/*
-
-# Test install
-uv pip install --index-url https://test.pypi.org/simple/ nyctea==0.2.0
-```
-
-### 5. Publish to PyPI
-
-```bash
-uv publish dist/*
-```
-
-You'll be prompted for your API token.
-
-Alternatively, set environment variable:
-```bash
-export UV_PUBLISH_TOKEN="pypi-YOUR-TOKEN-HERE"
-uv publish dist/*
-```
-
-### 6. Tag Release
-
-```bash
-git add pyproject.toml
-git commit -m "Bump version to 0.2.0"
-git tag v0.2.0
-git push origin main
-git push origin v0.2.0
-```
-
-### 7. Create GitHub Release
-
-Go to [Releases](https://github.com/yannick-vinkesteijn/nyctea/releases/new) and create a new release from tag `v0.2.0`.
+It predates trusted publishing and calls `uv publish dist/*` directly with a token, which bypasses the draft-review step entirely.
+It's kept for now; delete it once nobody reaches for it out of habit.
 
 ## Versioning
 
-Nyctea follows [Semantic Versioning](https://semver.org/):
+Semantic Versioning applies, pre-1.0:
 
-- **0.x.y** - Pre-1.0 releases (breaking changes allowed)
-  - `0.1.0` → `0.2.0` - Breaking changes or major new features
-  - `0.2.0` → `0.2.1` - Bug fixes, minor improvements
-  - `0.2.1` → `0.3.0` - New features
+| Change | Bump |
+| --- | --- |
+| Breaking change or major new feature | `0.x.0` to `0.(x+1).0` |
+| Bug fix, minor improvement | `0.x.y` to `0.x.(y+1)` |
 
-- **1.0.0+** - Stable API
-  - `1.0.0` → `2.0.0` - Breaking changes
-  - `1.0.0` → `1.1.0` - New features (backward compatible)
-  - `1.0.0` → `1.0.1` - Bug fixes
+At 1.0.0, standard semver applies: major for breaking changes, minor for backward-compatible features, patch for fixes.
 
-## Development Status
+Docs-only changes, CI or workflow changes, test-only changes, and ADRs do not bump the version.
+Anything under `src/nyctea/` that affects behavior, and any dependency update that changes runtime behavior, does.
 
-Current classifiers in `pyproject.toml`:
-- `Development Status :: 3 - Alpha` - Early stage, API may change
-- Change to `4 - Beta` when API stabilizes
-- Change to `5 - Production/Stable` for 1.0.0+
+Breaking changes always get an entry in [breaking changes](../releases/breaking-changes.md). That
+page is maintained by hand, unlike the release notes; a one-line changelog entry is not enough
+context for a migration.
+
+## Prerequisites, one-time
+
+- A PyPI trusted publisher registered at pypi.org for this repo, workflow `pypi-publish.yaml`, environment `release`. See PyPI's [trusted publishing docs](https://docs.pypi.org/trusted-publishers/) if this ever needs re-registering; a repo rename or workflow rename invalidates it.
+- The `Development Status` classifier in `pyproject.toml` should track reality: `3 - Alpha` now, `4 - Beta` once the API stabilizes, `5 - Production/Stable` at 1.0.0.
 
 ## Troubleshooting
 
-### "Invalid API token"
+**"Package already exists" on PyPI.**
+Versions cannot be replaced once published. Bump and retry.
 
-Make sure your token:
-- Starts with `pypi-`
-- Has appropriate scope (use "Entire account" initially)
-- Is not expired
-
-### "Package already exists"
-
-You cannot replace a version once published. Increment version and try again.
-
-### "Filename already exists"
-
-Clean `dist/` folder before building:
-```bash
-rm -rf dist/
-uv build
-```
+**Draft release never appeared.**
+Confirm the tag matches `v*` and was pushed to the actual remote, not just created locally: `git push origin <tag>`.

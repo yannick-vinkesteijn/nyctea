@@ -5,13 +5,13 @@ Get started with Nyctea in 5 minutes.
 ## Installation
 
 ```bash
-pip install nyctea
+uv add nyctea
 ```
 
-Or with uv:
+Or with pip:
 
 ```bash
-uv add nyctea
+pip install nyctea
 ```
 
 ## Basic Example
@@ -176,7 +176,3 @@ schema = SchemaModel.from_dict({
 ```
 
 ## Next Steps
-
-- Understand the [validation pipeline](pipeline.md)
-- Write [custom functions](custom-functions.md)
-- Explore [examples](examples.md)

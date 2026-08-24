@@ -11,7 +11,7 @@ icon: lucide/home
 
 **Polars-native data validation with a composable validator pipeline.**
 
-[Get started :octicons-arrow-right-24:](guides/quickstart.md){ .md-button .md-button--primary }
+[Get started :octicons-arrow-right-24:](user-guide/quickstart.md){ .md-button .md-button--primary }
 [View on GitHub :octicons-mark-github-16:](https://github.com/yourusername/nyctea){ .md-button }
 
 </div>
@@ -123,7 +123,7 @@ result.errors                   # (2)!
 
     Get up and running. Learn schemas, parsers, checks, and the registry.
 
-    [:octicons-arrow-right-24: Guides](guides/index.md)
+    [:octicons-arrow-right-24: Guides](user-guide/index.md)
 
 -   :material-code-braces:{ .lg .middle } **API Reference**
 
@@ -137,17 +137,9 @@ result.errors                   # (2)!
 
     ---
 
-    Architecture decisions, roadmap, and breaking change notes.
+    Architecture decisions, contributing, and release notes.
 
     [:octicons-arrow-right-24: Development](development/index.md)
-
--   :material-map-outline:{ .lg .middle } **Roadmap**
-
-    ---
-
-    What's planned for v0.2.0: pipeline phases, test coverage, and the path to main.
-
-    [:octicons-arrow-right-24: Roadmap](development/roadmap.md)
 
 </div>
 
@@ -173,4 +165,4 @@ Verified against Pandera 0.29.0 · Patito 0.8.6 · Dataframely 2.7.0 · Great Ex
 
     Great Expectations 1.15 has no Polars support. The community request was closed as "not planned" in August 2024.
 
-[Full comparison and citations :octicons-arrow-right-24:](development/adr-validation-api.md){ .md-button }
+[Full comparison and citations :octicons-arrow-right-24:](development/decisions/adr-validation-api.md){ .md-button }
