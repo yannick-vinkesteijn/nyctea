@@ -163,7 +163,7 @@ CI runs linting, type checking, and the test suite on Python 3.11 through 3.14 f
 Contributions are welcome. Open an issue before starting anything beyond a trivial fix; see
 [docs/development/contributing.md](https://nyctea.vinkesteijn.io/development/contributing/) for the full workflow
 (issue-first, branch and PR conventions, CI overview) and
-[DEVELOPMENT.md](DEVELOPMENT.md) for local setup.
+[DEVELOPMENT.md](<%5BDEVELOPMENT.md%5D(https://github.com/yannick-vinkesteijn/nyctea/blob/main/DEVELOPMENT.md)>) for local setup.
 
 ## License
 
