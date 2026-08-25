@@ -10,9 +10,9 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
-from nyctea.engine.phases import NOT_NULL_CHECK
+from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
-from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.engine.validate import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import SchemaModel
 from nyctea.validators.registry import Registry
@@ -160,37 +160,30 @@ class SchemaValidator:
     def _enforce_coercion_raise(self, context: PipelineContext) -> None:
         """Raise PipelineError if on_failure=raise columns gained nulls from coercion.
 
-        Uses a targeted collect of only the new-null counts (1-row aggregation),
-        not the full data.
+        Uses a targeted collect of only the failure counts (1-row aggregation), not
+        the full data.
 
         Args:
-            context: Pipeline context with LazyFrame containing __pre_null__ masks.
+            context: Pipeline context with check_masks populated (CoercionPhase
+                registers one coercion mask per cast column).
 
         Raises:
             PipelineError: If any on_failure=raise column has coercion-introduced nulls.
         """
         schema = context.schema
-        lf = context.data
-        col_names = lf.collect_schema().names()
 
-        count_exprs: list[pl.Expr] = []
-        raise_cols: list[str] = []
-
-        for col_name in schema.columns:
-            pre_null_col = f"__pre_null__{col_name}"
-            if pre_null_col not in col_names:
-                continue
-            if schema.resolve_on_failure(col_name) != "raise":
-                continue
-
-            expr = (pl.col(col_name).is_null() & ~pl.col(pre_null_col)).sum().alias(f"__new_nulls__{col_name}")
-            count_exprs.append(expr)
-            raise_cols.append(col_name)
-
-        if not count_exprs:
+        raise_cols = {
+            col_name: alias
+            for (col_name, check_name), alias in context.check_masks.items()
+            if check_name == COERCION_CHECK and schema.resolve_on_failure(col_name) == "raise"
+        }
+        if not raise_cols:
             return
 
-        counts = _collect(lf.select(count_exprs))
+        count_exprs = [
+            (~pl.col(alias)).sum().alias(f"__new_nulls__{col_name}") for col_name, alias in raise_cols.items()
+        ]
+        counts = _collect(context.data.select(count_exprs))
         for col_name in raise_cols:
             new_nulls = int(counts[f"__new_nulls__{col_name}"].item())
             if new_nulls > 0:
@@ -210,6 +203,10 @@ class SchemaValidator:
         rewrites ``'null'`` to ``'raise'`` for non-nullable columns; ``'ignore'`` is
         unaffected and can still apply).
 
+        Also excludes the coercion check: it has its own raise path, and a
+        coercion-failed value is already null, so nulling it again here would
+        double-count it in ``nullified_counts``.
+
         Args:
             context: Pipeline context with populated check_masks.
             on_failure: The resolved on_failure behavior to filter columns by.
@@ -220,7 +217,7 @@ class SchemaValidator:
         schema = context.schema
         grouped: dict[str, list[str]] = {}
         for (col_name, check_name), alias in context.check_masks.items():
-            if check_name == NOT_NULL_CHECK:
+            if check_name in (NOT_NULL_CHECK, COERCION_CHECK):
                 continue
             if schema.resolve_on_failure(col_name) != on_failure:
                 continue
@@ -293,13 +290,74 @@ class SchemaValidator:
         context.data = context.data.with_columns(null_exprs)
 
     def _build_report(self, context: PipelineContext) -> ValidationReport:
-        """Stub — row counts only. Replaced by ReportGenerationPhase (Step 4)."""
-        total = int(_collect(context.data.select(pl.len())).item())
+        """Build the validation report from the same check masks used by ``_build_errors``.
+
+        Coercion failures get their own column stat but still count toward rows_failed.
+
+        Uses a single targeted collect of per-column/per-row aggregations, never the
+        full data.
+
+        Args:
+            context: Pipeline context with check_masks and nullified_counts populated.
+
+        Returns:
+            ValidationReport with row counts and per-column statistics.
+        """
+        schema = context.schema
+        lf = context.data
+        col_names = lf.collect_schema().names()
+
+        check_masks_by_col: dict[str, list[str]] = {}
+        coercion_alias_by_col: dict[str, str] = {}
+        for (col_name, check_name), alias in context.check_masks.items():
+            if check_name == COERCION_CHECK:
+                coercion_alias_by_col[col_name] = alias
+            else:
+                check_masks_by_col.setdefault(col_name, []).append(alias)
+
+        exprs: list[pl.Expr] = [pl.len().alias("__total__")]
+
+        for col_name, aliases in check_masks_by_col.items():
+            # Sum of per-check failure counts, not distinct failing rows, so this
+            # matches the totals in `errors` for the same column: a row failing two
+            # checks contributes two failures here, same as two rows in `errors`.
+            exprs.append(
+                pl.sum_horizontal([(~pl.col(alias)).sum() for alias in aliases]).alias(f"__check_fail__{col_name}")
+            )
+        exprs.extend(
+            (~pl.col(alias)).sum().alias(f"__coercion_fail__{col_name}")
+            for col_name, alias in coercion_alias_by_col.items()
+        )
+
+        if context.check_masks:
+            all_aliases = list(context.check_masks.values())
+            exprs.append(pl.any_horizontal([~pl.col(alias) for alias in all_aliases]).sum().alias("__rows_failed__"))
+
+        report_cols = [c for c in schema.columns if c in col_names]
+        exprs.extend(pl.col(col_name).is_null().sum().alias(f"__final_null__{col_name}") for col_name in report_cols)
+
+        row = _collect(lf.select(exprs))
+
+        total = int(row["__total__"].item())
+        rows_failed = int(row["__rows_failed__"].item()) if "__rows_failed__" in row.columns else 0
+
+        columns: dict[str, ColumnValidationStats] = {}
+        for col_name in report_cols:
+            check_fail_alias = f"__check_fail__{col_name}"
+            coercion_fail_alias = f"__coercion_fail__{col_name}"
+            columns[col_name] = ColumnValidationStats(
+                column_name=col_name,
+                coercion_failures=int(row[coercion_fail_alias].item()) if coercion_fail_alias in row.columns else 0,
+                check_failures=int(row[check_fail_alias].item()) if check_fail_alias in row.columns else 0,
+                nullified=context.nullified_counts.get(col_name, 0),
+                final_null_count=int(row[f"__final_null__{col_name}"].item()),
+            )
+
         return ValidationReport(
             rows_processed=total,
-            rows_valid=total,
-            on_failure=context.schema.on_failure,
-            columns={},
+            rows_valid=total - rows_failed,
+            on_failure=schema.on_failure,
+            columns=columns,
         )
 
     def _build_errors(self, context: PipelineContext) -> pl.DataFrame:

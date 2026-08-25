@@ -8,6 +8,8 @@ import pytest
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.phases import (
+    COERCION_CHECK,
+    NOT_NULL_CHECK,
     CoercionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
@@ -102,6 +104,19 @@ class TestResolveDtype:
     def test_unsupported_type_raises(self):
         with pytest.raises(ValueError, match="Unsupported dtype specification"):
             _resolve_dtype(123)
+
+
+# ---------------------------------------------------------------------------
+# Public check-name contract
+# ---------------------------------------------------------------------------
+
+
+class TestPublicCheckNameContract:
+    def test_not_null_check_name_is_frozen(self):
+        assert NOT_NULL_CHECK == "not_null"
+
+    def test_coercion_check_name_is_frozen(self):
+        assert COERCION_CHECK == "coerce"
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +260,6 @@ class TestFullPipeline:
         assert result.report.rows_valid == 3
         assert len(result.errors) == 0
 
-    @pytest.mark.skip(reason="Step 4: _build_report() stub returns empty columns")
     def test_check_failure_recorded(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -253,6 +267,7 @@ class TestFullPipeline:
                     "age": {
                         "dtype": "Int64",
                         "nullable": True,
+                        "on_failure": "ignore",
                         "checks": [{"name": "between", "args": {"min": 0, "max": 150}}],
                     },
                 }
@@ -408,6 +423,29 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
 
+    def test_check_mask_alias_collision_raises_with_coercion_active(self, registry):
+        """A pre-seeded coercion mask must not shift the check-mask alias counter.
+
+        Otherwise the first real check gets '__check__1' instead of '__check__0',
+        and a user column literally named '__check__0' slips past this guard.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    },
+                    "__check__0": {"dtype": "Int64", "nullable": True},
+                },
+            }
+        )
+        df = pl.DataFrame({"age": ["1", "2"], "__check__0": [9, 9]})
+        with pytest.raises(PipelineError, match="already contains a column named"):
+            schema.validate(df, registry)
+
     def test_check_mask_aliases_are_unambiguous(self, registry):
         """Column and check names containing '__' must not produce a shared alias.
 
@@ -449,7 +487,6 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         assert "age" in result.data.collect_schema().names()
 
-    @pytest.mark.skip(reason="Step 4: _build_report() stub returns empty columns")
     def test_report_check_failure_counts(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -457,6 +494,7 @@ class TestFullPipeline:
                     "score": {
                         "dtype": "Int64",
                         "nullable": True,
+                        "on_failure": "ignore",
                         "checks": [{"name": "min_value", "args": {"min": 0}}],
                     },
                 }
@@ -465,6 +503,34 @@ class TestFullPipeline:
         df = pl.DataFrame({"score": [10, -1, -2, 5]})
         result = schema.validate(df, registry)
         assert result.report.columns["score"].check_failures == 2
+
+    def test_check_failures_sum_matches_errors_with_multiple_checks(self, registry):
+        """A row failing two checks on the same column must count as two failures.
+
+        report.columns[col].check_failures must equal the sum of errors["count"]
+        for that column, not the count of distinct failing rows.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [
+                            {"name": "min_value", "args": {"min": 0}},
+                            {"name": "between", "args": {"min": 0, "max": 100}},
+                        ],
+                    },
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [50, -1, 200]})
+        result = schema.validate(df, registry)
+        errors_sum = result.errors.filter(pl.col("column") == "age")["count"].sum()
+        assert errors_sum == 3
+        assert result.report.columns["age"].check_failures == errors_sum
+        assert result.report.rows_valid == 1
 
     def test_coerce_strict_incompatible_type_raises(self, registry):
         schema = SchemaModel.from_dict(
@@ -497,7 +563,6 @@ class TestFullPipeline:
 
 
 class TestNullification:
-    @pytest.mark.skip(reason="Step 5: NullificationPhase not yet implemented")
     def test_failing_values_nullified(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -519,6 +584,133 @@ class TestNullification:
         assert ages[0] == 10
         assert ages[2] == 5
         assert result.report.columns["age"].nullified == 2
+
+    def test_check_nullified_values_not_counted_as_coercion_failures(self, registry):
+        """A value nulled by a failing check must not also be reported as a coercion failure.
+
+        Both look identical from the __pre_null__ snapshot alone (wasn't null before
+        coercion, is null now), so the report must distinguish them.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "-1", "20"]})
+        result = schema.validate(df, registry)
+        assert result.report.columns["age"].coercion_failures == 0
+        assert result.report.columns["age"].nullified == 1
+
+    def test_coercion_failures_are_reported(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "ignore",
+                "columns": {"age": {"dtype": "Int64", "nullable": True}},
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "bad", "20"]})
+        result = schema.validate(df, registry)
+        assert result.report.columns["age"].coercion_failures == 1
+        assert "Coercion failures: 1" in result.report.summary()
+
+    def test_coercion_failures_appear_in_errors(self, registry):
+        """Coercion failures follow the same reporting path as parser/check failures."""
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "ignore",
+                "columns": {"age": {"dtype": "Int64", "nullable": True}},
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "bad", "20"]})
+        result = schema.validate(df, registry)
+        assert result.errors.filter((pl.col("column") == "age") & (pl.col("check") == "coerce"))["count"].item() == 1
+
+    def test_coercion_failures_reduce_rows_valid(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "ignore",
+                "columns": {"age": {"dtype": "Int64", "nullable": True}},
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "bad", "20"]})
+        result = schema.validate(df, registry)
+        assert result.report.rows_processed == 3
+        assert result.report.rows_valid == 2
+
+    def test_coercion_raise_is_strict_by_default(self, registry):
+        """Default on_failure='raise' stops before checks ever run on the coerced garbage."""
+        schema = SchemaModel.from_dict({"coerce": True, "columns": {"age": {"dtype": "Int64", "nullable": True}}})
+        df = pl.DataFrame({"age": ["10", "bad", "20"]})
+        with pytest.raises(PipelineError, match="Coercion failed for column 'age'"):
+            schema.validate(df, registry)
+
+    def test_coercion_failure_on_non_nullable_column_reports_both_and_counts_once(self, registry):
+        """A coercion-failed cell on a nullable=False column is null: both constraints fail.
+
+        Both should be reported, but the row must only count as invalid once.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "ignore",
+                "columns": {"age": {"dtype": "Int64", "nullable": False}},
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "bad", "20"]})
+        result = schema.validate(df, registry)
+        assert result.report.rows_processed == 3
+        assert result.report.rows_valid == 2
+        assert result.errors.filter((pl.col("column") == "age") & (pl.col("check") == "coerce"))["count"].item() == 1
+        assert result.errors.filter((pl.col("column") == "age") & (pl.col("check") == "not_null"))["count"].item() == 1
+
+    def test_coercion_check_name_is_reserved(self, registry):
+        """A user check named 'coerce' on a coerced column must not silently collide."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="coerce", tags=[])
+        def fake_coerce(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "coerce"}]},
+                },
+            }
+        )
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": ["1", "2"]}), registry)
+
+    def test_coercion_check_name_is_reserved_even_when_no_cast_is_needed(self, registry):
+        """The reservation is a schema property, not conditional on this input needing a cast."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="coerce", tags=[])
+        def fake_coerce(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "coerce"}]},
+                },
+            }
+        )
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": [1, 2]}), registry)
 
 
 # ---------------------------------------------------------------------------
@@ -672,7 +864,6 @@ class TestErrorReporting:
 
 
 class TestValidationReportSummary:
-    @pytest.mark.skip(reason="Step 4: _build_report() stub returns empty columns")
     def test_summary_with_failures(self, registry):
         schema = SchemaModel.from_dict(
             {
@@ -698,6 +889,13 @@ class TestValidationReportSummary:
         result = schema.validate(df, registry)
         text = result.report.summary()
         assert "3/3 valid" in text
+
+    def test_summary_empty_frame_does_not_divide_by_zero(self, registry):
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
+        df = pl.DataFrame({"age": []}, schema={"age": pl.Int64})
+        result = schema.validate(df, registry)
+        text = result.report.summary()
+        assert "0/0 valid (0.0%)" in text
 
 
 # ---------------------------------------------------------------------------
