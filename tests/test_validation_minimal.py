@@ -46,6 +46,7 @@ def sample_schema():
                     ],
                     "nullable": False,
                     "required": True,
+                    "on_failure": "ignore",
                 },
                 "city": {
                     "dtype": "Utf8",

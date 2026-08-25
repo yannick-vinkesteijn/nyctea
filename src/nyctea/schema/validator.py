@@ -10,6 +10,7 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
+from nyctea.engine.phases import NOT_NULL_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
@@ -127,9 +128,14 @@ class SchemaValidator:
 
         # Enforce on_failure=raise (targeted collect of counts only)
         self._enforce_coercion_raise(context)
+        self._enforce_check_raise(context)
 
-        # Build errors (targeted collect of mask + relevant columns only)
+        # Build errors before nulling failures, so the report reflects the
+        # original failing values (targeted collect of mask + relevant columns only)
         errors = self._build_errors(context)
+
+        # Apply on_failure=null: null out values that failed a check
+        self._apply_check_null(context)
 
         # Build report (targeted collect of row count only)
         report = self._build_report(context)
@@ -194,6 +200,97 @@ class SchemaValidator:
                     f"{schema.columns[col_name].dtype}",
                     phase="coercion",
                 )
+
+    def _check_masks_by_column(self, context: PipelineContext, on_failure: str) -> dict[str, list[str]]:
+        """Group check mask aliases by column for columns resolving to the given on_failure.
+
+        Excludes the built-in not-null check, which is already enforced directly in
+        ``ColumnCheckPhase`` and can never resolve to ``'null'`` (nullable=False is
+        required for that check to exist, and the guard in ``resolve_on_failure``
+        rewrites ``'null'`` to ``'raise'`` for non-nullable columns; ``'ignore'`` is
+        unaffected and can still apply).
+
+        Args:
+            context: Pipeline context with populated check_masks.
+            on_failure: The resolved on_failure behavior to filter columns by.
+
+        Returns:
+            Mapping of column name to the list of mask aliases for its checks.
+        """
+        schema = context.schema
+        grouped: dict[str, list[str]] = {}
+        for (col_name, check_name), alias in context.check_masks.items():
+            if check_name == NOT_NULL_CHECK:
+                continue
+            if schema.resolve_on_failure(col_name) != on_failure:
+                continue
+            grouped.setdefault(col_name, []).append(alias)
+        return grouped
+
+    def _enforce_check_raise(self, context: PipelineContext) -> None:
+        """Raise PipelineError if any on_failure=raise column failed a check.
+
+        Uses a targeted collect of only the per-column failure counts (1-row
+        aggregation), not the full data.
+
+        Args:
+            context: Pipeline context with check_masks populated.
+
+        Raises:
+            PipelineError: If any on_failure=raise column has a failing check.
+        """
+        raise_cols = self._check_masks_by_column(context, "raise")
+        if not raise_cols:
+            return
+
+        count_exprs = [
+            pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__check_fail__{col_name}")
+            for col_name, aliases in raise_cols.items()
+        ]
+        counts = _collect(context.data.select(count_exprs))
+        for col_name in raise_cols:
+            fail_count = int(counts[f"__check_fail__{col_name}"].item())
+            if fail_count > 0:
+                raise PipelineError(
+                    f"Check failed for column '{col_name}': {fail_count} value(s) failed "
+                    f"validation and on_failure is 'raise'.",
+                    phase="column_checks",
+                )
+
+    def _apply_check_null(self, context: PipelineContext) -> None:
+        """Null out values that failed a check on an on_failure=null column.
+
+        A value is nulled if any of its column's checks failed. Runs after
+        ``_build_errors`` so the error report still reflects the original
+        failing values.
+
+        Args:
+            context: Pipeline context with check_masks populated. Mutates
+                ``context.data`` and ``context.nullified_counts`` in place.
+        """
+        null_cols = self._check_masks_by_column(context, "null")
+        if not null_cols:
+            return
+
+        fail_exprs = {
+            col_name: pl.any_horizontal([~pl.col(alias) for alias in aliases])
+            for col_name, aliases in null_cols.items()
+        }
+        counts = _collect(
+            context.data.select(
+                [expr.sum().alias(f"__check_fail__{col_name}") for col_name, expr in fail_exprs.items()]
+            )
+        )
+        for col_name in null_cols:
+            context.nullified_counts[col_name] = context.nullified_counts.get(col_name, 0) + int(
+                counts[f"__check_fail__{col_name}"].item()
+            )
+
+        null_exprs = [
+            pl.when(fail_expr).then(None).otherwise(pl.col(col_name)).alias(col_name)
+            for col_name, fail_expr in fail_exprs.items()
+        ]
+        context.data = context.data.with_columns(null_exprs)
 
     def _build_report(self, context: PipelineContext) -> ValidationReport:
         """Stub — row counts only. Replaced by ReportGenerationPhase (Step 4)."""

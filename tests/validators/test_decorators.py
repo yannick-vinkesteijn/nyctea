@@ -148,6 +148,7 @@ class TestColumnCheckDecorator:
                         "parsers": [{"name": "to_int"}],
                         "checks": [{"name": "positive"}],
                         "nullable": False,
+                        "on_failure": "ignore",
                     },
                 }
             }
