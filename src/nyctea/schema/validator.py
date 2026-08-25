@@ -318,8 +318,11 @@ class SchemaValidator:
         exprs: list[pl.Expr] = [pl.len().alias("__total__")]
 
         for col_name, aliases in check_masks_by_col.items():
+            # Sum of per-check failure counts, not distinct failing rows, so this
+            # matches the totals in `errors` for the same column: a row failing two
+            # checks contributes two failures here, same as two rows in `errors`.
             exprs.append(
-                pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__check_fail__{col_name}")
+                pl.sum_horizontal([(~pl.col(alias)).sum() for alias in aliases]).alias(f"__check_fail__{col_name}")
             )
         exprs.extend(
             (~pl.col(alias)).sum().alias(f"__coercion_fail__{col_name}")

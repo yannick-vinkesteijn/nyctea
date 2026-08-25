@@ -504,6 +504,34 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         assert result.report.columns["score"].check_failures == 2
 
+    def test_check_failures_sum_matches_errors_with_multiple_checks(self, registry):
+        """A row failing two checks on the same column must count as two failures.
+
+        report.columns[col].check_failures must equal the sum of errors["count"]
+        for that column, not the count of distinct failing rows.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [
+                            {"name": "min_value", "args": {"min": 0}},
+                            {"name": "between", "args": {"min": 0, "max": 100}},
+                        ],
+                    },
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [50, -1, 200]})
+        result = schema.validate(df, registry)
+        errors_sum = result.errors.filter(pl.col("column") == "age")["count"].sum()
+        assert errors_sum == 3
+        assert result.report.columns["age"].check_failures == errors_sum
+        assert result.report.rows_valid == 1
+
     def test_coerce_strict_incompatible_type_raises(self, registry):
         schema = SchemaModel.from_dict(
             {
