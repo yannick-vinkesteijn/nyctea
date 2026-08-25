@@ -370,7 +370,7 @@ class ColumnCheckPhase(PipelinePhase):
                 continue
 
             for check_spec in checks_to_run:
-                if check_spec.name == COERCION_CHECK and (col_name, COERCION_CHECK) in check_masks:
+                if check_spec.name == COERCION_CHECK and schema.resolve_coerce(col_name):
                     raise PipelineError(
                         f"Column '{col_name}' has coercion enabled and also has a check named "
                         f"'{COERCION_CHECK}'. The name is reserved for the built-in coercion "

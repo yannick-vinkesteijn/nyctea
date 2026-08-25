@@ -665,6 +665,25 @@ class TestNullification:
         with pytest.raises(PipelineError, match="reserved"):
             schema.validate(pl.DataFrame({"age": ["1", "2"]}), registry)
 
+    def test_coercion_check_name_is_reserved_even_when_no_cast_is_needed(self, registry):
+        """The reservation is a schema property, not conditional on this input needing a cast."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="coerce", tags=[])
+        def fake_coerce(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "coerce"}]},
+                },
+            }
+        )
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": [1, 2]}), registry)
+
 
 # ---------------------------------------------------------------------------
 # Error report modes
