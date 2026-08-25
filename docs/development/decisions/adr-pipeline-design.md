@@ -89,7 +89,7 @@ The monolith is removed once all phases below are implemented and integration te
 | `_count_original_nulls`     | tracked in context            |
 | `_apply_frame_parsers`      | `FrameParsingPhase` ✅       |
 | `_apply_column_parsers`     | `ColumnParsingPhase` ✅      |
-| `_apply_coercion`           | `CoercionPhase` (todo)       |
+| `_apply_coercion`           | `CoercionPhase` ✅           |
 | `_apply_frame_checks`       | `FrameCheckPhase` ✅         |
 | `_collect_column_checks`    | `ColumnCheckPhase` ✅ (partial) |
 | `_build_error_report`       | `ErrorReportingPhase` (todo) |

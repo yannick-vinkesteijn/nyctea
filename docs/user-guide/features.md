@@ -100,9 +100,11 @@ schema = SchemaModel.from_dict({
 })
 ```
 
-Frame checks must return the frame unchanged (same rows, same columns) and raise on
-failure. Frame parsers may add, drop, or reorder columns and rows, and run before
-column parsers so later steps see the transformed frame.
+Frame checks must preserve row count and the set of columns, and raise on failure.
+Column order and values are not checked, so a well-behaved frame check should not
+change them even though nothing currently enforces it. Frame parsers may add, drop,
+or reorder columns and rows, and run before column parsers so later steps see the
+transformed frame.
 
 ## Failure handling
 

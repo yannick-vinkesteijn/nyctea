@@ -391,8 +391,9 @@ class FrameCheckPhase(PipelinePhase):
     """Apply frame-level checks (whole-DataFrame validations).
 
     Runs after coercion so frame checks see typed data, and before column
-    checks. A ``FrameCheck`` always preserves rows and columns (enforced by
-    the base class), so it can only pass a frame through or raise.
+    checks. The base class only enforces row count and column set on a
+    ``FrameCheck``'s output, not order or values, so it should pass the frame
+    through unchanged or raise, though nothing currently enforces the former.
 
     Dependencies: coercion
     """
