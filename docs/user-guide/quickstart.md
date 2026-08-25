@@ -37,10 +37,11 @@ def positive(col: pl.Expr) -> pl.Expr:
 
 # 3. Define a schema
 schema = SchemaModel.from_dict({
+    "on_failure": "ignore",  # Record failures instead of raising
     "columns": {
         "age": {
             "dtype": "Int64",
-            "nullable": False,  # No nulls allowed
+            "nullable": False,  # Nulls are recorded as failures, not dropped (see on_failure above)
             "checks": [{"name": "positive"}]  # Must be positive
         },
         "name": {
@@ -61,12 +62,12 @@ result = schema.validate(df, registry)
 
 # 6. Check results
 print(result.report.summary())
-# Validation Report (on_failure: raise)
+# Validation Report (on_failure: ignore)
 # Rows: 2/4 valid (50.0%)
 #
 # Column Issues:
 #   age:
-#     Check failures: 1
+#     Check failures: 2
 #     Final nulls: 1
 
 print(result.errors)
@@ -77,7 +78,7 @@ print(result.errors)
 # │ str    ┆ str      ┆ u32   │
 # ╞════════╪══════════╪═══════╡
 # │ age    ┆ positive ┆ 1     │
-# │ age    ┆ non_null ┆ 1     │
+# │ age    ┆ not_null ┆ 1     │
 # └────────┴──────────┴───────┘
 ```
 
@@ -96,7 +97,7 @@ The report provides high-level statistics:
 ```python
 result.report.rows_processed  # Total rows: 4
 result.report.rows_valid      # Valid rows: 2
-result.report.on_failure      # "raise"
+result.report.on_failure      # "ignore"
 ```
 
 Per-column statistics:

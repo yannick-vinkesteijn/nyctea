@@ -17,7 +17,10 @@ from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.schema.model import SchemaModel
 
 NOT_NULL_CHECK = "not_null"
-"""Check name reported for a nullable=False column that contains nulls."""
+"""Check name reported for a nullable=False column that contains nulls. Frozen, see test_phases.py."""
+
+COERCION_CHECK = "coerce"
+"""Check name reported for a failed dtype cast. Frozen, see test_phases.py."""
 
 
 def _reject_alias_collision(alias: str, current_columns: list[str], phase: str, what: str) -> None:
@@ -288,9 +291,20 @@ class CoercionPhase(PipelinePhase):
             _reject_alias_collision(
                 f"__pre_null__{c}", current_dtypes.names(), self.name, f"the pre-null snapshot for column '{c}'"
             )
+            _reject_alias_collision(
+                f"__coercion_ok__{c}", current_dtypes.names(), self.name, f"the coercion mask for column '{c}'"
+            )
         pre_null_exprs = [pl.col(c).is_null().alias(f"__pre_null__{c}") for c in cols_to_cast]
         context.internal_columns.update(f"__pre_null__{c}" for c in cols_to_cast)
         context.data = lf.with_columns(pre_null_exprs).with_columns(cast_exprs)
+
+        # True = no coercion failure; feeds check_masks like a real check.
+        coercion_ok_exprs = [
+            (~(pl.col(c).is_null() & ~pl.col(f"__pre_null__{c}"))).alias(f"__coercion_ok__{c}") for c in cols_to_cast
+        ]
+        context.data = context.data.with_columns(coercion_ok_exprs)
+        context.internal_columns.update(f"__coercion_ok__{c}" for c in cols_to_cast)
+        context.check_masks.update({(c, COERCION_CHECK): f"__coercion_ok__{c}" for c in cols_to_cast})
 
         return context
 
@@ -343,8 +357,11 @@ class ColumnCheckPhase(PipelinePhase):
         # Build boolean mask columns for each check (True = passed)
         # No collect here — downstream phases use these masks lazily
         mask_exprs: list[pl.Expr] = []
-        check_masks: dict[tuple[str, str], str] = {}
+        # Preserve entries earlier phases (e.g. CoercionPhase) already registered.
+        check_masks: dict[tuple[str, str], str] = dict(context.check_masks)
         notnull_aliases = self._build_notnull_mask_exprs(schema, current_columns, mask_exprs)
+        # Independent of check_masks' size, so seeded coercion entries don't shift aliases.
+        check_index = 0
 
         for col_name, col_schema in schema.columns.items():
             checks_to_run = list(col_schema.checks) if col_schema.checks else []
@@ -353,6 +370,14 @@ class ColumnCheckPhase(PipelinePhase):
                 continue
 
             for check_spec in checks_to_run:
+                if check_spec.name == COERCION_CHECK and (col_name, COERCION_CHECK) in check_masks:
+                    raise PipelineError(
+                        f"Column '{col_name}' has coercion enabled and also has a check named "
+                        f"'{COERCION_CHECK}'. The name is reserved for the built-in coercion "
+                        f"failure tracking. Rename the check.",
+                        phase=self.name,
+                    )
+
                 try:
                     check = registry.column_checks.get(check_spec.name)
                 except KeyError as e:
@@ -374,7 +399,8 @@ class ColumnCheckPhase(PipelinePhase):
                 # Index, not "{col}__{check}": the latter is ambiguous, since a column named
                 # 'a__b' with check 'c' and a column 'a' with check 'b__c' both produce
                 # '__check__a__b__c'. Nothing parses these aliases; they are opaque handles.
-                alias = f"__check__{len(check_masks)}"
+                alias = f"__check__{check_index}"
+                check_index += 1
                 _reject_alias_collision(
                     alias,
                     current_columns,

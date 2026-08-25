@@ -109,14 +109,15 @@ class ValidationReport(BaseModel):
 
     def summary(self) -> str:
         """Human-readable summary."""
+        pct = (self.rows_valid / self.rows_processed * 100) if self.rows_processed else 0.0
         lines = [
             f"Validation Report (on_failure: {self.on_failure})",
-            f"Rows: {self.rows_valid}/{self.rows_processed} valid ({self.rows_valid / self.rows_processed * 100:.1f}%)",
+            f"Rows: {self.rows_valid}/{self.rows_processed} valid ({pct:.1f}%)",
             "",
             "Column Issues:",
         ]
         for col_name, stats in self.columns.items():
-            if stats.nullified > 0 or stats.check_failures > 0:
+            if stats.nullified > 0 or stats.check_failures > 0 or stats.coercion_failures > 0:
                 lines.append(f"  {col_name}:")
                 if stats.coercion_failures:
                     lines.append(f"    Coercion failures: {stats.coercion_failures}")
