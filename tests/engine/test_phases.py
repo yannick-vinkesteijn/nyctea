@@ -590,6 +590,22 @@ class TestFrameValidators:
         with pytest.raises(PipelineError, match="not found in registry"):
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
+    def test_frame_parser_execution_failure_raises(self, registry):
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.frame_parser(name="explode", preserve_columns=False)
+        def explode(frame: pl.LazyFrame) -> pl.LazyFrame:  # noqa: ARG001
+            raise ValueError("boom")
+
+        schema = SchemaModel.from_dict(
+            {
+                "frame_parsers": [{"name": "explode"}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        with pytest.raises(PipelineError, match="boom"):
+            schema.validate(pl.DataFrame({"a": [1]}), registry)
+
     def test_frame_check_raises_on_failure(self, registry):
         decorators = ValidatorDecorator(registry)
 
