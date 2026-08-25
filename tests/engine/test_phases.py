@@ -922,7 +922,7 @@ class TestOnFailure:
         assert result.errors["value"].to_list() == ["-1"]
 
     def test_check_null_on_failure_only_nullifies_own_column(self, registry):
-        """Nullifying a failing on_failure=null column does not affect an unrelated raise column."""
+        """Nullifying a failing on_failure=null column does not affect an unrelated ignore column."""
         schema = SchemaModel.from_dict(
             {
                 "columns": {

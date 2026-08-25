@@ -207,7 +207,8 @@ class SchemaValidator:
         Excludes the built-in not-null check, which is already enforced directly in
         ``ColumnCheckPhase`` and can never resolve to ``'null'`` (nullable=False is
         required for that check to exist, and the guard in ``resolve_on_failure``
-        forces non-nullable columns to ``'raise'``).
+        rewrites ``'null'`` to ``'raise'`` for non-nullable columns; ``'ignore'`` is
+        unaffected and can still apply).
 
         Args:
             context: Pipeline context with populated check_masks.
