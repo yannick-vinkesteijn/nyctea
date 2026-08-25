@@ -77,6 +77,35 @@ schema = SchemaModel.from_dict({
 })
 ```
 
+## Frame-level parsers and checks
+
+Column parsers and checks operate on one column at a time. Frame parsers and checks
+operate on the whole DataFrame, for rules that need to see more than one column, such
+as cross-column comparisons or a minimum row count.
+
+```python
+from nyctea.validators.decorators import ValidatorDecorator
+
+decorators = ValidatorDecorator(registry)
+
+@decorators.frame_check(name="min_rows")
+def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
+    if frame.select(pl.len()).collect().item() < min_rows:
+        raise ValueError(f"expected at least {min_rows} rows")
+    return frame
+
+schema = SchemaModel.from_dict({
+    "frame_checks": [{"name": "min_rows", "args": {"min_rows": 2}}],
+    "columns": {"age": {"dtype": "Int64"}},
+})
+```
+
+Frame checks must preserve row count and the set of columns, and raise on failure.
+Column order and values are not checked, so a well-behaved frame check should not
+change them even though nothing currently enforces it. Frame parsers may add, drop,
+or reorder columns and rows, and run before column parsers so later steps see the
+transformed frame.
+
 ## Failure handling
 
 The `on_failure` field controls what happens when validation fails. Set it at schema level or per column.

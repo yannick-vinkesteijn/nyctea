@@ -558,6 +558,103 @@ class TestFullPipeline:
 
 
 # ---------------------------------------------------------------------------
+# Frame-level parsers/checks (#8)
+# ---------------------------------------------------------------------------
+
+
+class TestFrameValidators:
+    def test_frame_parser_runs_and_transforms_data(self, registry):
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.frame_parser(name="add_total", preserve_columns=False, preserve_rows=True)
+        def add_total(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame.with_columns((pl.col("a") + pl.col("b")).alias("total"))
+
+        schema = SchemaModel.from_dict(
+            {
+                "frame_parsers": [{"name": "add_total"}],
+                "columns": {"a": {"dtype": "Int64"}, "b": {"dtype": "Int64"}},
+            }
+        )
+        df = pl.DataFrame({"a": [1, 2], "b": [3, 4]})
+        result = schema.validate(df, registry)
+        assert result.data.collect()["total"].to_list() == [4, 6]
+
+    def test_frame_parser_not_registered_raises(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "frame_parsers": [{"name": "does_not_exist"}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        with pytest.raises(PipelineError, match="not found in registry"):
+            schema.validate(pl.DataFrame({"a": [1]}), registry)
+
+    def test_frame_parser_execution_failure_raises(self, registry):
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.frame_parser(name="explode", preserve_columns=False)
+        def explode(frame: pl.LazyFrame) -> pl.LazyFrame:  # noqa: ARG001
+            raise ValueError("boom")
+
+        schema = SchemaModel.from_dict(
+            {
+                "frame_parsers": [{"name": "explode"}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        with pytest.raises(PipelineError, match="boom"):
+            schema.validate(pl.DataFrame({"a": [1]}), registry)
+
+    def test_frame_check_raises_on_failure(self, registry):
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.frame_check(name="min_rows")
+        def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
+            if frame.select(pl.len()).collect().item() < min_rows:
+                raise ValueError("not enough rows")
+            return frame
+
+        schema = SchemaModel.from_dict(
+            {
+                "frame_checks": [{"name": "min_rows", "args": {"min_rows": 5}}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        with pytest.raises(PipelineError, match="not enough rows"):
+            schema.validate(pl.DataFrame({"a": [1, 2]}), registry)
+
+    def test_frame_check_passes_through_on_success(self, registry):
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.frame_check(name="min_rows")
+        def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
+            if frame.select(pl.len()).collect().item() < min_rows:
+                raise ValueError("not enough rows")
+            return frame
+
+        schema = SchemaModel.from_dict(
+            {
+                "frame_checks": [{"name": "min_rows", "args": {"min_rows": 1}}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        df = pl.DataFrame({"a": [1, 2]})
+        result = schema.validate(df, registry)
+        assert result.data.collect()["a"].to_list() == [1, 2]
+
+    def test_frame_check_not_registered_raises(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "frame_checks": [{"name": "does_not_exist"}],
+                "columns": {"a": {"dtype": "Int64"}},
+            }
+        )
+        with pytest.raises(PipelineError, match="not found in registry"):
+            schema.validate(pl.DataFrame({"a": [1]}), registry)
+
+
+# ---------------------------------------------------------------------------
 # Nullification (on_failure='null')
 # ---------------------------------------------------------------------------
 

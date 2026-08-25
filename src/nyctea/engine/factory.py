@@ -12,6 +12,8 @@ from nyctea.engine.phases import (
     ColumnCheckPhase,
     ColumnParsingPhase,
     ColumnResolutionPhase,
+    FrameCheckPhase,
+    FrameParsingPhase,
 )
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.schema.model import SchemaModel
@@ -102,6 +104,9 @@ def create_pipeline_from_schema(
     # Column resolution is always required
     phases.append(ColumnResolutionPhase())
 
+    if schema.frame_parsers:
+        phases.append(FrameParsingPhase())
+
     # Add parsing phase if any column has parsers
     has_parsers = any(col_schema.parsers for col_schema in schema.columns.values())
     if has_parsers:
@@ -109,6 +114,9 @@ def create_pipeline_from_schema(
 
     # Coercion always present (can_skip handles coerce=False)
     phases.append(CoercionPhase())
+
+    if schema.frame_checks:
+        phases.append(FrameCheckPhase())
 
     # Add check phase if any column has checks or nullable=False
     has_checks = any(col_schema.checks or not col_schema.nullable for col_schema in schema.columns.values())
