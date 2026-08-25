@@ -48,6 +48,8 @@ __all__ = [
     "ColumnCheckPhase",
     "ColumnParsingPhase",
     "ColumnResolutionPhase",
+    "FrameCheckPhase",
+    "FrameParsingPhase",
 ]
 
 
@@ -133,6 +135,71 @@ class ColumnResolutionPhase(PipelinePhase):
             context.data = lf.rename(mapping)
 
         return context
+
+
+class FrameParsingPhase(PipelinePhase):
+    """Apply frame-level parsers (whole-DataFrame transformations).
+
+    Runs before column parsing, so frame parsers see the data first (they may
+    add/drop rows or columns other parsers then operate on).
+
+    Dependencies: column_resolution
+    """
+
+    def __init__(self) -> None:
+        """Initialize frame parsing phase."""
+        super().__init__(
+            name="frame_parsing",
+            phase_type=PhaseType.PARSING,
+            dependencies=["column_resolution"],
+        )
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        """Apply frame parsers in schema-declared order.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            Updated context with the frame parsers applied.
+
+        Raises:
+            PipelineError: If a frame parser is unregistered or fails.
+        """
+        registry = context.registry
+        lf = context.data
+
+        for parser_spec in context.schema.frame_parsers:
+            try:
+                parser = registry.frame_parsers.get(parser_spec.name)
+            except KeyError as e:
+                raise PipelineError(
+                    f"Frame parser '{parser_spec.name}' not found in registry. "
+                    f"Available: {registry.frame_parsers.list_names()}",
+                    phase=self.name,
+                ) from e
+
+            try:
+                lf = parser(lf, **parser_spec.args)
+            except Exception as e:
+                raise PipelineError(
+                    f"Frame parser '{parser_spec.name}' failed: {e}",
+                    phase=self.name,
+                ) from e
+
+        context.data = lf
+        return context
+
+    def can_skip(self, context: PipelineContext) -> bool:
+        """Skip if the schema defines no frame parsers.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            True if no frame parsers are defined.
+        """
+        return not context.schema.frame_parsers
 
 
 class ColumnParsingPhase(PipelinePhase):
@@ -318,6 +385,72 @@ class CoercionPhase(PipelinePhase):
             True if no column will be coerced.
         """
         return not any(context.schema.resolve_coerce(col_name) for col_name in context.schema.columns)
+
+
+class FrameCheckPhase(PipelinePhase):
+    """Apply frame-level checks (whole-DataFrame validations).
+
+    Runs after coercion so frame checks see typed data, and before column
+    checks. A ``FrameCheck`` always preserves rows and columns (enforced by
+    the base class), so it can only pass a frame through or raise.
+
+    Dependencies: coercion
+    """
+
+    def __init__(self) -> None:
+        """Initialize frame check phase."""
+        super().__init__(
+            name="frame_checks",
+            phase_type=PhaseType.CHECKING,
+            dependencies=["coercion"],
+        )
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        """Apply frame checks in schema-declared order.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            Updated context with the frame checks applied.
+
+        Raises:
+            PipelineError: If a frame check is unregistered or fails.
+        """
+        registry = context.registry
+        lf = context.data
+
+        for check_spec in context.schema.frame_checks:
+            try:
+                check = registry.frame_checks.get(check_spec.name)
+            except KeyError as e:
+                raise PipelineError(
+                    f"Frame check '{check_spec.name}' not found in registry. "
+                    f"Available: {registry.frame_checks.list_names()}",
+                    phase=self.name,
+                ) from e
+
+            try:
+                lf = check(lf, **check_spec.args)
+            except Exception as e:
+                raise PipelineError(
+                    f"Frame check '{check_spec.name}' failed: {e}",
+                    phase=self.name,
+                ) from e
+
+        context.data = lf
+        return context
+
+    def can_skip(self, context: PipelineContext) -> bool:
+        """Skip if the schema defines no frame checks.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            True if no frame checks are defined.
+        """
+        return not context.schema.frame_checks
 
 
 class ColumnCheckPhase(PipelinePhase):
