@@ -185,14 +185,17 @@ class SchemaModel(BaseModel):
         description=(
             "Row count at or above which internal reduction-only aggregates (check "
             "and coercion enforcement, summary error counts, report building) use "
-            "Polars' streaming "
-            "engine instead of the default in-memory engine. Below this, an eager "
-            "DataFrame input uses the default engine, since streaming's fixed "
-            "pipeline setup cost outweighs the reduction itself on small data. A "
-            "LazyFrame input always uses streaming, since its size is unknown "
-            "without collecting and choosing lazy signals larger/out-of-core intent. "
-            "The 'rows' and 'cells' error report modes are not aggregates -- they "
-            "materialise row indices and values, and always use the default engine."
+            "Polars' streaming engine instead of the in-memory one. Below this, an "
+            "eager DataFrame input uses the in-memory engine, since streaming's "
+            "fixed pipeline setup cost outweighs the reduction itself on small "
+            "data. A LazyFrame input always uses streaming, since its size is "
+            "unknown without collecting and choosing lazy signals "
+            "larger/out-of-core intent. Those aggregates pass engine= explicitly, "
+            "so this threshold overrides any global engine affinity. The 'rows' "
+            "and 'cells' error report modes are not aggregates -- they materialise "
+            "row indices and values, pass no engine= at all, and so fall to Polars' "
+            "own default selection (engine='auto'), which does follow your global "
+            "affinity. 0 means always stream."
         ),
     )
 

@@ -283,6 +283,16 @@ class TestCollectEngineSelection:
         lf = pl.LazyFrame({"a": [1, 2, 3]})
         assert _pick_aggregate_engine(lf, threshold=1_000_000) == "streaming"
 
+    def test_threshold_rejects_negative(self):
+        """A negative row count is meaningless and would silently invert engine choice."""
+        with pytest.raises(ValueError, match="greater than or equal to 0"):
+            SchemaModel.from_dict({"streaming_row_threshold": -1, "columns": {"a": {"dtype": "Int64"}}})
+
+    def test_threshold_allows_zero(self):
+        """0 is the deliberate boundary: stream everything, including empty frames."""
+        schema = SchemaModel.from_dict({"streaming_row_threshold": 0, "columns": {"a": {"dtype": "Int64"}}})
+        assert schema.streaming_row_threshold == 0
+
 
 # ---------------------------------------------------------------------------
 # Full pipeline integration
@@ -367,12 +377,15 @@ class TestFullPipeline:
         assert all(call.get("engine") == "streaming" for call in collect_calls)
 
     @pytest.mark.parametrize("mode", ["rows", "cells"])
-    def test_rows_cells_never_stream(self, registry, collect_calls, mode):
-        """#11 step 4: only pure reductions stream.
+    def test_rows_cells_no_engine_override(self, registry, collect_calls, mode):
+        """#11 step 4: only pure reductions get an explicit engine.
 
         The rows/cells error builders materialize row indices and failing values, so
         they call plain _collect() with no engine kwarg even when the frame is well
         above streaming_row_threshold and every aggregate around them is streaming.
+        Absence of the kwarg is the contract: it leaves those two on Polars' own
+        engine="auto" selection, which follows global affinity. It does not mean they
+        can never stream.
         """
         schema = SchemaModel.from_dict(
             {

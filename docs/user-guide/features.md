@@ -35,13 +35,15 @@ schema = SchemaModel.from_dict({
 A `LazyFrame` input always uses streaming, since its row count isn't known without collecting, and passing lazy input in the first place signals larger or out-of-core data.
 
 The `rows` and `cells` error report modes are the exception.
-They materialise row indices and failing values rather than reducing them, so they always use the default engine regardless of the threshold.
+They materialise row indices and failing values rather than reducing them, so the threshold does not apply to them and they pass no `engine=` at all.
+That leaves them on Polars' own default selection, `engine="auto"`, which means they do follow your global affinity setting where the aggregates below deliberately do not.
 Only the `summary` mode's error counts are an aggregate.
 
 These aggregate collects always pass an explicit `engine=` value, so they don't respect [`pl.Config.set_engine_affinity()`](https://docs.pola.rs/api/python/stable/reference/api/polars.Config.set_engine_affinity.html) or the `POLARS_ENGINE_AFFINITY` environment variable, unlike `engine="auto"` calls elsewhere in your own code.
 That is deliberate.
 `streaming_row_threshold` is a per-query decision that knows how much data it is looking at, while Polars' engine affinity is a single global switch with no size awareness (see the `engine` parameter on [`LazyFrame.collect`](https://docs.pola.rs/api/python/stable/reference/lazyframe/api/polars.LazyFrame.collect.html)).
-If your global affinity is set to `"streaming"`, nyctea's internal aggregates on small data still use the default engine unless you lower `streaming_row_threshold` yourself.
+If your global affinity is set to `"streaming"`, nyctea's internal aggregates on small data still use the in-memory engine unless you lower `streaming_row_threshold` yourself.
+The `rows` and `cells` collects described above are the ones that will follow it, since they leave the choice to Polars.
 
 ## Composable pipeline
 
