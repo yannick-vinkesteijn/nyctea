@@ -18,8 +18,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The per-phase metrics block no longer collects when no observers are registered (#11).
 
+### Removed
+
+- `nyctea.engine.results`, which held a second, near-identical copy of `ErrorReportConfig`, `ColumnValidationStats`, `ValidationReport`, and `ValidationResult`. The canonical definitions in `nyctea.engine.validate` are the ones the public API has always exported, and the duplicates were never re-exported from `nyctea`, so importing them required reaching into the internal module path (#12).
+
 ### Fixed
 
+- Declaring two checks with the same name on one column now raises `PipelineError` instead of silently dropping the first one. `check_masks`, `result.errors`, and the report stats are all keyed on `(column, check name)`, so the second declaration overwrote the first and orphaned its mask, removing that check from both reporting and enforcement. A column declaring `between(0, 5)` under `on_failure: "raise"` would accept a value of `30` and report the dataset 100% valid. See [breaking changes](docs/releases/breaking-changes.md).
 - `on_failure` is now enforced for check failures, not only for coercion-introduced nulls. `raise` actually raises, and `null` actually nulls the failing value. Both were previously silent: the failure was recorded in `result.errors` while execution continued with the bad value still in the output (#9).
 - `_build_report` no longer reports every dataset as 100% valid. It is built from the same masks as `result.errors`, so `report` and `errors` agree (#6).
 - Per-column check failure counts in the report sum each check's failures rather than counting distinct failing rows, matching the totals in `errors`. A row failing two checks now contributes two failures in both places (#6).

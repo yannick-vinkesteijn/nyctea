@@ -14,7 +14,8 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
-from nyctea.schema.model import SchemaModel
+from nyctea.schema.model import Check, SchemaModel
+from nyctea.validators.registry import Registry
 
 NOT_NULL_CHECK = "not_null"
 """Check name reported for a nullable=False column that contains nulls. Frozen, see test_phases.py."""
@@ -498,37 +499,9 @@ class ColumnCheckPhase(PipelinePhase):
         check_index = 0
 
         for col_name, col_schema in schema.columns.items():
-            checks_to_run = list(col_schema.checks) if col_schema.checks else []
-
-            if not checks_to_run:
-                continue
-
-            for check_spec in checks_to_run:
-                if check_spec.name == COERCION_CHECK and schema.resolve_coerce(col_name):
-                    raise PipelineError(
-                        f"Column '{col_name}' has coercion enabled and also has a check named "
-                        f"'{COERCION_CHECK}'. The name is reserved for the built-in coercion "
-                        f"failure tracking. Rename the check.",
-                        phase=self.name,
-                    )
-
-                try:
-                    check = registry.column_checks.get(check_spec.name)
-                except KeyError as e:
-                    raise PipelineError(
-                        f"Check '{check_spec.name}' not found in registry. "
-                        f"Available: {registry.column_checks.list_names()}",
-                        phase=self.name,
-                    ) from e
-
-                args = check_spec.args or {}
-                try:
-                    check_expr = check(pl.col(col_name), **args)
-                except Exception as e:
-                    raise PipelineError(
-                        f"Failed to apply check '{check_spec.name}' to column '{col_name}': {e}",
-                        phase=self.name,
-                    ) from e
+            for check_spec in col_schema.checks or []:
+                self._reject_reserved_or_duplicate_check(schema, check_masks, col_name, check_spec.name)
+                check_expr = self._resolve_check_expr(registry, col_name, check_spec)
 
                 # Index, not "{col}__{check}": the latter is ambiguous, since a column named
                 # 'a__b' with check 'c' and a column 'a' with check 'b__c' both produce
@@ -566,6 +539,76 @@ class ColumnCheckPhase(PipelinePhase):
         self._enforce_notnull(context, notnull_aliases)
 
         return context
+
+    def _reject_reserved_or_duplicate_check(
+        self,
+        schema: SchemaModel,
+        check_masks: dict[tuple[str, str], str],
+        col_name: str,
+        check_name: str,
+    ) -> None:
+        """Reject check names that would collide in the (column, check) mask key.
+
+        Args:
+            schema: The schema being validated.
+            check_masks: Masks registered so far, keyed on (column, check name).
+            col_name: Column the check is declared on.
+            check_name: Declared name of the check.
+
+        Raises:
+            PipelineError: If the name is reserved for coercion tracking, or if the
+                column already has a check registered under the same name.
+        """
+        if check_name == COERCION_CHECK and schema.resolve_coerce(col_name):
+            raise PipelineError(
+                f"Column '{col_name}' has coercion enabled and also has a check named "
+                f"'{COERCION_CHECK}'. The name is reserved for the built-in coercion "
+                f"failure tracking. Rename the check.",
+                phase=self.name,
+            )
+
+        # check_masks is keyed on (column, check name), and so are the error report and
+        # the per-column report stats. A second check with the same name on the same
+        # column would overwrite the first entry, orphaning its mask: that check would be
+        # dropped from both reporting and enforcement, and the run would report clean.
+        if (col_name, check_name) in check_masks:
+            raise PipelineError(
+                f"Column '{col_name}' has more than one check named '{check_name}'. "
+                f"Check names must be unique per column, because error reports and the "
+                f"validation report are keyed on (column, check name). Give the checks "
+                f"distinct names.",
+                phase=self.name,
+            )
+
+    def _resolve_check_expr(self, registry: Registry, col_name: str, check_spec: Check) -> pl.Expr:
+        """Look a check up in the registry and apply it to build its boolean mask expression.
+
+        Args:
+            registry: Registry to resolve the check name against.
+            col_name: Column the check applies to.
+            check_spec: Declared check name and arguments.
+
+        Returns:
+            Boolean expression that is True where the check passes.
+
+        Raises:
+            PipelineError: If the check is not registered, or applying it fails.
+        """
+        try:
+            check = registry.column_checks.get(check_spec.name)
+        except KeyError as e:
+            raise PipelineError(
+                f"Check '{check_spec.name}' not found in registry. Available: {registry.column_checks.list_names()}",
+                phase=self.name,
+            ) from e
+
+        try:
+            return check(pl.col(col_name), **(check_spec.args or {}))
+        except Exception as e:
+            raise PipelineError(
+                f"Failed to apply check '{check_spec.name}' to column '{col_name}': {e}",
+                phase=self.name,
+            ) from e
 
     @staticmethod
     def _build_notnull_mask_exprs(
