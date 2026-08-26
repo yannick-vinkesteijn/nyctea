@@ -253,7 +253,7 @@ class TestCoercionPhase:
 
 
 class TestCollectEngineSelection:
-    def test_collect_aggregate_passes_through_requested_engine(self, collect_calls):
+    def test_collect_aggregate_uses_given_engine(self, collect_calls):
         from nyctea.schema.validator import _collect_aggregate
 
         _collect_aggregate(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
@@ -265,19 +265,19 @@ class TestCollectEngineSelection:
         _collect(pl.LazyFrame({"a": [1, 2, 3]}))
         assert collect_calls[0].get("engine") is None
 
-    def test_pick_aggregate_engine_dataframe_below_threshold(self):
+    def test_pick_engine_df_below_threshold(self):
         from nyctea.schema.validator import _pick_aggregate_engine
 
         df = pl.DataFrame({"a": range(100)})
         assert _pick_aggregate_engine(df, threshold=1000) == "in-memory"
 
-    def test_pick_aggregate_engine_dataframe_at_or_above_threshold(self):
+    def test_pick_engine_df_above_threshold(self):
         from nyctea.schema.validator import _pick_aggregate_engine
 
         df = pl.DataFrame({"a": range(1000)})
         assert _pick_aggregate_engine(df, threshold=1000) == "streaming"
 
-    def test_pick_aggregate_engine_lazyframe_always_streaming(self):
+    def test_pick_engine_lazyframe_streams(self):
         from nyctea.schema.validator import _pick_aggregate_engine
 
         lf = pl.LazyFrame({"a": [1, 2, 3]})
@@ -297,7 +297,7 @@ class TestFullPipeline:
         assert result.report.rows_valid == 3
         assert len(result.errors) == 0
 
-    def test_validate_collect_count_is_bounded(self, simple_schema, registry, collect_calls):
+    def test_collect_count_bounded(self, simple_schema, registry, collect_calls):
         """#11: guards against silently regaining wasted collects.
 
         4 today: _enforce_notnull, _enforce_check_raise, _build_errors, _build_report.
@@ -309,7 +309,7 @@ class TestFullPipeline:
 
         assert len(collect_calls) == 4
 
-    def test_validate_collect_count_is_bounded_with_coercion_active(self, registry, collect_calls):
+    def test_collect_count_bounded_with_coercion(self, registry, collect_calls):
         """Same guard as above, but for the path with coercion's own raise-check active.
 
         5 today: _enforce_notnull, _enforce_coercion_raise, _enforce_check_raise,
@@ -334,7 +334,7 @@ class TestFullPipeline:
 
         assert len(collect_calls) == 5
 
-    def test_small_dataframe_input_uses_default_engine(self, simple_schema, registry, collect_calls):
+    def test_small_df_uses_default_engine(self, simple_schema, registry, collect_calls):
         """Below schema.streaming_row_threshold, an eager DataFrame stays on the
         default engine -- streaming's fixed setup cost regresses small validations.
         """
@@ -344,7 +344,7 @@ class TestFullPipeline:
         assert collect_calls
         assert all(call.get("engine") == "in-memory" for call in collect_calls)
 
-    def test_large_dataframe_input_uses_streaming_engine(self, registry, collect_calls):
+    def test_large_df_streams(self, registry, collect_calls):
         schema = SchemaModel.from_dict(
             {
                 "streaming_row_threshold": 10,
@@ -357,7 +357,7 @@ class TestFullPipeline:
         assert collect_calls
         assert all(call.get("engine") == "streaming" for call in collect_calls)
 
-    def test_lazyframe_input_always_uses_streaming_engine(self, registry, collect_calls):
+    def test_lazyframe_input_streams(self, registry, collect_calls):
         """Unknown size (no free row count), and choosing lazy signals larger intent."""
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
         lf = pl.LazyFrame({"age": [1, 2, 3]})
@@ -367,7 +367,7 @@ class TestFullPipeline:
         assert all(call.get("engine") == "streaming" for call in collect_calls)
 
     @pytest.mark.parametrize("mode", ["rows", "cells"])
-    def test_row_and_cell_error_modes_never_stream(self, registry, collect_calls, mode):
+    def test_rows_cells_never_stream(self, registry, collect_calls, mode):
         """#11 step 4: only pure reductions stream.
 
         The rows/cells error builders materialize row indices and failing values, so
@@ -837,7 +837,7 @@ class TestNullification:
         assert result.report.columns["age"].coercion_failures == 0
         assert result.report.columns["age"].nullified == 1
 
-    def test_both_coercion_and_check_nulls_coexist_under_streaming_aggregate(self, registry):
+    def test_coercion_and_check_nulls_under_streaming(self, registry):
         """#11 step 4: the streaming-engine aggregate collect in _apply_check_null must
         agree with the with_columns mutation that follows it on the same lazy graph.
         """
