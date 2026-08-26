@@ -581,7 +581,7 @@ class ColumnCheckPhase(PipelinePhase):
             )
 
     def _resolve_check_expr(self, registry: Registry, col_name: str, check_spec: Check) -> pl.Expr:
-        """Look a check up in the registry and apply it to build its boolean mask expression.
+        """Look up a check in the registry and apply it to build its boolean mask expression.
 
         Args:
             registry: Registry to resolve the check name against.
