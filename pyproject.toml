@@ -32,7 +32,7 @@ Homepage = "https://github.com/yannick-vinkesteijn/nyctea"
 Documentation = "https://nyctea.vinkesteijn.io/"
 Repository = "https://github.com/yannick-vinkesteijn/nyctea"
 Issues = "https://github.com/yannick-vinkesteijn/nyctea/issues"
-Changelog = "https://github.com/yannick-vinkesteijn/nyctea/releases"
+Changelog = "https://github.com/yannick-vinkesteijn/nyctea/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

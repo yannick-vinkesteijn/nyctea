@@ -10,7 +10,7 @@ from typing import Any
 import polars as pl
 
 from nyctea.engine.validate import ErrorReportConfig, ValidationReport
-from nyctea.schema.model import SchemaModel
+from nyctea.schema.model import AggregateEngine, SchemaModel
 from nyctea.validators.registry import Registry
 
 __all__ = ["PipelineContext"]
@@ -36,6 +36,10 @@ class PipelineContext:
         errors: Error DataFrame (built by ErrorReportingPhase).
         report: Final validation report (built by ReportGenerationPhase).
         metadata: Additional phase-specific metadata.
+        aggregate_engine: Polars ``collect()`` engine for internal reduction-only
+            aggregates (not for materializing rows). Decided once per ``validate()``
+            call from ``schema.streaming_row_threshold`` before the pipeline runs,
+            so every phase and post-pipeline step uses the same choice.
     """
 
     # Input configuration
@@ -43,6 +47,7 @@ class PipelineContext:
     schema: SchemaModel
     registry: Registry
     error_report_config: ErrorReportConfig | None = None
+    aggregate_engine: AggregateEngine = "in-memory"
 
     # Tracking state (populated by phases)
     original_nulls: dict[str, int] = field(default_factory=dict)

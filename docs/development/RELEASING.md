@@ -18,9 +18,13 @@ A tag push does not publish anything by itself; a human always reviews a draft f
 5. Review the draft. This is the point to edit the notes if the auto-generated summary needs a human pass, not a step to skip. Click **Publish**.
 6. Publishing the release fires **`Publish to PyPI`** (`pypi-publish.yaml`). It builds the package and uploads it to PyPI through trusted publishing, with no token and no manual `uv publish`.
 
-There is no maintained `CHANGELOG.md`. The GitHub Release for each tag is the changelog, the same
-way Polars does it. Label PRs correctly (`bug`, `enhancement`, `documentation`, `breaking`) so
-`.github/release.yml` sorts them into the right section automatically.
+`CHANGELOG.md` in the repository root is maintained by hand and is the canonical account of what changed.
+Move the `[Unreleased]` entries under the new version heading as part of step 1, in the same commit as the version bump, and add a fresh empty `[Unreleased]` section above it.
+Update the link definitions at the bottom of the file too.
+
+The auto-generated GitHub Release notes are not a replacement for it.
+They list merged pull requests grouped by label, which is useful raw material but not a curated account of behaviour changes.
+Label PRs correctly (`bug`, `enhancement`, `documentation`, `breaking`) so `.github/release.yml` still sorts them sensibly, and paste the relevant `CHANGELOG.md` section into the draft release when reviewing it at step 5.
 
 ## `scripts/release.sh` is superseded, do not use it
 

@@ -44,6 +44,9 @@ if TYPE_CHECKING:
 # Type alias for failure handling behavior
 OnFailureBehavior = Literal["raise", "null", "ignore"]
 
+# Type alias for the Polars engine used by validation's internal aggregate collects
+AggregateEngine = Literal["in-memory", "streaming"]
+
 try:
     import yaml
 except ImportError:
@@ -173,6 +176,19 @@ class SchemaModel(BaseModel):
             "- 'raise': error, stop\n"
             "- 'null': value becomes null\n"
             "- 'ignore': coercion nulls forced by dtype, check failures kept and reported"
+        ),
+    )
+
+    streaming_row_threshold: int = Field(
+        100_000,
+        description=(
+            "Row count at or above which internal reduction-only aggregates (check "
+            "and coercion enforcement, error/report building) use Polars' streaming "
+            "engine instead of the default in-memory engine. Below this, an eager "
+            "DataFrame input uses the default engine, since streaming's fixed "
+            "pipeline setup cost outweighs the reduction itself on small data. A "
+            "LazyFrame input always uses streaming, since its size is unknown "
+            "without collecting and choosing lazy signals larger/out-of-core intent."
         ),
     )
 

@@ -4,6 +4,7 @@ import polars as pl
 import pytest
 
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.observability import MetricsCollector
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import SchemaModel
@@ -139,3 +140,27 @@ def test_pipeline_repr():
     repr_str = repr(pipeline)
     assert "ValidationPipeline" in repr_str
     assert "1 phases" in repr_str
+
+
+def _context_with_row_index():
+    lf = pl.LazyFrame({"a": [1, 2, 3]}).with_row_index("__row_index__")
+    return PipelineContext(data=lf, schema=SchemaModel(columns={}), registry=Registry())
+
+
+def test_execute_phase_skips_metrics_collect_without_observers(collect_calls):
+    """#11 step 1: the per-phase metrics block must not collect when nothing observes it."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+    pipeline.execute(_context_with_row_index())
+
+    assert len(collect_calls) == 0
+
+
+def test_execute_phase_collects_metrics_with_observers():
+    """The observer path still gets real metrics once the metrics block is guarded."""
+    collector = MetricsCollector()
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")], observers=[collector])
+    pipeline.execute(_context_with_row_index())
+
+    assert len(collector.phase_metrics) == 1
+    assert collector.phase_metrics[0].phase_name == "p1"
+    assert collector.phase_metrics[0].rows_processed == 3
