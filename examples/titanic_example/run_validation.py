@@ -32,7 +32,9 @@ def main() -> None:
     # Use summary mode for production - minimal overhead
     error_config = ErrorReportConfig(mode="summary")
     result = validate(lf, schema, registry, lazy=False, coerce_strategy="null_on_failure", error_report=error_config)
-    data_df: pl.DataFrame = result.data  # type: ignore[assignment]
+    # validate(lazy=False) always materialises, but the declared type is the union.
+    assert isinstance(result.data, pl.DataFrame)
+    data_df = result.data
     errors_df: pl.DataFrame = result.errors
 
     data_df.write_parquet(output_data)
