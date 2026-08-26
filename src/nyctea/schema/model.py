@@ -180,7 +180,7 @@ class SchemaModel(BaseModel):
     )
 
     streaming_row_threshold: int = Field(
-        100_000,
+        100_000, ge=0,
         description=(
             "Row count at or above which internal reduction-only aggregates (check "
             "and coercion enforcement, error/report building) use Polars' streaming "
