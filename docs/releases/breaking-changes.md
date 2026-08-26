@@ -1,5 +1,32 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: duplicate check names on one column now raise
+
+A column could declare two checks with the same name, most plausibly the same parameterised check
+with different arguments:
+
+```python
+"checks": [
+    {"name": "between", "args": {"min": 0, "max": 5}},
+    {"name": "between", "args": {"min": 0, "max": 100}},
+]
+```
+
+This never worked. `check_masks`, `result.errors`, and the per-column report stats are all keyed
+on `(column, check name)`, so the second declaration overwrote the first and orphaned its mask.
+The first check was dropped from reporting *and* from enforcement: in the example above, value
+`30` violates the declared `between(0, 5)` under the default `on_failure: "raise"`, and validation
+returned no errors, raised nothing, and reported `2/2 rows valid (100.0%)`.
+
+Nyctea now raises `PipelineError` when a column declares the same check name twice.
+
+**Migration:** give the checks distinct names. Register the second under its own name rather than
+reusing the first, or express the intent as a single check. A schema that hits this error was
+already producing wrong results, so no working configuration is affected.
+
+Note that the same check name on *different* columns was always fine and remains so; the key is
+the pair, not the name alone.
+
 ## Within v0.2.0 pre-release: `nullable: false` is now enforced
 
 `ColumnSchema.nullable` defaults to `false`. Until now the not-null constraint was never applied,

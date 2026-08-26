@@ -347,7 +347,7 @@ def _(mo):
 
 @app.cell
 def _(dirty, registry, schema):
-    from nyctea.engine.results import ErrorReportConfig
+    from nyctea import ErrorReportConfig
 
     result_cells = schema.validate(
         dirty,
@@ -361,7 +361,7 @@ def _(dirty, registry, schema):
 
 @app.cell
 def _(dirty, registry, schema):
-    from nyctea.engine.results import ErrorReportConfig as _ERC
+    from nyctea import ErrorReportConfig as _ERC
 
     result_rows = schema.validate(
         dirty,

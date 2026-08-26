@@ -12,8 +12,8 @@ from nyctea.engine.phases import (
     NOT_NULL_CHECK,
     CoercionPhase,
 )
-from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
+from nyctea.engine.validate import ErrorReportConfig
 from nyctea.exceptions import PipelineError
 from nyctea.validators.decorators import ValidatorDecorator
 
@@ -511,6 +511,44 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": ["1", "2"], "__pre_null__age": [9, 9]})
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
+
+    def test_duplicate_check_name_on_one_column_raises(self, registry):
+        """Two same-named checks collided in check_masks and the second silently won.
+
+        The first check was dropped from reporting AND enforcement: a declared
+        between(0, 5) with on_failure='raise' let value 30 through and the report
+        claimed 2/2 rows valid.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "a": {
+                        "dtype": "Int64",
+                        "on_failure": "raise",
+                        "checks": [
+                            {"name": "between", "args": {"min": 0, "max": 5}},
+                            {"name": "between", "args": {"min": 0, "max": 100}},
+                        ],
+                    }
+                }
+            }
+        )
+        with pytest.raises(PipelineError, match="more than one check named 'between'"):
+            schema.validate(pl.DataFrame({"a": [1, 30]}), registry)
+
+    def test_same_check_name_on_different_columns_is_fine(self, registry):
+        """The key is (column, check), so the same check name on two columns must still work."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "a": {"dtype": "Int64", "checks": [{"name": "min_value", "args": {"min": 0}}]},
+                    "b": {"dtype": "Int64", "checks": [{"name": "min_value", "args": {"min": 10}}]},
+                },
+            }
+        )
+        result = schema.validate(pl.DataFrame({"a": [1, -1], "b": [50, 5]}), registry)
+        assert sorted(result.errors["column"].to_list()) == ["a", "b"]
 
     def test_not_null_check_name_is_reserved_on_non_nullable_column(self, registry):
         """A user check named not_null must not silently replace the built-in constraint."""
