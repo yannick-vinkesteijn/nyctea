@@ -613,7 +613,7 @@ class ColumnCheckPhase(PipelinePhase):
         # Aggregate first: collects a single row, not one boolean per input row.
         notnull_check = context.data.select(
             [pl.col(alias).all().alias(alias) for alias in notnull_aliases.values()]
-        ).collect()
+        ).collect(engine=context.aggregate_engine)
         for col_name, alias in notnull_aliases.items():
             if not notnull_check[alias].item() and context.schema.resolve_on_failure(col_name) != "ignore":
                 raise PipelineError(

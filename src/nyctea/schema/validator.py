@@ -14,7 +14,7 @@ from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.validate import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
-from nyctea.schema.model import SchemaModel
+from nyctea.schema.model import AggregateEngine, SchemaModel
 from nyctea.validators.registry import Registry
 
 __all__ = ["SchemaValidator"]
@@ -30,6 +30,37 @@ def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
     result = lf.collect()
     assert isinstance(result, pl.DataFrame)
     return result
+
+
+def _collect_aggregate(lf: pl.LazyFrame, engine: AggregateEngine) -> pl.DataFrame:
+    """Collect a LazyFrame of pure reduction expressions (sum/len/all/any_horizontal).
+
+    Streaming roughly halves peak memory on these (#11) with no correctness
+    difference, since none of the reductions used here are approximation-based
+    (unlike e.g. ``approx_n_unique``, which does disagree between engines). Not for
+    row- or cell-level materialization -- those need the default engine.
+
+    ``engine`` is decided once per ``validate()`` call (see
+    ``schema.streaming_row_threshold``) and threaded in via
+    ``context.aggregate_engine`` rather than hardcoded, since streaming has a fixed
+    per-query setup cost that makes it slower than the default engine on small data.
+    """
+    result = lf.collect(engine=engine)
+    assert isinstance(result, pl.DataFrame)
+    return result
+
+
+def _pick_aggregate_engine(df: pl.DataFrame | pl.LazyFrame, threshold: int) -> AggregateEngine:
+    """Decide the engine for this validate() call's internal aggregate collects.
+
+    A LazyFrame input's size is unknown without collecting, and choosing lazy is
+    itself a signal of larger/out-of-core intent, so it always gets streaming. An
+    eager DataFrame's row count is free (``.height``), so it only pays streaming's
+    setup cost once the data is actually large enough to benefit.
+    """
+    if isinstance(df, pl.DataFrame) and df.height < threshold:
+        return "in-memory"
+    return "streaming"
 
 
 class SchemaValidator:
@@ -109,6 +140,10 @@ class SchemaValidator:
             ...     print(f"Found {len(result.errors)} errors")
             >>> print(result.report.summary())
         """
+        # Decided from the original df (before the LazyFrame conversion below), since
+        # only the eager form has a free row count to threshold on.
+        aggregate_engine = _pick_aggregate_engine(df, self.schema.streaming_row_threshold)
+
         # Convert to LazyFrame
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
@@ -121,6 +156,7 @@ class SchemaValidator:
             schema=self.schema,
             registry=self.registry,
             error_report_config=error_report_config or ErrorReportConfig(),
+            aggregate_engine=aggregate_engine,
         )
 
         # Execute pipeline (fully lazy — no collects inside phases)
@@ -183,7 +219,7 @@ class SchemaValidator:
         count_exprs = [
             (~pl.col(alias)).sum().alias(f"__new_nulls__{col_name}") for col_name, alias in raise_cols.items()
         ]
-        counts = _collect(context.data.select(count_exprs))
+        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
         for col_name in raise_cols:
             new_nulls = int(counts[f"__new_nulls__{col_name}"].item())
             if new_nulls > 0:
@@ -244,7 +280,7 @@ class SchemaValidator:
             pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__check_fail__{col_name}")
             for col_name, aliases in raise_cols.items()
         ]
-        counts = _collect(context.data.select(count_exprs))
+        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
         for col_name in raise_cols:
             fail_count = int(counts[f"__check_fail__{col_name}"].item())
             if fail_count > 0:
@@ -273,10 +309,11 @@ class SchemaValidator:
             col_name: pl.any_horizontal([~pl.col(alias) for alias in aliases])
             for col_name, aliases in null_cols.items()
         }
-        counts = _collect(
+        counts = _collect_aggregate(
             context.data.select(
                 [expr.sum().alias(f"__check_fail__{col_name}") for col_name, expr in fail_exprs.items()]
-            )
+            ),
+            context.aggregate_engine,
         )
         for col_name in null_cols:
             context.nullified_counts[col_name] = context.nullified_counts.get(col_name, 0) + int(
@@ -336,7 +373,7 @@ class SchemaValidator:
         report_cols = [c for c in schema.columns if c in col_names]
         exprs.extend(pl.col(col_name).is_null().sum().alias(f"__final_null__{col_name}") for col_name in report_cols)
 
-        row = _collect(lf.select(exprs))
+        row = _collect_aggregate(lf.select(exprs), context.aggregate_engine)
 
         total = int(row["__total__"].item())
         rows_failed = int(row["__rows_failed__"].item()) if "__rows_failed__" in row.columns else 0
@@ -385,25 +422,21 @@ class SchemaValidator:
             "rows": self._build_errors_rows,
             "cells": self._build_errors_cells,
         }
-        return builders[config.mode](context.check_masks, context.data, config)
+        return builders[config.mode](context, config)
 
-    def _build_errors_summary(
-        self,
-        check_masks: dict[tuple[str, str], str],
-        lf: pl.LazyFrame,
-        config: ErrorReportConfig,
-    ) -> pl.DataFrame:
+    def _build_errors_summary(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
         """Build summary error report: column | check | count.
 
         Single 1-row aggregation collect.
         """
+        check_masks = context.check_masks
         empty_schema = {"column": pl.String, "check": pl.String, "count": pl.UInt32}
         empty = pl.DataFrame({"column": [], "check": [], "count": []}, schema=empty_schema)
         if not check_masks:
             return empty
 
         count_exprs = [(~pl.col(alias)).sum().cast(pl.UInt32).alias(alias) for alias in check_masks.values()]
-        counts = _collect(lf.select(count_exprs))
+        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
 
         rows: list[dict[str, str | int]] = []
         for (col_name, check_name), alias in check_masks.items():
@@ -415,16 +448,13 @@ class SchemaValidator:
             return empty
         return pl.DataFrame(rows, schema=empty_schema)
 
-    def _build_errors_rows(
-        self,
-        check_masks: dict[tuple[str, str], str],
-        lf: pl.LazyFrame,
-        config: ErrorReportConfig,
-    ) -> pl.DataFrame:
+    def _build_errors_rows(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
         """Build rows error report: column | check | count | row_indices.
 
-        Collects only __row_index__ + mask columns.
+        Collects only __row_index__ + mask columns. Row materialization stays on the
+        default engine, unlike the summary builder's pure aggregate.
         """
+        check_masks = context.check_masks
         empty_schema = {
             "column": pl.String,
             "check": pl.String,
@@ -439,7 +469,7 @@ class SchemaValidator:
             return empty
 
         mask_aliases = list(check_masks.values())
-        subset = _collect(lf.select(["__row_index__", *mask_aliases]))
+        subset = _collect(context.data.select(["__row_index__", *mask_aliases]))
         row_index = subset.get_column("__row_index__")
 
         rows: list[dict[str, object]] = []
@@ -462,16 +492,14 @@ class SchemaValidator:
             return empty
         return pl.DataFrame(rows, schema=empty_schema)
 
-    def _build_errors_cells(
-        self,
-        check_masks: dict[tuple[str, str], str],
-        lf: pl.LazyFrame,
-        config: ErrorReportConfig,
-    ) -> pl.DataFrame:
+    def _build_errors_cells(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
         """Build cells error report: column | check | row_index | value.
 
         Collects only __row_index__ + mask columns + data columns with failing checks.
+        Cell materialization stays on the default engine, unlike the summary builder's
+        pure aggregate.
         """
+        check_masks = context.check_masks
         empty_schema = {
             "column": pl.String,
             "check": pl.String,
@@ -488,7 +516,7 @@ class SchemaValidator:
         # Collect only the columns we need: row_index + masks + data columns with checks
         mask_aliases = list(check_masks.values())
         data_cols = list({col_name for (col_name, _) in check_masks})
-        subset = _collect(lf.select(["__row_index__", *mask_aliases, *data_cols]))
+        subset = _collect(context.data.select(["__row_index__", *mask_aliases, *data_cols]))
         row_index = subset.get_column("__row_index__")
 
         parts: list[pl.DataFrame] = []

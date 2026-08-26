@@ -337,16 +337,16 @@ class ValidationPipeline:
             ) from e
         phase_duration = time.time() - phase_start
 
-        metrics = PhaseMetrics(
-            phase_name=phase.name,
-            duration_seconds=phase_duration,
-            rows_processed=context.data.select("__row_index__").collect().height
-            if "__row_index__" in context.data.collect_schema().names()
-            else 0,
-        )
-
-        for observer in self.observers:
-            observer.on_phase_end(phase.name, context, metrics)
+        if self.observers:
+            metrics = PhaseMetrics(
+                phase_name=phase.name,
+                duration_seconds=phase_duration,
+                rows_processed=context.data.select("__row_index__").collect().height
+                if "__row_index__" in context.data.collect_schema().names()
+                else 0,
+            )
+            for observer in self.observers:
+                observer.on_phase_end(phase.name, context, metrics)
 
         return context
 

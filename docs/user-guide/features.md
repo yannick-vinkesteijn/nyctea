@@ -17,6 +17,34 @@ result = schema.validate(df, registry)        # result.data is a LazyFrame
 result = schema.validate(df, registry, lazy=False)  # result.data is a DataFrame
 ```
 
+## Streaming engine for internal aggregates
+
+Validation's internal aggregate collects (check and coercion enforcement, summary error counts, report building) are pure reductions: sums, lengths, boolean `all()`.
+Above `schema.streaming_row_threshold` rows, they use Polars' streaming engine, which cuts peak memory substantially on large data.
+Below it, they use the default engine, since streaming has a fixed per-query setup cost that outweighs the reduction itself on small data.
+The default threshold is 100,000 rows, based on a measured crossover.
+Override it per schema if your workload sits far from that:
+
+```python
+schema = SchemaModel.from_dict({
+    "streaming_row_threshold": 10_000,  # lower it if you mostly validate large files
+    "columns": {"age": {"dtype": "Int64"}},
+})
+```
+
+A `LazyFrame` input always uses streaming, since its row count isn't known without collecting, and passing lazy input in the first place signals larger or out-of-core data.
+
+The `rows` and `cells` error report modes are the exception.
+They materialise row indices and failing values rather than reducing them, so the threshold does not apply to them and they pass no `engine=` at all.
+That leaves them on Polars' own default selection, `engine="auto"`, which means they do follow your global affinity setting where the aggregates below deliberately do not.
+Only the `summary` mode's error counts are an aggregate.
+
+These aggregate collects always pass an explicit `engine=` value, so they don't respect [`pl.Config.set_engine_affinity()`](https://docs.pola.rs/api/python/stable/reference/api/polars.Config.set_engine_affinity.html) or the `POLARS_ENGINE_AFFINITY` environment variable, unlike `engine="auto"` calls elsewhere in your own code.
+That is deliberate.
+`streaming_row_threshold` is a per-query decision that knows how much data it is looking at, while Polars' engine affinity is a single global switch with no size awareness (see the `engine` parameter on [`LazyFrame.collect`](https://docs.pola.rs/api/python/stable/reference/lazyframe/api/polars.LazyFrame.collect.html)).
+If your global affinity is set to `"streaming"`, nyctea's internal aggregates on small data still use the in-memory engine unless you lower `streaming_row_threshold` yourself.
+The `rows` and `cells` collects described above are the ones that will follow it, since they leave the choice to Polars.
+
 ## Composable pipeline
 
 Validation runs through ordered phases. Each phase receives a `PipelineContext` and returns it with updated state.

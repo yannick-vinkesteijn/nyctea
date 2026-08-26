@@ -248,6 +248,53 @@ class TestCoercionPhase:
 
 
 # ---------------------------------------------------------------------------
+# _collect / _collect_aggregate engine selection (#11 step 4)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectEngineSelection:
+    def test_collect_aggregate_uses_given_engine(self, collect_calls):
+        from nyctea.schema.validator import _collect_aggregate
+
+        _collect_aggregate(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
+        assert collect_calls[0].get("engine") == "streaming"
+
+    def test_collect_uses_default_engine(self, collect_calls):
+        from nyctea.schema.validator import _collect
+
+        _collect(pl.LazyFrame({"a": [1, 2, 3]}))
+        assert collect_calls[0].get("engine") is None
+
+    def test_pick_engine_df_below_threshold(self):
+        from nyctea.schema.validator import _pick_aggregate_engine
+
+        df = pl.DataFrame({"a": range(100)})
+        assert _pick_aggregate_engine(df, threshold=1000) == "in-memory"
+
+    def test_pick_engine_df_above_threshold(self):
+        from nyctea.schema.validator import _pick_aggregate_engine
+
+        df = pl.DataFrame({"a": range(1000)})
+        assert _pick_aggregate_engine(df, threshold=1000) == "streaming"
+
+    def test_pick_engine_lazyframe_streams(self):
+        from nyctea.schema.validator import _pick_aggregate_engine
+
+        lf = pl.LazyFrame({"a": [1, 2, 3]})
+        assert _pick_aggregate_engine(lf, threshold=1_000_000) == "streaming"
+
+    def test_threshold_rejects_negative(self):
+        """A negative row count is meaningless and would silently invert engine choice."""
+        with pytest.raises(ValueError, match="greater than or equal to 0"):
+            SchemaModel.from_dict({"streaming_row_threshold": -1, "columns": {"a": {"dtype": "Int64"}}})
+
+    def test_threshold_allows_zero(self):
+        """0 is the deliberate boundary: stream everything, including empty frames."""
+        schema = SchemaModel.from_dict({"streaming_row_threshold": 0, "columns": {"a": {"dtype": "Int64"}}})
+        assert schema.streaming_row_threshold == 0
+
+
+# ---------------------------------------------------------------------------
 # Full pipeline integration
 # ---------------------------------------------------------------------------
 
@@ -259,6 +306,103 @@ class TestFullPipeline:
         assert result.report.rows_processed == 3
         assert result.report.rows_valid == 3
         assert len(result.errors) == 0
+
+    def test_collect_count_bounded(self, simple_schema, registry, collect_calls):
+        """#11: guards against silently regaining wasted collects.
+
+        4 today: _enforce_notnull, _enforce_check_raise, _build_errors, _build_report.
+        Expected to drop once #38 merges these into one pass -- update this count
+        deliberately when that lands, don't just raise the bound to make it pass.
+        """
+        df = pl.DataFrame({"age": [25, 30, 40], "name": ["Alice", "Bob", "Carol"]})
+        simple_schema.validate(df, registry)
+
+        assert len(collect_calls) == 4
+
+    def test_collect_count_bounded_with_coercion(self, registry, collect_calls):
+        """Same guard as above, but for the path with coercion's own raise-check active.
+
+        5 today: _enforce_notnull, _enforce_coercion_raise, _enforce_check_raise,
+        _build_errors, _build_report. The issue this guards against (#11) specifically
+        called out that this path, not the no-coercion one, is the one most likely to
+        regain a collect.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "20", "30"]})
+        schema.validate(df, registry)
+
+        assert len(collect_calls) == 5
+
+    def test_small_df_uses_default_engine(self, simple_schema, registry, collect_calls):
+        """Below schema.streaming_row_threshold, an eager DataFrame stays on the
+        default engine -- streaming's fixed setup cost regresses small validations.
+        """
+        df = pl.DataFrame({"age": [25, 30, 40], "name": ["Alice", "Bob", "Carol"]})
+        simple_schema.validate(df, registry)
+
+        assert collect_calls
+        assert all(call.get("engine") == "in-memory" for call in collect_calls)
+
+    def test_large_df_streams(self, registry, collect_calls):
+        schema = SchemaModel.from_dict(
+            {
+                "streaming_row_threshold": 10,
+                "columns": {"age": {"dtype": "Int64", "nullable": True}},
+            }
+        )
+        df = pl.DataFrame({"age": list(range(20))})
+        schema.validate(df, registry)
+
+        assert collect_calls
+        assert all(call.get("engine") == "streaming" for call in collect_calls)
+
+    def test_lazyframe_input_streams(self, registry, collect_calls):
+        """Unknown size (no free row count), and choosing lazy signals larger intent."""
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
+        lf = pl.LazyFrame({"age": [1, 2, 3]})
+        schema.validate(lf, registry)
+
+        assert collect_calls
+        assert all(call.get("engine") == "streaming" for call in collect_calls)
+
+    @pytest.mark.parametrize("mode", ["rows", "cells"])
+    def test_rows_cells_no_engine_override(self, registry, collect_calls, mode):
+        """#11 step 4: only pure reductions get an explicit engine.
+
+        The rows/cells error builders materialize row indices and failing values, so
+        they call plain _collect() with no engine kwarg even when the frame is well
+        above streaming_row_threshold and every aggregate around them is streaming.
+        Absence of the kwarg is the contract: it leaves those two on Polars' own
+        engine="auto" selection, which follows global affinity. It does not mean they
+        can never stream.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "streaming_row_threshold": 10,
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [*range(19), -1]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode=mode))
+
+        assert len(result.errors) == 1
+        engines = [call.get("engine") for call in collect_calls]
+        assert "streaming" in engines, "the aggregate collects should still stream above the threshold"
+        assert None in engines, "the row/cell materialization should use the default engine"
 
     def test_check_failure_recorded(self, registry):
         schema = SchemaModel.from_dict(
@@ -705,6 +849,29 @@ class TestNullification:
         result = schema.validate(df, registry)
         assert result.report.columns["age"].coercion_failures == 0
         assert result.report.columns["age"].nullified == 1
+
+    def test_coercion_and_check_nulls_under_streaming(self, registry):
+        """#11 step 4: the streaming-engine aggregate collect in _apply_check_null must
+        agree with the with_columns mutation that follows it on the same lazy graph.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": True,
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": ["10", "-1", "bad", "20"]})
+        result = schema.validate(df, registry)
+        assert result.data.collect()["age"].to_list() == [10, None, None, 20]
+        assert result.report.columns["age"].nullified == 1
+        assert result.report.columns["age"].coercion_failures == 1
 
     def test_coercion_failures_are_reported(self, registry):
         schema = SchemaModel.from_dict(
