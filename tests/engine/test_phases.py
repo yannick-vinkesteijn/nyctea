@@ -366,6 +366,31 @@ class TestFullPipeline:
         assert collect_calls
         assert all(call.get("engine") == "streaming" for call in collect_calls)
 
+    @pytest.mark.parametrize("mode", ["rows", "cells"])
+    def test_row_and_cell_error_modes_never_stream(self, registry, collect_calls, mode):
+        """#11 step 4: only pure reductions stream.
+
+        The rows/cells error builders materialize row indices and failing values, so
+        they call plain _collect() with no engine kwarg even when the frame is well
+        above streaming_row_threshold and every aggregate around them is streaming.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "streaming_row_threshold": 10,
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [*range(19), -1]})
+        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode=mode))
+
+        assert len(result.errors) == 1
+        engines = [call.get("engine") for call in collect_calls]
+        assert "streaming" in engines, "the aggregate collects should still stream above the threshold"
+        assert None in engines, "the row/cell materialization should use the default engine"
+
     def test_check_failure_recorded(self, registry):
         schema = SchemaModel.from_dict(
             {

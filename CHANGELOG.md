@@ -2,7 +2,7 @@
 
 All notable changes to Nyctea are recorded here.
 This file is maintained by hand and is the canonical account of what changed in each release.
-The auto-generated notes on each [GitHub Release](https://github.com/yannick-vinkesteijn/nyctea/releases) are a raw list of merged pull requests, useful as raw material but not curated.
+The auto-generated notes on each [GitHub Release](https://github.com/yannick-vinkesteijn/nyctea/releases) are a raw list of merged pull requests.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) as described in [Releasing](docs/development/RELEASING.md#versioning).
 

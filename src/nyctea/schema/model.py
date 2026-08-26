@@ -180,15 +180,19 @@ class SchemaModel(BaseModel):
     )
 
     streaming_row_threshold: int = Field(
-        100_000, ge=0,
+        100_000,
+        ge=0,
         description=(
             "Row count at or above which internal reduction-only aggregates (check "
-            "and coercion enforcement, error/report building) use Polars' streaming "
+            "and coercion enforcement, summary error counts, report building) use "
+            "Polars' streaming "
             "engine instead of the default in-memory engine. Below this, an eager "
             "DataFrame input uses the default engine, since streaming's fixed "
             "pipeline setup cost outweighs the reduction itself on small data. A "
             "LazyFrame input always uses streaming, since its size is unknown "
-            "without collecting and choosing lazy signals larger/out-of-core intent."
+            "without collecting and choosing lazy signals larger/out-of-core intent. "
+            "The 'rows' and 'cells' error report modes are not aggregates -- they "
+            "materialise row indices and values, and always use the default engine."
         ),
     )
 
