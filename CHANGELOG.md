@@ -32,8 +32,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [0.2.0b1] - 2026-08-24
 
-First beta release under the validator-based architecture.
-This release is not backward compatible with 0.1.0; see [breaking changes](docs/releases/breaking-changes.md).
+First published release, and the first under the validator-based architecture.
+Everything before this was unreleased: the repository carried a `0.1.0` version string from its initial commit but was never tagged or published, so the entries below are measured against that unreleased state rather than against anything a user could have installed.
+See [breaking changes](docs/releases/breaking-changes.md).
 
 ### Added
 
@@ -71,18 +72,6 @@ This release is not backward compatible with 0.1.0; see [breaking changes](docs/
 - `strict`, `clean`, and `audit` validation profiles, replaced by `on_failure`.
 - The `coerce_strategy` parameter, replaced by per-column `on_failure`.
 
-## [0.1.0] - 2026-01-09
-
-Initial functional validation engine. Never tagged or published to PyPI.
-
-### Added
-
-- Schema definition via `SchemaModel.from_dict()`.
-- Column-level dtype validation and coercion.
-- Function registry for parsers and checks.
-- Error reporting in summary mode only.
-
 [Unreleased]: https://github.com/yannick-vinkesteijn/nyctea/compare/v0.2.0b2...HEAD
 [0.2.0b2]: https://github.com/yannick-vinkesteijn/nyctea/compare/v0.2.0b1...v0.2.0b2
 [0.2.0b1]: https://github.com/yannick-vinkesteijn/nyctea/releases/tag/v0.2.0b1
-[0.1.0]: https://github.com/yannick-vinkesteijn/nyctea/commit/4f374f5
