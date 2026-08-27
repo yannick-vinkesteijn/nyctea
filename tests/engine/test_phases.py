@@ -1173,7 +1173,7 @@ class TestValidationReportSummary:
                     "age": {
                         "dtype": "Int64",
                         "nullable": True,
-                        "on_failure": "ignore",
+                        "on_failure": "null",
                         "checks": [{"name": "min_value", "args": {"min": 0}}],
                     }
                 }
@@ -1184,6 +1184,8 @@ class TestValidationReportSummary:
         text = result.report.summary()
         assert "Validation Report" in text
         assert "Check failures" in text
+        assert "Nullified: 1" in text
+        assert "Final nulls: 1" in text
 
     def test_summary_all_valid(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
