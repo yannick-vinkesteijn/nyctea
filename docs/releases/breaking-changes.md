@@ -9,6 +9,8 @@ Nyctea now has one validation path and one registry. The untested legacy
 Use the current API:
 
 ```python
+import polars as pl
+
 from nyctea import Registry, SchemaModel, ValidatorDecorator
 
 registry = Registry()
@@ -108,6 +110,10 @@ The documented entry point shifted significantly. If you followed the v0.1.0 REA
 ---
 
 ### What changed
+
+The v0.1.0 snippets below are historical examples for migration reference. Their
+imports were removed in v0.2.0 and will raise `ModuleNotFoundError` in current
+versions; use the corresponding v0.2.0 examples instead.
 
 #### Registry: `FunctionRegistry` → `Registry`
 
