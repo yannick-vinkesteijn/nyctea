@@ -47,7 +47,6 @@ nb = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.0",
-    "tara; python_version >= '3.12'",
     { include-group = "lint" },
     { include-group = "test" },
     { include-group = "docs" },
@@ -183,9 +182,6 @@ xfail_strict = true
 exclude = [
     "src/nyctea/engine/**",
 ]
-
-[tool.uv.sources]
-tara = { git = "https://github.com/plugin-healthcare/tara" }
 
 [tool.ty.environment]
 python-version = "3.11"

@@ -135,7 +135,7 @@ def sort_by_date(lf: pl.LazyFrame) -> pl.LazyFrame:
 
 ```python
 @decorators.frame_parser(name="fill_nulls")
-def fill_nulls(lf: pl.LazyFrame, column: str, value: any) -> pl.LazyFrame:
+def fill_nulls(lf: pl.LazyFrame, column: str, value: str) -> pl.LazyFrame:
     """Fill nulls in a specific column.
 
     Args:
