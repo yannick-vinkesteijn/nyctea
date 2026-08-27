@@ -27,7 +27,7 @@ registry = Registry()
 register_builtins(registry)
 
 # 2. Register a custom validation check (using ValidatorDecorator)
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea import ValidatorDecorator
 decorators = ValidatorDecorator(registry)
 
 @decorators.column_check(name="positive")

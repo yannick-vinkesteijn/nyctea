@@ -1,6 +1,5 @@
 """Script to run validation for the Titanic example and write outputs."""
 
-
 import sys
 from pathlib import Path
 
@@ -11,9 +10,8 @@ for path in (project_root / "src", project_root):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from nyctea.engine import ErrorReportConfig, validate
+from nyctea import ErrorReportConfig, SchemaModel
 from nyctea.ingest import read_csv
-from nyctea.schema.model import SchemaModel
 from examples.titanic_example.functions import registry
 
 
@@ -31,8 +29,8 @@ def main() -> None:
 
     # Use summary mode for production - minimal overhead
     error_config = ErrorReportConfig(mode="summary")
-    result = validate(lf, schema, registry, lazy=False, coerce_strategy="null_on_failure", error_report=error_config)
-    # validate(lazy=False) always materialises, but the declared type is the union.
+    result = schema.validate(lf, registry, lazy=False, error_report_config=error_config)
+    # schema.validate(lazy=False) always materialises, but the declared type is the union.
     assert isinstance(result.data, pl.DataFrame)
     data_df = result.data
     errors_df: pl.DataFrame = result.errors

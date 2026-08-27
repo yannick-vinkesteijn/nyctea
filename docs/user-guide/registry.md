@@ -17,9 +17,10 @@ The `Registry` class manages four types of validators:
 ## Creating a Registry
 
 ```python
-from nyctea import Registry
+from nyctea import Registry, ValidatorDecorator
 
 registry = Registry()
+decorators = ValidatorDecorator(registry)
 ```
 
 ## Column Parsers
@@ -36,7 +37,7 @@ Column parsers transform individual column values. Common use cases include:
 ```python
 import polars as pl
 
-@registry.column_parser(name="trim")
+@decorators.column_parser(name="trim")
 def trim_whitespace(col: pl.Expr) -> pl.Expr:
     """Remove leading/trailing whitespace."""
     return col.str.strip_chars()
@@ -45,7 +46,7 @@ def trim_whitespace(col: pl.Expr) -> pl.Expr:
 ### Column Parser with Parameters
 
 ```python
-@registry.column_parser(name="replace_text")
+@decorators.column_parser(name="replace_text")
 def replace_text(col: pl.Expr, old: str, new: str) -> pl.Expr:
     """Replace text in column values.
 
@@ -80,7 +81,7 @@ Column checks validate individual column values. They must return a boolean expr
 ### Basic Column Check
 
 ```python
-@registry.column_check(name="positive")
+@decorators.column_check(name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are positive."""
     return col.gt(0)
@@ -89,7 +90,7 @@ def positive(col: pl.Expr) -> pl.Expr:
 ### Column Check with Parameters
 
 ```python
-@registry.column_check(name="in_range")
+@decorators.column_check(name="in_range")
 def in_range(col: pl.Expr, min_val: float, max_val: float) -> pl.Expr:
     """Check that values fall within a range.
 
@@ -124,7 +125,7 @@ Frame parsers transform entire DataFrames. They must preserve the row count and 
 ### Basic Frame Parser
 
 ```python
-@registry.frame_parser(name="sort_by_date")
+@decorators.frame_parser(name="sort_by_date")
 def sort_by_date(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Sort DataFrame by date column."""
     return lf.sort("date")
@@ -133,7 +134,7 @@ def sort_by_date(lf: pl.LazyFrame) -> pl.LazyFrame:
 ### Frame Parser with Parameters
 
 ```python
-@registry.frame_parser(name="fill_nulls")
+@decorators.frame_parser(name="fill_nulls")
 def fill_nulls(lf: pl.LazyFrame, column: str, value: any) -> pl.LazyFrame:
     """Fill nulls in a specific column.
 
@@ -167,7 +168,7 @@ on validation failure.
 ### Basic Frame Check
 
 ```python
-@registry.frame_check(name="min_rows")
+@decorators.frame_check(name="min_rows")
 def min_rows(lf: pl.LazyFrame, count: int) -> pl.LazyFrame:
     """Ensure DataFrame has minimum row count.
 
@@ -187,120 +188,15 @@ def min_rows(lf: pl.LazyFrame, count: int) -> pl.LazyFrame:
     return lf
 ```
 
-## Validation Rules
+## Registration rules
 
-The registry enforces strict rules to ensure correctness:
+Names must be unique within each validator kind. Registering a second column check,
+column parser, frame check, or frame parser under an existing name raises
+`RegistrationError`.
 
-### Type Safety
-
-All parameters and returns must be type-annotated:
-
-```python
-# ✅ Good
-@registry.column_parser(name="trim")
-def trim(col: pl.Expr) -> pl.Expr:
-    return col.str.strip_chars()
-
-# ❌ Bad - missing annotations
-@registry.column_parser(name="trim")
-def trim(col):
-    return col.str.strip_chars()
-```
-
-### Column Purity
-
-Column functions can only reference their input column:
-
-```python
-# ✅ Good - only references input column
-@registry.column_parser(name="normalize")
-def normalize(col: pl.Expr) -> pl.Expr:
-    return (col - col.mean()) / col.std()
-
-# ❌ Bad - references other column
-@registry.column_parser(name="ratio")
-def ratio(col: pl.Expr) -> pl.Expr:
-    return col / pl.col("total")  # References "total" column
-```
-
-### JSON-Serializable Defaults
-
-Default parameter values must be JSON-serializable:
-
-```python
-# ✅ Good
-@registry.column_check(name="min_length")
-def min_length(col: pl.Expr, length: int = 5) -> pl.Expr:
-    return col.str.len_chars().ge(length)
-
-# ❌ Bad - datetime not JSON-serializable
-from datetime import datetime
-@registry.column_check(name="after_date")
-def after_date(col: pl.Expr, date: datetime = datetime.now()) -> pl.Expr:
-    return col.gt(date)
-```
-
-### No Variadic Args
-
-Functions cannot use `*args` or `**kwargs`:
-
-```python
-# ✅ Good
-@registry.column_check(name="in_list")
-def in_list(col: pl.Expr, values: list) -> pl.Expr:
-    return col.is_in(values)
-
-# ❌ Bad - uses **kwargs
-@registry.column_check(name="in_list")
-def in_list(col: pl.Expr, **kwargs) -> pl.Expr:
-    return col.is_in(kwargs["values"])
-```
-
-## Error Messages
-
-The registry provides clear error messages when validation fails:
-
-```python
-# Missing type annotation
-@registry.column_parser(name="bad_func")
-def bad_func(col):  # Missing return type
-    return col.str.upper()
-
-# RegistryError: column parser 'bad_func' must return pl.Expr
-```
-
-```python
-# Violates column purity
-@registry.column_parser(name="bad_func")
-def bad_func(col: pl.Expr) -> pl.Expr:
-    return col / pl.col("other")
-
-# ColumnPurityError: column parser 'bad_func' referenced disallowed columns: other
-```
-
-## Reusing Functions Across Registries
-
-You can register the same function in multiple registries:
-
-```python
-registry1 = Registry()
-registry2 = Registry()
-
-def positive(col: pl.Expr) -> pl.Expr:
-    return col.gt(0)
-
-registry1.register_column_check(positive, name="positive")
-registry2.register_column_check(positive, name="positive")
-```
-
-Or use the decorator with explicit names:
-
-```python
-@registry1.column_check(name="positive")
-@registry2.column_check(name="positive")
-def positive(col: pl.Expr) -> pl.Expr:
-    return col.gt(0)
-```
+Decorator functions receive a Polars expression or lazy frame and must return the
+same kind of object. Schema arguments are forwarded as keyword arguments when the
+validator executes.
 
 ## Best Practices
 

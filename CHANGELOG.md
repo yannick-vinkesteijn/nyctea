@@ -17,10 +17,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The per-phase metrics block no longer collects when no observers are registered (#11).
+- Result models now live in `nyctea.engine.results`, leaving one canonical implementation after the legacy validation module was removed. Public imports from `nyctea` are unchanged (#12, #43).
+- Public APIs are layered: common workflow objects come from `nyctea`, schema configuration models from `nyctea.schema`, and extension types from `nyctea.validators` (#43).
 
 ### Removed
 
-- `nyctea.engine.results`, which held a second, near-identical copy of `ErrorReportConfig`, `ColumnValidationStats`, `ValidationReport`, and `ValidationResult`. The canonical definitions in `nyctea.engine.validate` are the ones the public API has always exported, and the duplicates were never re-exported from `nyctea`, so importing them required reaching into the internal module path (#12).
+- The untested legacy validation system: `nyctea.functions`, `FunctionRegistry`, and the standalone `nyctea.engine.validate.validate()` function. Use `Registry`, `ValidatorDecorator`, and `SchemaModel.validate()` instead. Removing the legacy registry also resolves its decorator typing defect (#42, #43).
+- The Titanic-specific `register_titanic_validators()` helper from the library API. The example owns its validators directly now (#43).
 
 ### Fixed
 

@@ -22,7 +22,7 @@ This is the recommended approach for validation workflows:
 
 ```python
 from nyctea.ingest import read_csv
-from nyctea.schema.model import SchemaModel
+from nyctea import SchemaModel
 
 schema = SchemaModel.from_yaml_file("schema.yaml")
 
@@ -87,7 +87,7 @@ For advanced use cases, you can access the schema override dict:
 
 ```python
 import polars as pl
-from nyctea.schema.model import SchemaModel
+from nyctea import SchemaModel
 
 schema = SchemaModel.from_yaml_file("schema.yaml")
 

@@ -1,9 +1,15 @@
 """Test suite for minimal validation functionality with new validator architecture."""
 
+import importlib.util
+
 import polars as pl
 import pytest
 
+import nyctea
 from nyctea import Registry, SchemaModel, register_builtins
+from nyctea.engine import ColumnValidationStats
+from nyctea.schema import Check, ColumnSchema, FrameCheck, FrameParser, Parser
+from nyctea.validators import ColumnCheck, ColumnParser, ValidatorMetadata
 
 
 @pytest.fixture
@@ -76,6 +82,48 @@ def test_schema_loads_successfully(sample_schema):
     assert "name" in sample_schema.columns
     assert "age" in sample_schema.columns
     assert "city" in sample_schema.columns
+
+
+def test_top_level_public_api_exports() -> None:
+    """The root package stays focused on the common validation workflow."""
+    assert set(nyctea.__all__) == {
+        "ErrorReportConfig",
+        "NycteaError",
+        "PipelineError",
+        "Registry",
+        "SchemaModel",
+        "ValidationError",
+        "ValidationReport",
+        "ValidationResult",
+        "ValidatorDecorator",
+        "ValidatorError",
+        "configure_logging",
+        "register_builtins",
+    }
+
+
+def test_layered_public_api_exports() -> None:
+    """Advanced public types live in explicit schema, validator, and engine namespaces."""
+    assert all(
+        symbol is not None
+        for symbol in (
+            Check,
+            ColumnCheck,
+            ColumnParser,
+            ColumnSchema,
+            ColumnValidationStats,
+            FrameCheck,
+            FrameParser,
+            Parser,
+            ValidatorMetadata,
+        )
+    )
+
+
+def test_legacy_validation_modules_are_removed() -> None:
+    """The package exposes only the current registry and validation path."""
+    assert importlib.util.find_spec("nyctea.functions") is None
+    assert importlib.util.find_spec("nyctea.engine.validate") is None
 
 
 def test_registry_has_plugins(registry):

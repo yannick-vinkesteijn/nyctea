@@ -12,8 +12,8 @@ from nyctea.engine.phases import (
     NOT_NULL_CHECK,
     CoercionPhase,
 )
+from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
-from nyctea.engine.validate import ErrorReportConfig
 from nyctea.exceptions import PipelineError
 from nyctea.validators.decorators import ValidatorDecorator
 

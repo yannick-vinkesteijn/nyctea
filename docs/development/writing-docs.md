@@ -77,8 +77,8 @@ Extended description with more details.
 Example:
     Usage example::
 
-        from nyctea import validate
-        result = validate(df, schema, registry)
+
+        result = schema.validate(df, registry)
 
 Note:
     Important notes or warnings.
@@ -100,13 +100,13 @@ Raises:
 Functions should also use Google style:
 
 ```python
-def validate(df, schema, registry):
+def validate_data(df, schema, registry):
     """Validate a DataFrame according to schema.
 
     Args:
         df: Input DataFrame or LazyFrame.
         schema: SchemaModel defining validation rules.
-        registry: FunctionRegistry with parsers and checks.
+        registry: Registry with parsers and checks.
 
     Returns:
         ValidationResult with data, errors, and report.
@@ -115,7 +115,7 @@ def validate(df, schema, registry):
         SchemaResolutionError: If columns cannot be resolved.
 
     Example:
-        >>> result = validate(df, schema, registry)
+        >>> result = validate_data(df, schema, registry)
         >>> print(result.report.summary())
     """
 ```

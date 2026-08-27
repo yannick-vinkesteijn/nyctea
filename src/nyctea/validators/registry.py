@@ -4,9 +4,9 @@ This module provides generic registry classes for managing validators with type 
 metadata-based discovery, and lifecycle management.
 """
 
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from nyctea.exceptions import RegistrationError
 from nyctea.validators.base import Validator
@@ -159,26 +159,10 @@ class Registry(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    column_parsers: ValidatorRegistry[ColumnParser]
-    column_checks: ValidatorRegistry[ColumnCheck]
-    frame_parsers: ValidatorRegistry[FrameParser]
-    frame_checks: ValidatorRegistry[FrameCheck]
-
-    @model_validator(mode="before")
-    @classmethod
-    def _init_registries(cls, data: Any) -> Any:
-        """Provide empty sub-registries when not supplied."""
-        if not isinstance(data, dict):
-            return data
-        if "column_parsers" not in data:
-            data["column_parsers"] = ValidatorRegistry(ColumnParser)
-        if "column_checks" not in data:
-            data["column_checks"] = ValidatorRegistry(ColumnCheck)
-        if "frame_parsers" not in data:
-            data["frame_parsers"] = ValidatorRegistry(FrameParser)
-        if "frame_checks" not in data:
-            data["frame_checks"] = ValidatorRegistry(FrameCheck)
-        return data
+    column_parsers: ValidatorRegistry[ColumnParser] = Field(default_factory=lambda: ValidatorRegistry(ColumnParser))
+    column_checks: ValidatorRegistry[ColumnCheck] = Field(default_factory=lambda: ValidatorRegistry(ColumnCheck))
+    frame_parsers: ValidatorRegistry[FrameParser] = Field(default_factory=lambda: ValidatorRegistry(FrameParser))
+    frame_checks: ValidatorRegistry[FrameCheck] = Field(default_factory=lambda: ValidatorRegistry(FrameCheck))
 
     def register_column_parser(self, validator: ColumnParser) -> None:
         """Register a column parser validator.

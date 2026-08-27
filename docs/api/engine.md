@@ -1,35 +1,32 @@
 # Validation Engine
 
-The validation engine module provides the core validation functionality.
-
-## validate
-
-::: nyctea.engine.validate.validate
+Validation is performed through `SchemaModel.validate()`. The engine package exposes
+the result models and column-resolution helpers used by the pipeline.
 
 ## ValidationResult
 
-::: nyctea.engine.validate.ValidationResult
+::: nyctea.engine.results.ValidationResult
 
 ## ValidationReport
 
-::: nyctea.engine.validate.ValidationReport
+::: nyctea.engine.results.ValidationReport
 
 ## ColumnValidationStats
 
-::: nyctea.engine.validate.ColumnValidationStats
+::: nyctea.engine.results.ColumnValidationStats
 
 ## ErrorReportConfig
 
-::: nyctea.engine.validate.ErrorReportConfig
+::: nyctea.engine.results.ErrorReportConfig
 
 ## Helper Functions
 
 ### resolve_column_names
 
-::: nyctea.engine.validate.resolve_column_names
+::: nyctea.engine.utils.resolve_column_names
 
 ## Exceptions
 
 ### SchemaResolutionError
 
-::: nyctea.engine.validate.SchemaResolutionError
+::: nyctea.engine.utils.SchemaResolutionError

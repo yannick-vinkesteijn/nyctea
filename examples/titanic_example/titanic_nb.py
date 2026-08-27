@@ -16,10 +16,10 @@ def _():
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
 
-    from nyctea.engine import ErrorReportConfig, validate
+    from nyctea import ErrorReportConfig, SchemaModel
     from nyctea.ingest import read_csv
-    from nyctea.schema.model import SchemaModel
-    return ErrorReportConfig, SchemaModel, project_root, read_csv, validate
+
+    return ErrorReportConfig, SchemaModel, project_root, read_csv
 
 
 @app.cell
@@ -40,16 +40,14 @@ def _(data_path, read_csv, schema):
 
 
 @app.cell
-def _(ErrorReportConfig, lf, registry, schema, validate):
+def _(ErrorReportConfig, lf, registry, schema):
     # Use summary mode for quick overview
     error_config = ErrorReportConfig(mode="summary")
-    result = validate(
+    result = schema.validate(
         lf,
-        schema,
         registry,
         lazy=True,
-        coerce_strategy="null_on_failure",
-        error_report=error_config,
+        error_report_config=error_config,
     )
     errors = result.errors
     data_out = result.data
