@@ -7,7 +7,7 @@ pipeline execution, collecting metrics, and logging phase activity.
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from nyctea.engine.context import PipelineContext
 
@@ -37,7 +37,7 @@ class PhaseMetrics:
     rows_processed: int = 0
     rows_modified: int = 0
     errors_found: int = 0
-    additional: dict[str, any] = field(default_factory=dict)
+    additional: dict[str, Any] = field(default_factory=dict)
 
 
 class PipelineObserver(Protocol):
@@ -237,7 +237,7 @@ class MetricsCollector:
         """Record duration at error time."""
         self.total_duration = time.time() - self._pipeline_start_time
 
-    def get_summary(self) -> dict[str, any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get metrics summary.
 
         Returns:

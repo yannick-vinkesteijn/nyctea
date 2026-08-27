@@ -177,12 +177,6 @@ addopts = [
 ]
 xfail_strict = true
 
-[tool.ty.src]
-# Engine typing migration remains in progress.
-exclude = [
-    "src/nyctea/engine/**",
-]
-
 [tool.ty.environment]
 python-version = "3.11"
 
