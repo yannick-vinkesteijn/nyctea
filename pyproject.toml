@@ -144,8 +144,6 @@ strict = true
     "E402",    # Module-level import not at top — configure_logging() must run first
     "RUF022",  # __all__ not sorted — ruff auto-sort strips comments
 ]
-"src/nyctea/cli/__init__.py" = ["D104"]  # Package docstring not needed for CLI
-"src/nyctea/cli/main.py" = ["T201"]      # print() is intentional in CLI output
 "src/nyctea/utils/__init__.py" = [
     "TID252",  # Relative import — re-export from submodule
     "D104",    # Package docstring not needed

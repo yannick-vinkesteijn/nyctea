@@ -358,6 +358,18 @@ class ValidationPipeline:
         """
         return [p.name for p in self.phases]
 
+    def copy(self) -> "ValidationPipeline":
+        """Return an independent copy of this pipeline.
+
+        Phase and observer instances are shared, since phases are stateless by
+        design, but the copy's phase list is a separate list. Calling
+        ``add_phase``/``remove_phase`` on the copy does not affect this pipeline.
+
+        Returns:
+            A new ``ValidationPipeline`` with the same phases and observers.
+        """
+        return ValidationPipeline(phases=list(self.phases), observers=list(self.observers))
+
     def __len__(self) -> int:
         """Get number of phases in pipeline."""
         return len(self.phases)

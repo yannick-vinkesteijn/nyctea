@@ -30,7 +30,7 @@ test *ARGS:
 
 # Run tests with coverage
 test-cov:
-    uv run pytest tests/ --cov=src/nyctea --cov-report=xml --cov-report=term --cov-report=html
+    uv run pytest tests/ --cov=src/nyctea --cov-report=xml --cov-report=term-missing --cov-report=html
 
 # Run tests on all Python versions (mimics CI)
 test-all:
