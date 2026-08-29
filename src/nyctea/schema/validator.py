@@ -4,8 +4,6 @@ This module provides the SchemaValidator class, which is the main entry point
 for validation using the new validator-based pipeline architecture.
 """
 
-from typing import Any
-
 import polars as pl
 
 from nyctea.engine.context import PipelineContext
@@ -114,7 +112,6 @@ class SchemaValidator:
         *,
         error_report_config: ErrorReportConfig | None = None,
         lazy: bool | None = None,
-        **kwargs: Any,
     ) -> ValidationResult:
         """Validate a DataFrame against the schema.
 
@@ -125,7 +122,6 @@ class SchemaValidator:
             df: Input DataFrame to validate.
             error_report_config: Configuration for error reporting.
             lazy: Return LazyFrame (True) or DataFrame (False). If None, uses schema.lazy.
-            **kwargs: Additional validation options (reserved for future use).
 
         Returns:
             ValidationResult with validated data, errors, and report.
@@ -451,8 +447,11 @@ class SchemaValidator:
     def _build_errors_rows(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
         """Build rows error report: column | check | count | row_indices.
 
-        Collects only __row_index__ + mask columns. Row materialization stays on the
-        default engine, unlike the summary builder's pure aggregate.
+        The failing-row count is a full aggregation, but ``row_indices`` is limited
+        with ``.head(config.limit)`` inside the lazy query, before collecting, so a
+        small ``limit`` also bounds how much is materialized rather than only
+        truncating output. Row materialization stays on the default engine, unlike
+        the summary builder's pure aggregate.
         """
         check_masks = context.check_masks
         empty_schema = {
@@ -468,23 +467,28 @@ class SchemaValidator:
         if not check_masks:
             return empty
 
-        mask_aliases = list(check_masks.values())
-        subset = _collect(context.data.select(["__row_index__", *mask_aliases]))
-        row_index = subset.get_column("__row_index__")
+        exprs: list[pl.Expr] = []
+        for alias in check_masks.values():
+            failed = ~pl.col(alias)
+            indices_expr = pl.col("__row_index__").filter(failed).cast(pl.UInt32)
+            if config.limit is not None:
+                indices_expr = indices_expr.head(config.limit)
+            exprs.append(failed.sum().cast(pl.UInt32).alias(f"__count__{alias}"))
+            exprs.append(indices_expr.implode().alias(f"__indices__{alias}"))
+
+        row = _collect(context.data.select(exprs))
 
         rows: list[dict[str, object]] = []
         for (col_name, check_name), alias in check_masks.items():
-            failed = subset.get_column(alias).not_()
-            indices = row_index.filter(failed).cast(pl.UInt32).to_list()
-            if not indices:
+            count = int(row[f"__count__{alias}"].item())
+            if count == 0:
                 continue
-            limited = indices[: config.limit] if config.limit is not None else indices
             rows.append(
                 {
                     "column": col_name,
                     "check": check_name,
-                    "count": len(indices),
-                    "row_indices": limited,
+                    "count": count,
+                    "row_indices": row[f"__indices__{alias}"].item().to_list(),
                 }
             )
 
@@ -492,56 +496,61 @@ class SchemaValidator:
             return empty
         return pl.DataFrame(rows, schema=empty_schema)
 
-    def _build_errors_cells(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
-        """Build cells error report: column | check | row_index | value.
+    @staticmethod
+    def _cells_exprs(check_masks: dict[tuple[str, str], str], config: ErrorReportConfig) -> list[pl.Expr]:
+        """Build the per-alias limited indices (and optional values) list expressions."""
+        exprs: list[pl.Expr] = []
+        for (col_name, _check_name), alias in check_masks.items():
+            failed = ~pl.col(alias)
+            indices_expr = pl.col("__row_index__").filter(failed).cast(pl.UInt32)
+            if config.limit is not None:
+                indices_expr = indices_expr.head(config.limit)
+            exprs.append(indices_expr.implode().alias(f"__indices__{alias}"))
+            if config.include_values:
+                values_expr = pl.col(col_name).filter(failed).cast(pl.String)
+                if config.limit is not None:
+                    values_expr = values_expr.head(config.limit)
+                exprs.append(values_expr.implode().alias(f"__values__{alias}"))
+        return exprs
 
-        Collects only __row_index__ + mask columns + data columns with failing checks.
-        Cell materialization stays on the default engine, unlike the summary builder's
-        pure aggregate.
+    def _build_errors_cells(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
+        """Build cells error report: column | check | row_index (| value).
+
+        Both ``row_index`` and ``value`` lists are limited with ``.head(config.limit)``
+        inside the lazy query, before collecting, so a small ``limit`` also bounds how
+        much is materialized rather than only truncating output. ``value`` is included
+        only when ``config.include_values`` is set. Cell materialization stays on the
+        default engine, unlike the summary builder's pure aggregate.
         """
         check_masks = context.check_masks
         empty_schema = {
             "column": pl.String,
             "check": pl.String,
             "row_index": pl.UInt32,
-            "value": pl.String,
         }
-        empty = pl.DataFrame(
-            {"column": [], "check": [], "row_index": [], "value": []},
-            schema=empty_schema,
-        )
+        if config.include_values:
+            empty_schema["value"] = pl.String
+        empty = pl.DataFrame({name: [] for name in empty_schema}, schema=empty_schema)
         if not check_masks:
             return empty
 
-        # Collect only the columns we need: row_index + masks + data columns with checks
-        mask_aliases = list(check_masks.values())
-        data_cols = list({col_name for (col_name, _) in check_masks})
-        subset = _collect(context.data.select(["__row_index__", *mask_aliases, *data_cols]))
-        row_index = subset.get_column("__row_index__")
+        row = _collect(context.data.select(self._cells_exprs(check_masks, config)))
 
         parts: list[pl.DataFrame] = []
         for (col_name, check_name), alias in check_masks.items():
-            failed = subset.get_column(alias).not_()
-            if failed.sum() == 0:
+            indices = row[f"__indices__{alias}"].item().to_list()
+            if not indices:
                 continue
 
-            fail_indices = row_index.filter(failed).cast(pl.UInt32)
-            fail_values = subset.get_column(col_name).filter(failed).cast(pl.String)
+            part: dict[str, object] = {
+                "column": [col_name] * len(indices),
+                "check": [check_name] * len(indices),
+                "row_index": indices,
+            }
+            if config.include_values:
+                part["value"] = row[f"__values__{alias}"].item().to_list()
 
-            if config.limit is not None:
-                fail_indices = fail_indices.head(config.limit)
-                fail_values = fail_values.head(config.limit)
-
-            parts.append(
-                pl.DataFrame(
-                    {
-                        "column": [col_name] * len(fail_indices),
-                        "check": [check_name] * len(fail_indices),
-                        "row_index": fail_indices,
-                        "value": fail_values,
-                    }
-                )
-            )
+            parts.append(pl.DataFrame(part, schema=empty_schema))
 
         if not parts:
             return empty
@@ -561,6 +570,4 @@ class SchemaValidator:
             >>> validator.pipeline = pipeline
             >>> result = validator.validate(df)
         """
-        # For now, return the existing pipeline
-        # In full implementation, would create a deep copy
-        return self.pipeline
+        return self.pipeline.copy()

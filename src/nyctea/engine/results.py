@@ -32,6 +32,7 @@ class ErrorReportConfig(BaseModel):
     )
     limit: int | None = Field(
         None,
+        ge=0,
         description="Maximum number of error rows to return per column+check. None = unlimited.",
     )
     include_values: bool = Field(

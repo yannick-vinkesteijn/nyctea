@@ -71,7 +71,14 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
         Raises:
             RegistrationError: If signature validation fails.
         """
-        sig = inspect.signature(self.execute)
+        try:
+            sig = inspect.signature(self.execute, eval_str=True)
+        except NameError as e:
+            raise RegistrationError(
+                f"Validator '{self.name}' execute() has an unresolvable annotation: {e}",
+                validator_name=self.name,
+                validator_type=self.__class__.__name__,
+            ) from e
         params = list(sig.parameters.values())
 
         # Skip 'self' parameter
