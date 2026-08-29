@@ -79,6 +79,18 @@ def test_pipeline_add_phase_after():
     assert phases == ["first", "second"]
 
 
+def test_pipeline_add_phase_before():
+    """Test adding a phase before another."""
+    pipeline = ValidationPipeline()
+    phase1 = SimplePhase(name="first")
+    phase2 = SimplePhase(name="second")
+    pipeline.add_phase(phase2)
+
+    pipeline.add_phase(phase1, before="second")
+
+    assert pipeline.list_phases() == ["first", "second"]
+
+
 def test_pipeline_remove_phase():
     """Test removing a phase from pipeline."""
     pipeline = ValidationPipeline()
