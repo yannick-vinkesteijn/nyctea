@@ -4,9 +4,7 @@ Nyctea provides a declarative schema-based validation system for Polars DataFram
 with an extensible validator architecture.
 
 Quick Start:
-    >>> from nyctea.schema.model import SchemaModel
-    >>> from nyctea.validators.registry import Registry
-    >>> from nyctea.validators.builtins.register import register_builtins
+    >>> from nyctea import Registry, SchemaModel, register_builtins
     >>>
     >>> # Load schema and register validators
     >>> schema = SchemaModel.from_yaml("schema.yaml")
@@ -14,7 +12,7 @@ Quick Start:
     >>> register_builtins(registry)
     >>>
     >>> # Validate data
-    >>> result = schema.run(df, registry)
+    >>> result = schema.validate(df, registry)
     >>> print(result.report.summary())
 """
 
@@ -24,7 +22,7 @@ from nyctea.utils import configure_logging
 configure_logging()
 
 # Core API exports
-from nyctea.engine.validate import ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.engine.results import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import (
     NycteaError,
     PipelineError,
@@ -32,7 +30,8 @@ from nyctea.exceptions import (
     ValidatorError,
 )
 from nyctea.schema.model import SchemaModel
-from nyctea.validators.builtins.register import register_builtins, register_titanic_validators
+from nyctea.validators.builtins.register import register_builtins
+from nyctea.validators.decorators import ValidatorDecorator
 from nyctea.validators.registry import Registry
 
 __all__ = [
@@ -44,21 +43,8 @@ __all__ = [
     "ValidationError",
     "ValidationReport",
     "ValidationResult",
+    "ValidatorDecorator",
     "ValidatorError",
     "configure_logging",
     "register_builtins",
-    "register_titanic_validators",
 ]
-
-
-def __getattr__(name: str) -> object:
-    if name == "FunctionRegistry":
-        import warnings
-
-        warnings.warn(
-            "FunctionRegistry was renamed to Registry in v0.2.0. FunctionRegistry will be removed in v0.3.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return Registry
-    raise AttributeError(f"module 'nyctea' has no attribute {name!r}")

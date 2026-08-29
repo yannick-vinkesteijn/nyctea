@@ -42,15 +42,14 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 
 ## Coverage by Module
 
-| Module                           | Coverage | Notes                     |
-| -------------------------------- | -------- | ------------------------- |
-| `__init__.py`                    | 100%     | Main exports              |
-| `schema/validator.py`            | 95%      | SchemaValidator           |
-| `validators/builtins/parsers.py` | 84%      | Built-in parsers          |
-| `validators/registry.py`         | 81%      | Validator registration    |
-| `engine/phases.py`               | 83%      | Pipeline phases           |
-| `engine/pipeline.py`             | 59%      | Pipeline orchestration    |
-| `engine/validate.py`             | 14%      | Legacy (to be deprecated) |
+| Module                           | Coverage | Notes                  |
+| -------------------------------- | -------- | ---------------------- |
+| `__init__.py`                    | 100%     | Main exports           |
+| `schema/validator.py`            | 95%      | SchemaValidator        |
+| `validators/builtins/parsers.py` | 84%      | Built-in parsers       |
+| `validators/registry.py`         | 81%      | Validator registration |
+| `engine/phases.py`               | 83%      | Pipeline phases        |
+| `engine/pipeline.py`             | 59%      | Pipeline orchestration |
 
 ## Adding New Tests
 

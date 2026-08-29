@@ -79,8 +79,7 @@ print(result.data.collect())
 
 ```python
 import polars as pl
-from nyctea.validators.base import ValidatorMetadata
-from nyctea.validators.column import ColumnParser
+from nyctea.validators import ColumnParser, ValidatorMetadata
 
 
 class TrimParser(ColumnParser):
@@ -105,7 +104,7 @@ registry.register_column_parser(TrimParser())
 
 ```python
 import polars as pl
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea import ValidatorDecorator
 
 decorators = ValidatorDecorator(registry)
 

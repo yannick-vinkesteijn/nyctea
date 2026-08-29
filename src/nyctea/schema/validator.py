@@ -12,7 +12,7 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
-from nyctea.engine.validate import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import AggregateEngine, SchemaModel
 from nyctea.validators.registry import Registry

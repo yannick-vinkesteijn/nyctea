@@ -9,7 +9,7 @@ from typing import Any
 
 import polars as pl
 
-from nyctea.engine.validate import ErrorReportConfig, ValidationReport
+from nyctea.engine.results import ErrorReportConfig, ValidationReport
 from nyctea.schema.model import AggregateEngine, SchemaModel
 from nyctea.validators.registry import Registry
 

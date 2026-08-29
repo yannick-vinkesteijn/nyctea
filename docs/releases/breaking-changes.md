@@ -1,5 +1,34 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: the legacy validation API was removed
+
+Nyctea now has one validation path and one registry. The untested legacy
+`nyctea.functions.FunctionRegistry` package, the misleading top-level
+`FunctionRegistry` alias, and `nyctea.engine.validate.validate()` were removed.
+
+Use the current API:
+
+```python
+import polars as pl
+
+from nyctea import Registry, SchemaModel, ValidatorDecorator
+
+registry = Registry()
+decorators = ValidatorDecorator(registry)
+
+@decorators.column_check(name="positive")
+def positive(column: pl.Expr) -> pl.Expr:
+    return column > 0
+
+schema = SchemaModel.from_dict(...)
+result = schema.validate(df, registry)
+```
+
+The result models remain importable from `nyctea`; their implementation now lives in
+`nyctea.engine.results`. Advanced configuration and extension types use the explicit
+`nyctea.schema` and `nyctea.validators` namespaces to avoid name collisions. This
+removal also makes the legacy decorator typing defect tracked in #42 obsolete (#43).
+
 ## Within v0.2.0 pre-release: duplicate check names on one column now raise
 
 A column could declare two checks with the same name, most plausibly the same parameterised check
@@ -72,7 +101,7 @@ Before the first public release, the extensibility system was renamed from "plug
 
 ### Summary
 
-v0.2.0 introduces the OOP validator system with a clean `Registry` class alongside the existing `FunctionRegistry`. The core `SchemaModel` is unchanged. No public API symbols that were exported in v0.1.0 have been removed.
+v0.2.0 introduces the OOP validator system with a clean `Registry` class and removes the earlier `FunctionRegistry` path. The core `SchemaModel` is unchanged.
 
 The documented entry point shifted significantly. If you followed the v0.1.0 README or guides, you will need to update your code.
 
@@ -81,6 +110,10 @@ The documented entry point shifted significantly. If you followed the v0.1.0 REA
 ---
 
 ### What changed
+
+The v0.1.0 snippets below are historical examples for migration reference. Their
+imports were removed in v0.2.0 and will raise `ModuleNotFoundError` in current
+versions; use the corresponding v0.2.0 examples instead.
 
 #### Registry: `FunctionRegistry` → `Registry`
 
@@ -105,14 +138,6 @@ registry = Registry()
 register_builtins(registry)  # registers built-in parsers and checks
 ```
 
-**`FunctionRegistry` still exists** as a top-level alias in `nyctea` (`from nyctea import FunctionRegistry`) for backward compatibility. Code using it will continue to import without error. But:
-
-- It is a deprecated alias for `Registry`.
-- It is no longer the recommended pattern.
-- It does not work with the old `FunctionRegistry`-based decorator API from v0.1.0.
-
-The alias will be removed in v0.3.0.
-
 **Migration:** replace `FunctionRegistry` with `Registry`. Re-register custom functions using either OOP validator classes or the `ValidatorDecorator` functional API.
 
 #### Validation entry point
@@ -131,19 +156,15 @@ v0.2.0 uses `schema.validate(df, registry)` via `SchemaValidator`:
 result = schema.validate(df, registry)
 ```
 
-**`validate()` still exists** at `nyctea.engine.validate.validate` and has not been removed. It still takes a `FunctionRegistry`. Code calling it directly will continue to work.
-
-But it is not exposed in the top-level `nyctea` namespace and is not the recommended pattern going forward.
-
 **Migration:** use `schema.validate(df, registry)` with a `Registry`.
 
 #### Top-level exports
 
 v0.1.0 exported only `configure_logging` from `nyctea`.
 
-v0.2.0 adds: `SchemaModel`, `Registry`, `FunctionRegistry` (compatibility alias), `register_builtins`, `ValidationResult`, `ValidationReport`, `ErrorReportConfig`, and the exception classes.
+v0.2.0 adds: `SchemaModel`, `Registry`, `register_builtins`, `ValidationResult`, `ValidationReport`, `ErrorReportConfig`, and the exception classes.
 
-This is **additive**. No existing imports break.
+The legacy `FunctionRegistry` and standalone `validate()` imports must be migrated as described above.
 
 ---
 

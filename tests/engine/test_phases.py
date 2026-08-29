@@ -12,8 +12,8 @@ from nyctea.engine.phases import (
     NOT_NULL_CHECK,
     CoercionPhase,
 )
+from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
-from nyctea.engine.validate import ErrorReportConfig
 from nyctea.exceptions import PipelineError
 from nyctea.validators.decorators import ValidatorDecorator
 
@@ -1173,7 +1173,7 @@ class TestValidationReportSummary:
                     "age": {
                         "dtype": "Int64",
                         "nullable": True,
-                        "on_failure": "ignore",
+                        "on_failure": "null",
                         "checks": [{"name": "min_value", "args": {"min": 0}}],
                     }
                 }
@@ -1184,6 +1184,8 @@ class TestValidationReportSummary:
         text = result.report.summary()
         assert "Validation Report" in text
         assert "Check failures" in text
+        assert "Nullified: 1" in text
+        assert "Final nulls: 1" in text
 
     def test_summary_all_valid(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})

@@ -169,7 +169,7 @@ class ValidationPipeline:
                     f"Cannot insert phase '{phase.name}' after '{after}': phase '{after}' not found",
                     phase=phase.name,
                 ) from e
-        else:
+        elif before is not None:
             # Insert before specified phase
             try:
                 idx = self._find_phase_index(before)

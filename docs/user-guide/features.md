@@ -72,7 +72,7 @@ register_builtins(registry)  # strip, lower, upper, to_int, to_float, min_value,
 Custom validators can be added via OOP classes or the decorator API:
 
 ```python
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea import ValidatorDecorator
 
 decorators = ValidatorDecorator(registry)
 
@@ -112,7 +112,7 @@ operate on the whole DataFrame, for rules that need to see more than one column,
 as cross-column comparisons or a minimum row count.
 
 ```python
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea import ValidatorDecorator
 
 decorators = ValidatorDecorator(registry)
 

@@ -20,7 +20,8 @@ Complete reference for Nyctea's public API.
 
     ---
 
-    `SchemaModel`, `ColumnSchema`, `Parser`, `Check`, `OnFailureBehavior`.
+    Configuration types from `nyctea.schema`: `ColumnSchema`, `Parser`, `Check`,
+    `FrameParser`, `FrameCheck`.
 
     [:octicons-arrow-right-24: Schema](schema.md)
 
@@ -28,7 +29,8 @@ Complete reference for Nyctea's public API.
 
     ---
 
-    `Registry`, `ValidatorRegistry`, `ColumnParser`, `ColumnCheck`, `FrameParser`, `FrameCheck`.
+    Extension types from `nyctea.validators`: `ValidatorRegistry`, `ColumnParser`,
+    `ColumnCheck`, `FrameParser`, `FrameCheck`.
 
     [:octicons-arrow-right-24: Registry](registry.md)
 
@@ -44,21 +46,23 @@ Complete reference for Nyctea's public API.
 
 ---
 
-## Public exports
+## Public API layers
 
-Everything importable directly from `nyctea`:
+The root package contains the common workflow:
 
 ```python
 from nyctea import (
-    SchemaModel,          # schema definition
-    Registry,       # validator registry
-    register_builtins,    # register built-in parsers/checks
-    ValidationResult,     # result of a validation run
-    ValidationReport,     # per-column statistics
-    ErrorReportConfig,    # error reporting mode (summary/rows/cells)
-    NycteaError,          # base exception
-    ValidationError,      # column/pipeline validation failure
-    ValidatorError,          # validator registration or execution failure
-    PipelineError,        # pipeline phase failure
+    SchemaModel, Registry, register_builtins, ValidatorDecorator,
+    ErrorReportConfig, ValidationReport, ValidationResult,
+    NycteaError, PipelineError, ValidationError, ValidatorError,
 )
+```
+
+Advanced types use explicit namespaces so similarly named schema specifications and
+validator classes cannot be confused:
+
+```python
+from nyctea.schema import Check, ColumnSchema, FrameCheck, FrameParser, Parser
+from nyctea.validators import ColumnCheck, ColumnParser, ValidatorMetadata
+from nyctea.engine import ColumnValidationStats
 ```

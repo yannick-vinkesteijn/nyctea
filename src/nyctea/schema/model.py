@@ -37,7 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 if TYPE_CHECKING:
     from nyctea.engine.pipeline import ValidationPipeline
-    from nyctea.engine.validate import ValidationResult
+    from nyctea.engine.results import ValidationResult
     from nyctea.schema.validator import SchemaValidator
     from nyctea.validators.registry import Registry
 

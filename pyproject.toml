@@ -4,7 +4,8 @@ version = "0.2.0b2"
 description = "Polars-based data validation library with an extensible OOP validator architecture"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Yannick Vinkesteijn" }
 ]
@@ -14,7 +15,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Information Analysis",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -35,7 +35,7 @@ Issues = "https://github.com/yannick-vinkesteijn/nyctea/issues"
 Changelog = "https://github.com/yannick-vinkesteijn/nyctea/blob/main/CHANGELOG.md"
 
 [build-system]
-requires = ["uv_build>=0.9.17,<0.10.0"]
+requires = ["uv_build>=0.11.28,<0.12.0"]
 build-backend = "uv_build"
 
 [project.optional-dependencies]
@@ -150,31 +150,6 @@ strict = true
     "TID252",  # Relative import — re-export from submodule
     "D104",    # Package docstring not needed
 ]
-# Legacy monolith and functions module — scheduled for removal in Step 7
-"src/nyctea/engine/validate.py" = [
-    "C901",    # Too complex
-    "PLR0911", # Too many return statements
-    "PLR0912", # Too many branches
-    "PLR0915", # Too many statements
-    "SIM118",  # Use key in dict — legacy code
-    "S608",    # SQL injection false positive
-    "RUF059",  # Unused unpacked variable
-    "RUF005",  # List concatenation style
-    "PLR2004", # Magic value in comparison
-    "TRY300",  # Consider else block
-]
-"src/nyctea/functions/**/*.py" = [
-    "C901",    # Too complex
-    "PLR0912", # Too many branches
-    "SLF001",  # Private member access
-    "D107",    # Missing __init__ docstring
-    "F821",    # Undefined name — type var used at runtime
-]
-"src/nyctea/functions/__init__.py" = [
-    "TID252",  # Relative imports — legacy module
-    "I001",    # Import sorting — legacy module
-    "RUF022",  # __all__ sorting — legacy module
-]
 "*_nb.py" = [
     "E402",    # Module level import not at top of file
     "F401",    # Imported but unused
@@ -201,13 +176,6 @@ addopts = [
     "--import-mode=importlib",
 ]
 xfail_strict = true
-
-[tool.ty.src]
-# System A (engine + function registry) is being rewritten — exclude until removed
-exclude = [
-    "src/nyctea/engine/**",
-    "src/nyctea/functions/**",
-]
 
 [tool.ty.environment]
 python-version = "3.11"
