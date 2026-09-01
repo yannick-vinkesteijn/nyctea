@@ -498,6 +498,70 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         assert "age" not in result.data.collect_schema().names()
 
+    def test_parser_skips_missing_optional_column(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "id": {"dtype": "Int64"},
+                    "name": {
+                        "dtype": "Utf8",
+                        "required": False,
+                        "parsers": [{"name": "strip"}],
+                    },
+                }
+            }
+        )
+        result = schema.validate(pl.DataFrame({"id": [1]}), registry)
+        assert result.data.collect_schema().names() == ["id"]
+
+    def test_parser_runs_for_present_optional_column(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "name": {
+                        "dtype": "Utf8",
+                        "required": False,
+                        "parsers": [{"name": "strip"}],
+                    }
+                }
+            }
+        )
+        result = schema.validate(pl.DataFrame({"name": [" Alice "]}), registry, lazy=False)
+        assert result.data["name"].to_list() == ["Alice"]
+
+    def test_check_skips_missing_optional_column(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "id": {"dtype": "Int64"},
+                    "age": {
+                        "dtype": "Int64",
+                        "required": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    },
+                },
+            }
+        )
+        result = schema.validate(pl.DataFrame({"id": [1]}), registry)
+        assert result.errors.is_empty()
+
+    def test_check_runs_for_present_optional_column(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "required": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        result = schema.validate(pl.DataFrame({"age": [-1]}), registry)
+        assert result.errors["count"].item() == 1
+
     def test_nullable_false_on_failure_ignore_does_not_raise(self, registry):
         schema = SchemaModel.from_dict(
             {"columns": {"age": {"dtype": "Int64", "nullable": False, "on_failure": "ignore"}}}

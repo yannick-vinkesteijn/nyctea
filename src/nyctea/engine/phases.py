@@ -235,12 +235,13 @@ class ColumnParsingPhase(PipelinePhase):
         schema = context.schema
         registry = context.registry
         lf = context.data
+        current_columns = set(lf.collect_schema().names())
 
         # Collect all transformations to apply in batch
         transformations: list[pl.Expr] = []
 
         for col_name, col_schema in schema.columns.items():
-            if not col_schema.parsers:
+            if col_name not in current_columns or not col_schema.parsers:
                 continue
 
             # Start with the column
@@ -499,6 +500,8 @@ class ColumnCheckPhase(PipelinePhase):
         check_index = 0
 
         for col_name, col_schema in schema.columns.items():
+            if col_name not in current_columns:
+                continue
             for check_spec in col_schema.checks or []:
                 self._reject_reserved_or_duplicate_check(schema, check_masks, col_name, check_spec.name)
                 check_expr = self._resolve_check_expr(registry, col_name, check_spec)
