@@ -168,7 +168,8 @@ class FrameParsingPhase(PipelinePhase):
             PipelineError: If a frame parser is unregistered or fails.
         """
         registry = context.registry
-        lf = context.data
+        input_columns = context.data.collect_schema().names()
+        lf = context.data.drop("__row_index__") if "__row_index__" in input_columns else context.data
 
         for parser_spec in context.schema.frame_parsers:
             try:
@@ -188,7 +189,26 @@ class FrameParsingPhase(PipelinePhase):
                     phase=self.name,
                 ) from e
 
-        context.data = lf
+        output_columns = lf.collect_schema().names()
+        output_column_names = set(output_columns)
+        missing_required = [
+            col_name
+            for col_name, col_schema in context.schema.columns.items()
+            if col_schema.required and col_name not in output_column_names
+        ]
+        if missing_required:
+            raise PipelineError(
+                f"Frame parsers removed required columns: {missing_required}",
+                phase=self.name,
+            )
+
+        _reject_alias_collision(
+            "__row_index__",
+            output_columns,
+            self.name,
+            "row tracking after frame parsing",
+        )
+        context.data = lf.with_row_index("__row_index__")
         return context
 
     def can_skip(self, context: PipelineContext) -> bool:

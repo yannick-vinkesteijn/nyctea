@@ -1589,3 +1589,62 @@ class TestOnFailure:
         data = result.data.collect()
         assert data["age"].to_list() == [None, 5]
         assert data["score"].to_list() == [-1, 5]
+
+
+def test_frame_parser_cannot_remove_required_column(registry):
+    decorators = ValidatorDecorator(registry)
+
+    @decorators.frame_parser(name="drop_required", preserve_columns=False)
+    def drop_required(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.drop("name")
+
+    schema = SchemaModel.from_dict(
+        {
+            "frame_parsers": [{"name": "drop_required"}],
+            "columns": {
+                "id": {"dtype": "Int64"},
+                "name": {"dtype": "Utf8"},
+            },
+        }
+    )
+
+    with pytest.raises(PipelineError, match=r"removed required columns: \['name'\]"):
+        schema.validate(pl.DataFrame({"id": [1], "name": ["Alice"]}), registry)
+
+
+@pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
+def test_frame_parser_preserves_error_tracking(registry, mode):
+    decorators = ValidatorDecorator(registry)
+
+    @decorators.frame_parser(name="select_columns", preserve_columns=False)
+    def select_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
+        assert "__row_index__" not in frame.collect_schema().names()
+        return frame.select("age")
+
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "frame_parsers": [{"name": "select_columns"}],
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "checks": [{"name": "min_value", "args": {"min": 0}}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(
+        pl.DataFrame({"age": [-1, 2], "unused": ["x", "y"]}),
+        registry,
+        error_report_config=ErrorReportConfig(mode=mode),
+    )
+
+    assert result.report.rows_valid == 1
+    if mode == "summary":
+        assert result.errors["count"].item() == 1
+    elif mode == "rows":
+        assert result.errors["row_indices"].to_list() == [[0]]
+    else:
+        assert result.errors["row_index"].to_list() == [0]
