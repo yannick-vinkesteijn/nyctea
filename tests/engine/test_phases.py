@@ -10,6 +10,7 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.phases import (
     COERCION_CHECK,
     NOT_NULL_CHECK,
+    PARSING_CHECK,
     CoercionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
@@ -117,6 +118,9 @@ class TestPublicCheckNameContract:
 
     def test_coercion_check_name_is_frozen(self):
         assert COERCION_CHECK == "coerce"
+
+    def test_parsing_check_name_is_frozen(self):
+        assert PARSING_CHECK == "parse"
 
 
 # ---------------------------------------------------------------------------
@@ -363,27 +367,21 @@ class TestFullPipeline:
     def test_collect_count_bounded(self, simple_schema, registry, collect_calls):
         """#11/#38: guards against silently regaining wasted collects.
 
-        3 today: ColumnCheckPhase._enforce_notnull (its own raise-check collect,
-        still separate -- moving it post-pipeline would change the wrapped
-        PipelineError message shape, tracked as a #38 follow-up rather than done
-        here), _run_aggregates_and_raise (coercion-raise counts, check-raise counts,
-        on_failure=null counts, and the report's own aggregates, merged into one
-        collect by #38), and _build_errors (its own collect, since row/cell modes
-        need the default engine, not the aggregate engine). Update this count
-        deliberately if it changes, don't just raise the bound to make it pass.
+        2 today: _run_aggregates_and_raise (parser/coercion/not-null/check raise
+        counts, on_failure=null counts, and report aggregates) and _build_errors.
+        Update this count deliberately if it changes.
         """
         df = pl.DataFrame({"age": [25, 30, 40], "name": ["Alice", "Bob", "Carol"]})
         simple_schema.validate(df, registry)
 
-        assert len(collect_calls) == 3
+        assert len(collect_calls) == 2
 
     def test_collect_count_bounded_with_coercion(self, registry, collect_calls):
         """Same guard as above, but for the path with coercion's own raise-check active.
 
-        3 today: ColumnCheckPhase._enforce_notnull, _run_aggregates_and_raise (now
-        including coercion-raise counts), and _build_errors. The issue this guards
-        against (#11) specifically called out that this path, not the no-coercion
-        one, is the one most likely to regain a collect.
+        2 today: _run_aggregates_and_raise and _build_errors. The issue this
+        guards against (#11) specifically called out that this path, not the
+        no-coercion one, is the one most likely to regain a collect.
         """
         schema = SchemaModel.from_dict(
             {
@@ -400,7 +398,7 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": ["10", "20", "30"]})
         schema.validate(df, registry)
 
-        assert len(collect_calls) == 3
+        assert len(collect_calls) == 2
 
     def test_small_df_uses_default_engine(self, simple_schema, registry, collect_calls):
         """Below schema.streaming_row_threshold, an eager DataFrame stays on the
@@ -859,6 +857,316 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         values = result.data.collect()["value"].to_list()
         assert values == [10, None, 20]
+
+
+@pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
+@pytest.mark.parametrize("on_failure", ["ignore", "null"])
+def test_parser_introduced_null_is_reported(registry, mode, on_failure):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": on_failure,
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(
+        pl.DataFrame({"age": ["1", "bad", None]}),
+        registry,
+        error_report_config=ErrorReportConfig(mode=mode),
+        lazy=False,
+    )
+
+    assert isinstance(result.data, pl.DataFrame)
+    assert result.data["age"].to_list() == [1, None, None]
+    parse_errors = result.errors.filter(pl.col("check") == PARSING_CHECK)
+    assert parse_errors.height == 1
+    if mode != "cells":
+        assert parse_errors["count"].item() == 1
+    else:
+        assert parse_errors["value"].item() == "bad"
+    assert result.report.rows_processed == 3
+    assert result.report.rows_valid == 2
+    assert result.report.columns["age"].parse_failures == 1
+    assert result.report.columns["age"].coercion_failures == 0
+    assert result.report.columns["age"].check_failures == 0
+    assert result.report.columns["age"].original_null_count == 1
+    assert result.report.columns["age"].final_null_count == 2
+
+
+def test_parser_introduced_null_raises(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                }
+            }
+        }
+    )
+
+    with pytest.raises(PipelineError, match="Parsing failed for column 'age'"):
+        schema.validate(pl.DataFrame({"age": ["1", "bad"]}), registry)
+
+
+def test_parser_introduced_null_precedes_not_null_failure(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": False,
+                    "parsers": [{"name": "to_int"}],
+                }
+            }
+        }
+    )
+
+    with pytest.raises(PipelineError, match="Parsing failed for column 'age'"):
+        schema.validate(pl.DataFrame({"age": ["1", "bad"]}), registry)
+
+
+def test_parser_chain_uses_null_state_before_first_parser(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "strip"}, {"name": "to_int"}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"age": [" 1 ", " invalid "]}), registry, lazy=False)
+
+    assert isinstance(result.data, pl.DataFrame)
+    assert result.data["age"].to_list() == [1, None]
+    assert result.report.columns["age"].parse_failures == 1
+
+
+def test_original_null_count_is_before_frame_parsing(registry):
+    decorators = ValidatorDecorator(registry)
+
+    @decorators.frame_parser(name="drop_nulls", preserve_columns=True, preserve_rows=False)
+    def drop_nulls(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.filter(pl.col("age").is_not_null())
+
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "frame_parsers": [{"name": "drop_nulls"}],
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"age": [None, "1"]}), registry)
+
+    assert result.report.rows_processed == 1
+    assert result.report.columns["age"].original_null_count == 1
+    assert result.report.columns["age"].parse_failures == 0
+
+
+@pytest.mark.parametrize("input_kind", ["eager", "lazy"])
+@pytest.mark.parametrize("output_lazy", [False, True])
+def test_null_provenance_has_eager_lazy_parity(registry, input_kind, output_lazy):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                }
+            },
+        }
+    )
+    data = pl.DataFrame({"age": ["1", "bad", None]})
+    input_data = data if input_kind == "eager" else data.lazy()
+
+    result = schema.validate(input_data, registry, lazy=output_lazy)
+
+    assert result.report.columns["age"].parse_failures == 1
+    assert result.report.columns["age"].original_null_count == 1
+    assert result.report.columns["age"].final_null_count == 2
+
+
+def test_original_null_count_handles_empty_data(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"age": []}, schema={"age": pl.String}), registry)
+
+    assert result.report.rows_processed == 0
+    assert result.report.rows_valid == 0
+    assert result.report.columns["age"].parse_failures == 0
+    assert result.report.columns["age"].original_null_count == 0
+    assert result.report.columns["age"].final_null_count == 0
+
+
+def test_original_null_count_without_column_parsers(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {"age": {"dtype": "Int64", "nullable": True}},
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"age": [1, None]}), registry)
+
+    assert result.report.columns["age"].original_null_count == 1
+    assert result.report.columns["age"].final_null_count == 1
+
+
+def test_original_null_count_uses_resolved_column_name(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "synonyms": ["Age"],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"Age": [1, None]}), registry)
+
+    assert result.report.columns["age"].original_null_count == 1
+
+
+def test_parse_check_name_is_reserved(registry):
+    decorators = ValidatorDecorator(registry)
+
+    @decorators.column_check(name="parse", tags=[])
+    def fake_parse(column: pl.Expr) -> pl.Expr:
+        return column > 0
+
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "checks": [{"name": "parse"}],
+                }
+            },
+        }
+    )
+
+    with pytest.raises(PipelineError, match="reserved"):
+        schema.validate(pl.DataFrame({"age": [1]}), registry)
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ["__pre_parse_null__age", "__pre_parse_value__age", "__parse_ok__age"],
+)
+def test_parser_mask_alias_collision_raises(registry, alias):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                },
+                alias: {"dtype": "Int64", "nullable": True},
+            },
+        }
+    )
+
+    with pytest.raises(PipelineError, match="already contains a column named"):
+        schema.validate(
+            pl.DataFrame({"age": ["1"], alias: [1]}),
+            registry,
+            error_report_config=ErrorReportConfig(mode="cells"),
+        )
+
+
+@pytest.mark.parametrize(
+    "alias",
+    ["__pre_parse_null__age", "__pre_parse_value__age", "__parse_ok__age"],
+)
+def test_parser_mask_alias_collision_with_absent_optional_column_raises(registry, alias):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "parsers": [{"name": "to_int"}],
+                },
+                alias: {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "required": False,
+                },
+            },
+        }
+    )
+
+    with pytest.raises(PipelineError, match="schema already contains a column named"):
+        schema.validate(
+            pl.DataFrame({"age": ["1"]}),
+            registry,
+            error_report_config=ErrorReportConfig(mode="cells"),
+        )
+
+
+def test_parser_failure_and_original_null_are_distinct_on_non_nullable_column(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": False,
+                    "parsers": [{"name": "to_int"}],
+                }
+            },
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"age": ["1", "bad", None]}), registry)
+
+    assert result.errors.filter(pl.col("check") == PARSING_CHECK)["count"].item() == 1
+    assert result.errors.filter(pl.col("check") == NOT_NULL_CHECK)["count"].item() == 2
+    assert result.report.rows_valid == 1
+    assert result.report.columns["age"].parse_failures == 1
+    assert result.report.columns["age"].check_failures == 2
+    assert result.report.columns["age"].original_null_count == 1
 
 
 # ---------------------------------------------------------------------------

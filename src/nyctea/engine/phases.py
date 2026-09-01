@@ -23,28 +23,32 @@ NOT_NULL_CHECK = "not_null"
 COERCION_CHECK = "coerce"
 """Check name reported for a failed dtype cast. Frozen, see test_phases.py."""
 
+PARSING_CHECK = "parse"
+"""Check name reported when a parser turns a non-null value into null."""
 
-def _reject_alias_collision(alias: str, current_columns: list[str], phase: str, what: str) -> None:
-    """Raise if a generated internal column would overwrite a real input column.
+
+def _reject_alias_collision(alias: str, occupied_columns: list[str], phase: str, what: str) -> None:
+    """Raise if a generated internal column would overwrite a declared or input column.
 
     Args:
         alias: Generated internal column name.
-        current_columns: Column names currently present in the data.
+        occupied_columns: Input or schema column names that cannot be overwritten.
         phase: Phase name, for the error.
         what: Human description of what the alias is for.
 
     Raises:
         PipelineError: If the alias collides with an existing column.
     """
-    if alias in current_columns:
+    if alias in occupied_columns:
         raise PipelineError(
-            f"Cannot build {what}: the input data already contains a column named "
+            f"Cannot build {what}: the data or schema already contains a column named "
             f"'{alias}'. Rename it before validating.",
             phase=phase,
         )
 
 
 __all__ = [
+    "PARSING_CHECK",
     "CoercionPhase",
     "ColumnCheckPhase",
     "ColumnParsingPhase",
@@ -135,6 +139,7 @@ class ColumnResolutionPhase(PipelinePhase):
         if mapping:
             context.data = lf.rename(mapping)
 
+        context.original_data = context.data
         return context
 
 
@@ -259,10 +264,39 @@ class ColumnParsingPhase(PipelinePhase):
 
         # Collect all transformations to apply in batch
         transformations: list[pl.Expr] = []
+        parsed_columns: list[str] = []
+        reserved_columns = list(current_columns | set(schema.columns))
+        capture_error_values = (
+            context.error_report_config is not None
+            and context.error_report_config.mode == "cells"
+            and context.error_report_config.include_values
+        )
 
         for col_name, col_schema in schema.columns.items():
             if col_name not in current_columns or not col_schema.parsers:
                 continue
+
+            pre_null_alias = f"__pre_parse_null__{col_name}"
+            parse_ok_alias = f"__parse_ok__{col_name}"
+            _reject_alias_collision(
+                pre_null_alias,
+                reserved_columns,
+                self.name,
+                f"the pre-parser null snapshot for column '{col_name}'",
+            )
+            _reject_alias_collision(
+                parse_ok_alias,
+                reserved_columns,
+                self.name,
+                f"the parser failure mask for column '{col_name}'",
+            )
+            if capture_error_values:
+                _reject_alias_collision(
+                    f"__pre_parse_value__{col_name}",
+                    reserved_columns,
+                    self.name,
+                    f"the pre-parser error value for column '{col_name}'",
+                )
 
             # Start with the column
             expr = pl.col(col_name)
@@ -291,10 +325,36 @@ class ColumnParsingPhase(PipelinePhase):
 
             # Add transformed column to batch
             transformations.append(expr.alias(col_name))
+            parsed_columns.append(col_name)
 
         # Apply all transformations in a single with_columns call
         if transformations:
-            context.data = lf.with_columns(transformations)
+            pre_null_exprs = [
+                pl.col(col_name).is_null().alias(f"__pre_parse_null__{col_name}") for col_name in parsed_columns
+            ]
+            if capture_error_values:
+                pre_null_exprs.extend(
+                    pl.col(col_name).alias(f"__pre_parse_value__{col_name}") for col_name in parsed_columns
+                )
+            context.data = lf.with_columns(pre_null_exprs).with_columns(transformations)
+
+            parse_ok_exprs = [
+                (pl.col(f"__pre_parse_null__{col_name}") | pl.col(col_name).is_not_null()).alias(
+                    f"__parse_ok__{col_name}"
+                )
+                for col_name in parsed_columns
+            ]
+            context.data = context.data.with_columns(parse_ok_exprs)
+            context.internal_columns.update(
+                alias
+                for col_name in parsed_columns
+                for alias in (f"__pre_parse_null__{col_name}", f"__parse_ok__{col_name}")
+            )
+            if capture_error_values:
+                context.internal_columns.update(f"__pre_parse_value__{col_name}" for col_name in parsed_columns)
+            context.check_masks.update(
+                {(col_name, PARSING_CHECK): f"__parse_ok__{col_name}" for col_name in parsed_columns}
+            )
 
         return context
 
@@ -559,8 +619,6 @@ class ColumnCheckPhase(PipelinePhase):
 
         context.check_masks = check_masks
 
-        self._enforce_notnull(context, notnull_aliases)
-
         return context
 
     def _reject_reserved_or_duplicate_check(
@@ -580,7 +638,7 @@ class ColumnCheckPhase(PipelinePhase):
             PipelineError: If the name is reserved for internal tracking, or if the
                 column already has a check registered under the same name.
         """
-        if check_name in {COERCION_CHECK, NOT_NULL_CHECK}:
+        if check_name in {COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK}:
             raise PipelineError(
                 f"Column '{col_name}' has a check named '{check_name}'. The name is "
                 "reserved for built-in failure tracking. Rename the check.",
@@ -658,31 +716,6 @@ class ColumnCheckPhase(PipelinePhase):
                 mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
                 notnull_aliases[col_name] = alias
         return notnull_aliases
-
-    def _enforce_notnull(self, context: PipelineContext, notnull_aliases: dict[str, str]) -> None:
-        """Raise if any nullable=False column contains a null value, unless on_failure='ignore'.
-
-        Args:
-            context: Pipeline context with the not-null mask columns applied.
-            notnull_aliases: Mapping of column name to its not-null mask alias.
-
-        Raises:
-            PipelineError: If a nullable=False column contains a null value and its
-                resolved on_failure behavior is not 'ignore'.
-        """
-        if not notnull_aliases:
-            return
-
-        # Aggregate first: collects a single row, not one boolean per input row.
-        notnull_check = context.data.select(
-            [pl.col(alias).all().alias(alias) for alias in notnull_aliases.values()]
-        ).collect(engine=context.aggregate_engine)
-        for col_name, alias in notnull_aliases.items():
-            if not notnull_check[alias].item() and context.schema.resolve_on_failure(col_name) != "ignore":
-                raise PipelineError(
-                    f"Column '{col_name}' has nullable=False but contains null values.",
-                    phase=self.name,
-                )
 
     def can_skip(self, context: PipelineContext) -> bool:
         """Skip if no checks are defined in schema.

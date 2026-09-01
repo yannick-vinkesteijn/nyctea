@@ -8,7 +8,7 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
-from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK
+from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.exceptions import PipelineError
@@ -153,11 +153,10 @@ class SchemaValidator:
             registry=self.registry,
             error_report_config=error_report_config or ErrorReportConfig(),
             aggregate_engine=aggregate_engine,
+            original_data=lf,
         )
 
-        # Execute pipeline. Phases build the lazy graph without collecting, except
-        # ColumnCheckPhase._enforce_notnull, which still does its own raise-check
-        # collect (tracked separately, see #38 follow-up).
+        # Execute pipeline. Phases build the lazy graph without collecting.
         context = self.pipeline.execute(context)
 
         # Single collect for every aggregate this call needs: on_failure=raise counts
@@ -196,15 +195,16 @@ class SchemaValidator:
     def _check_masks_by_column(self, context: PipelineContext, on_failure: str) -> dict[str, list[str]]:
         """Group check mask aliases by column for columns resolving to the given on_failure.
 
-        Excludes the built-in not-null check, which is already enforced directly in
+        Excludes parser, coercion, and built-in not-null failures because each has
+        separate enforcement and report accounting. The not-null check is enforced directly in
         ``ColumnCheckPhase`` and can never resolve to ``'null'`` (nullable=False is
         required for that check to exist, and the guard in ``resolve_on_failure``
         rewrites ``'null'`` to ``'raise'`` for non-nullable columns; ``'ignore'`` is
         unaffected and can still apply).
 
-        Also excludes the coercion check: it has its own raise path, and a
-        coercion-failed value is already null, so nulling it again here would
-        double-count it in ``nullified_counts``.
+        Parser and coercion failures have their own raise paths. Their failed values
+        are already null, so nulling them again here would double-count them in
+        ``nullified_counts``.
 
         Args:
             context: Pipeline context with populated check_masks.
@@ -216,7 +216,7 @@ class SchemaValidator:
         schema = context.schema
         grouped: dict[str, list[str]] = {}
         for (col_name, check_name), alias in context.check_masks.items():
-            if check_name in (NOT_NULL_CHECK, COERCION_CHECK):
+            if check_name in (NOT_NULL_CHECK, COERCION_CHECK, PARSING_CHECK):
                 continue
             if schema.resolve_on_failure(col_name) != on_failure:
                 continue
@@ -227,6 +227,7 @@ class SchemaValidator:
         self,
         context: PipelineContext,
         coercion_raise_cols: dict[str, str],
+        notnull_raise_cols: dict[str, str],
         check_raise_cols: dict[str, list[str]],
         null_fail_exprs: dict[str, pl.Expr],
     ) -> list[pl.Expr]:
@@ -235,6 +236,7 @@ class SchemaValidator:
         Args:
             context: Pipeline context with check_masks populated.
             coercion_raise_cols: Column name to coercion mask alias, for on_failure=raise columns.
+            notnull_raise_cols: Column name to not-null mask alias, for on_failure=raise columns.
             check_raise_cols: Column name to check mask aliases, for on_failure=raise columns.
             null_fail_exprs: Column name to combined-failure expression, for on_failure=null columns.
 
@@ -245,9 +247,12 @@ class SchemaValidator:
         col_names = context.data.collect_schema().names()
 
         check_masks_by_col: dict[str, list[str]] = {}
+        parsing_alias_by_col: dict[str, str] = {}
         coercion_alias_by_col: dict[str, str] = {}
         for (col_name, check_name), alias in context.check_masks.items():
-            if check_name == COERCION_CHECK:
+            if check_name == PARSING_CHECK:
+                parsing_alias_by_col[col_name] = alias
+            elif check_name == COERCION_CHECK:
                 coercion_alias_by_col[col_name] = alias
             else:
                 check_masks_by_col.setdefault(col_name, []).append(alias)
@@ -256,6 +261,10 @@ class SchemaValidator:
         exprs.extend(
             (~pl.col(alias)).sum().alias(f"__coerce_raise__{col_name}")
             for col_name, alias in coercion_raise_cols.items()
+        )
+        exprs.extend(
+            (~pl.col(alias)).sum().alias(f"__notnull_raise__{col_name}")
+            for col_name, alias in notnull_raise_cols.items()
         )
         exprs.extend(
             pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__raise_fail__{col_name}")
@@ -269,6 +278,10 @@ class SchemaValidator:
             exprs.append(
                 pl.sum_horizontal([(~pl.col(alias)).sum() for alias in aliases]).alias(f"__check_fail__{col_name}")
             )
+        exprs.extend(
+            (~pl.col(alias)).sum().alias(f"__parsing_fail__{col_name}")
+            for col_name, alias in parsing_alias_by_col.items()
+        )
         exprs.extend(
             (~pl.col(alias)).sum().alias(f"__coercion_fail__{col_name}")
             for col_name, alias in coercion_alias_by_col.items()
@@ -301,9 +314,8 @@ class SchemaValidator:
         stays a separate collect: its row/cell modes need the default engine, not the
         aggregate engine (see ``_collect_aggregate``'s docstring).
 
-        Coercion-raise and check-raise are checked in that order after the single
-        collect, matching the previous two-collect call order, so raise precedence
-        between them is unchanged.
+        Parser-, coercion-, and check-raise failures are checked in pipeline order
+        after the single collect.
 
         Args:
             context: Pipeline context with check_masks populated.
@@ -314,15 +326,25 @@ class SchemaValidator:
             without a second collect.
 
         Raises:
-            PipelineError: If any on_failure=raise column has coercion-introduced
-                nulls or a failing check.
+            PipelineError: If any on_failure=raise column has parser- or
+                coercion-introduced nulls, or a failing check.
         """
         schema = context.schema
 
+        parsing_raise_cols = {
+            col_name: alias
+            for (col_name, check_name), alias in context.check_masks.items()
+            if check_name == PARSING_CHECK and schema.resolve_on_failure(col_name) == "raise"
+        }
         coercion_raise_cols = {
             col_name: alias
             for (col_name, check_name), alias in context.check_masks.items()
             if check_name == COERCION_CHECK and schema.resolve_on_failure(col_name) == "raise"
+        }
+        notnull_raise_cols = {
+            col_name: alias
+            for (col_name, check_name), alias in context.check_masks.items()
+            if check_name == NOT_NULL_CHECK and schema.resolve_on_failure(col_name) == "raise"
         }
         check_raise_cols = self._check_masks_by_column(context, "raise")
         null_cols = self._check_masks_by_column(context, "null")
@@ -331,9 +353,32 @@ class SchemaValidator:
             for col_name, aliases in null_cols.items()
         }
 
-        exprs = self._build_aggregate_exprs(context, coercion_raise_cols, check_raise_cols, null_fail_exprs)
-        row = _collect_aggregate(context.data.select(exprs), context.aggregate_engine)
+        exprs = self._build_aggregate_exprs(
+            context,
+            coercion_raise_cols,
+            notnull_raise_cols,
+            check_raise_cols,
+            null_fail_exprs,
+        )
+        aggregates = context.data.select(exprs)
+        original_data = context.original_data if context.original_data is not None else context.data
+        original_columns = set(original_data.collect_schema().names())
+        original_null_exprs = [
+            pl.col(col_name).is_null().sum().alias(f"__original_null__{col_name}")
+            for col_name in schema.columns
+            if col_name in original_columns
+        ]
+        if original_null_exprs:
+            aggregates = aggregates.join(original_data.select(original_null_exprs), how="cross")
+        row = _collect_aggregate(aggregates, context.aggregate_engine)
 
+        for col_name in parsing_raise_cols:
+            parse_failures = int(row[f"__parsing_fail__{col_name}"].item())
+            if parse_failures > 0:
+                raise PipelineError(
+                    f"Parsing failed for column '{col_name}': {parse_failures} non-null value(s) became null.",
+                    phase="column_parsing",
+                )
         for col_name in coercion_raise_cols:
             new_nulls = int(row[f"__coerce_raise__{col_name}"].item())
             if new_nulls > 0:
@@ -342,6 +387,13 @@ class SchemaValidator:
                     f"{new_nulls} value(s) could not be cast to "
                     f"{schema.columns[col_name].dtype}",
                     phase="coercion",
+                )
+        for col_name in notnull_raise_cols:
+            null_count = int(row[f"__notnull_raise__{col_name}"].item())
+            if null_count > 0:
+                raise PipelineError(
+                    f"Column '{col_name}' has nullable=False but contains null values.",
+                    phase="column_checks",
                 )
         for col_name in check_raise_cols:
             fail_count = int(row[f"__raise_fail__{col_name}"].item())
@@ -388,7 +440,8 @@ class SchemaValidator:
     def _build_report(self, context: PipelineContext, row: pl.DataFrame) -> ValidationReport:
         """Build the validation report from the aggregate row already collected.
 
-        Coercion failures get their own column stat but still count toward rows_failed.
+        Parser and coercion failures get their own column stats but still count
+        toward rows_failed.
 
         Args:
             context: Pipeline context with check_masks and nullified_counts populated.
@@ -407,13 +460,17 @@ class SchemaValidator:
         columns: dict[str, ColumnValidationStats] = {}
         for col_name in report_cols:
             check_fail_alias = f"__check_fail__{col_name}"
+            parsing_fail_alias = f"__parsing_fail__{col_name}"
             coercion_fail_alias = f"__coercion_fail__{col_name}"
+            original_null_alias = f"__original_null__{col_name}"
             columns[col_name] = ColumnValidationStats(
                 column_name=col_name,
+                parse_failures=int(row[parsing_fail_alias].item()) if parsing_fail_alias in row.columns else 0,
                 coercion_failures=int(row[coercion_fail_alias].item()) if coercion_fail_alias in row.columns else 0,
                 check_failures=int(row[check_fail_alias].item()) if check_fail_alias in row.columns else 0,
                 nullified=context.nullified_counts.get(col_name, 0),
                 final_null_count=int(row[f"__final_null__{col_name}"].item()),
+                original_null_count=int(row[original_null_alias].item()) if original_null_alias in row.columns else 0,
             )
 
         return ValidationReport(
@@ -530,14 +587,15 @@ class SchemaValidator:
     def _cells_exprs(check_masks: dict[tuple[str, str], str], config: ErrorReportConfig) -> list[pl.Expr]:
         """Build the per-alias limited indices (and optional values) list expressions."""
         exprs: list[pl.Expr] = []
-        for (col_name, _check_name), alias in check_masks.items():
+        for (col_name, check_name), alias in check_masks.items():
             failed = ~pl.col(alias)
             indices_expr = pl.col("__row_index__").filter(failed).cast(pl.UInt32)
             if config.limit is not None:
                 indices_expr = indices_expr.head(config.limit)
             exprs.append(indices_expr.implode().alias(f"__indices__{alias}"))
             if config.include_values:
-                values_expr = pl.col(col_name).filter(failed).cast(pl.String)
+                value_column = f"__pre_parse_value__{col_name}" if check_name == PARSING_CHECK else col_name
+                values_expr = pl.col(value_column).filter(failed).cast(pl.String)
                 if config.limit is not None:
                     values_expr = values_expr.head(config.limit)
                 exprs.append(values_expr.implode().alias(f"__values__{alias}"))

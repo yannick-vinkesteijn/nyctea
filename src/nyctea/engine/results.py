@@ -52,7 +52,10 @@ class ColumnValidationStats(BaseModel):
     check_failures: int = 0
     nullified: int = Field(0, description="Values set to null due to failures")
     final_null_count: int = Field(0, description="Total nulls in output")
-    original_null_count: int = Field(0, description="Nulls before validation")
+    original_null_count: int = Field(
+        0,
+        description="Nulls after column resolution and before frame and column transformations",
+    )
 
 
 class ValidationReport(BaseModel):
@@ -75,8 +78,15 @@ class ValidationReport(BaseModel):
             "Column Issues:",
         ]
         for col_name, stats in self.columns.items():
-            if stats.nullified > 0 or stats.check_failures > 0 or stats.coercion_failures > 0:
+            if (
+                stats.nullified > 0
+                or stats.parse_failures > 0
+                or stats.check_failures > 0
+                or stats.coercion_failures > 0
+            ):
                 lines.append(f"  {col_name}:")
+                if stats.parse_failures:
+                    lines.append(f"    Parse failures: {stats.parse_failures}")
                 if stats.coercion_failures:
                     lines.append(f"    Coercion failures: {stats.coercion_failures}")
                 if stats.check_failures:
