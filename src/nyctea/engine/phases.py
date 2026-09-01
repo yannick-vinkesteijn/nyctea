@@ -190,10 +190,11 @@ class FrameParsingPhase(PipelinePhase):
                 ) from e
 
         output_columns = lf.collect_schema().names()
+        output_column_names = set(output_columns)
         missing_required = [
             col_name
             for col_name, col_schema in context.schema.columns.items()
-            if col_schema.required and col_name not in output_columns
+            if col_schema.required and col_name not in output_column_names
         ]
         if missing_required:
             raise PipelineError(

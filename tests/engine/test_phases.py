@@ -1645,6 +1645,6 @@ def test_frame_parser_preserves_error_tracking(registry, mode):
     if mode == "summary":
         assert result.errors["count"].item() == 1
     elif mode == "rows":
-        assert result.errors["row_indices"].item().to_list() == [0]
+        assert result.errors["row_indices"].to_list() == [[0]]
     else:
         assert result.errors["row_index"].to_list() == [0]
