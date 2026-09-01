@@ -61,9 +61,10 @@
 
 ## Related Issues
 
-<!-- Link to related issues using #issue_number -->
+<!-- Link the branch through the issue's Development section before opening the PR. -->
+<!-- Reference the issue here for context only. Do not use Closes, Fixes, or Resolves. -->
 
-Closes #
+Related: #
 
 ## Additional Notes
 
