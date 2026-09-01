@@ -300,10 +300,10 @@ class TestCollectEngineSelection:
 
 
 def test_collect_count_with_raise_and_null_columns(registry, collect_calls):
-    """_enforce_coercion_raise, _enforce_check_raise, _apply_check_null's count, and
-    _build_report must share a single aggregate collect. _build_errors keeps its own
-    separate collect, since row/cell modes need the default engine, not the aggregate
-    engine (see TestCollectEngineSelection).
+    """_run_aggregates_and_raise must perform a single aggregate collect covering
+    on_failure=raise counts, on_failure=null counts, and report aggregates. _build_errors
+    keeps its own collect, since row/cell modes need the default engine (see
+    TestCollectEngineSelection).
     """
     schema = SchemaModel.from_dict(
         {
