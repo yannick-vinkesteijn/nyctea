@@ -8,7 +8,7 @@ from nyctea.validators.column import ColumnParser
 from nyctea.validators.registry import Registry, ValidatorRegistry
 
 
-class TestParser(ColumnParser):
+class SampleParser(ColumnParser):
     """Test parser."""
 
     def __init__(self, name="test"):
@@ -32,7 +32,7 @@ def test_plugin_registry_creation():
 def test_plugin_registry_register():
     """Test registering a validator."""
     registry = ValidatorRegistry(ColumnParser)
-    validator = TestParser()
+    validator = SampleParser()
 
     registry.register(validator)
     assert len(registry) == 1
@@ -42,7 +42,7 @@ def test_plugin_registry_register():
 def test_plugin_registry_get():
     """Test getting a validator by name."""
     registry = ValidatorRegistry(ColumnParser)
-    validator = TestParser()
+    validator = SampleParser()
     registry.register(validator)
 
     retrieved = registry.get("test")
@@ -60,8 +60,8 @@ def test_plugin_registry_get_nonexistent():
 def test_plugin_registry_collision_detection():
     """Test that duplicate names are rejected."""
     registry = ValidatorRegistry(ColumnParser)
-    validator1 = TestParser(name="duplicate")
-    validator2 = TestParser(name="duplicate")
+    validator1 = SampleParser(name="duplicate")
+    validator2 = SampleParser(name="duplicate")
 
     registry.register(validator1)
 
@@ -91,9 +91,9 @@ def test_plugin_registry_type_validation():
 def test_plugin_registry_list_names():
     """Test listing validator names."""
     registry = ValidatorRegistry(ColumnParser)
-    registry.register(TestParser(name="a"))
-    registry.register(TestParser(name="c"))
-    registry.register(TestParser(name="b"))
+    registry.register(SampleParser(name="a"))
+    registry.register(SampleParser(name="c"))
+    registry.register(SampleParser(name="b"))
 
     names = registry.list_names()
     assert names == ["a", "b", "c"]  # Should be sorted
@@ -102,8 +102,8 @@ def test_plugin_registry_list_names():
 def test_plugin_registry_list_all():
     """Test listing all validators."""
     registry = ValidatorRegistry(ColumnParser)
-    p1 = TestParser(name="one")
-    p2 = TestParser(name="two")
+    p1 = SampleParser(name="one")
+    p2 = SampleParser(name="two")
 
     registry.register(p1)
     registry.register(p2)
@@ -167,7 +167,7 @@ def test_master_registry_get_counts():
     assert counts["frame_checks"] == 0
 
     # Register a parser
-    registry.register_column_parser(TestParser())
+    registry.register_column_parser(SampleParser())
     counts = registry.get_validator_counts()
     assert counts["column_parsers"] == 1
 

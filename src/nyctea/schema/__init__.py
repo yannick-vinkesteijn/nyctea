@@ -1,6 +1,5 @@
-"""Schema models and loaders."""
+"""Schema models."""
 
-from nyctea.schema.loader import SchemaLoader
 from nyctea.schema.model import (
     AggregateEngine,
     Check,
@@ -20,6 +19,5 @@ __all__ = [
     "FrameParser",
     "OnFailureBehavior",
     "Parser",
-    "SchemaLoader",
     "SchemaModel",
 ]

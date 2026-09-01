@@ -19,63 +19,8 @@ from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.schema.model import SchemaModel
 
 __all__ = [
-    "create_minimal_pipeline",
     "create_pipeline_from_schema",
-    "create_standard_pipeline",
 ]
-
-
-def create_minimal_pipeline(
-    observers: Sequence[PipelineObserver] | None = None,
-) -> ValidationPipeline:
-    """Create a minimal validation pipeline.
-
-    This pipeline includes only the essential phases:
-    - Column resolution
-    - Column parsing
-    - Column checks
-
-    Args:
-        observers: Optional pipeline observers.
-
-    Returns:
-        Configured validation pipeline.
-
-    Example:
-        >>> pipeline = create_minimal_pipeline()
-        >>> result = pipeline.execute(context)
-    """
-    phases = [
-        ColumnResolutionPhase(),
-        ColumnParsingPhase(),
-        CoercionPhase(),
-        ColumnCheckPhase(),
-    ]
-
-    return ValidationPipeline(phases=phases, observers=observers)
-
-
-def create_standard_pipeline(
-    observers: Sequence[PipelineObserver] | None = None,
-) -> ValidationPipeline:
-    """Create a standard validation pipeline.
-
-    For now, this is the same as minimal. In the full implementation,
-    this would include additional phases like coercion, error reporting, etc.
-
-    Args:
-        observers: Optional pipeline observers.
-
-    Returns:
-        Configured validation pipeline.
-
-    Example:
-        >>> pipeline = create_standard_pipeline()
-        >>> result = pipeline.execute(context)
-    """
-    # For now, standard = minimal
-    # TODO: Add error reporting, nullification phases  # noqa: FIX002
-    return create_minimal_pipeline(observers=observers)
 
 
 def create_pipeline_from_schema(
