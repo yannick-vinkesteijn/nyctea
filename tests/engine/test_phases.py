@@ -686,8 +686,8 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="reserved"):
             schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
 
-    def test_not_null_check_name_allowed_on_nullable_column(self, registry):
-        """The reservation only applies where the built-in constraint is generated."""
+    def test_not_null_check_name_is_reserved_on_nullable_column(self, registry):
+        """The name stays reserved because downstream consumers always treat it as internal."""
         decorators = ValidatorDecorator(registry)
 
         @decorators.column_check(name="not_null", tags=[])
@@ -697,8 +697,8 @@ class TestFullPipeline:
         schema = SchemaModel.from_dict(
             {"columns": {"age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "not_null"}]}}}
         )
-        result = schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
-        assert result.errors.filter(pl.col("check") == "not_null")["count"].item() == 1
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
 
     @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
     def test_not_null_reported_in_every_error_mode(self, registry, mode):
@@ -1128,6 +1128,25 @@ class TestNullification:
         schema = SchemaModel.from_dict(
             {
                 "coerce": True,
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "coerce"}]},
+                },
+            }
+        )
+        with pytest.raises(PipelineError, match="reserved"):
+            schema.validate(pl.DataFrame({"age": [1, 2]}), registry)
+
+    def test_coercion_check_name_is_reserved_when_coercion_is_disabled(self, registry):
+        """The name stays reserved because downstream consumers always treat it as internal."""
+        decorators = ValidatorDecorator(registry)
+
+        @decorators.column_check(name="coerce", tags=[])
+        def fake_coerce(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        schema = SchemaModel.from_dict(
+            {
+                "coerce": False,
                 "columns": {
                     "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "coerce"}]},
                 },
