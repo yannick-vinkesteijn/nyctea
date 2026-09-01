@@ -503,7 +503,7 @@ class ColumnCheckPhase(PipelinePhase):
             if col_name not in current_columns:
                 continue
             for check_spec in col_schema.checks or []:
-                self._reject_reserved_or_duplicate_check(schema, check_masks, col_name, check_spec.name)
+                self._reject_reserved_or_duplicate_check(check_masks, col_name, check_spec.name)
                 check_expr = self._resolve_check_expr(registry, col_name, check_spec)
 
                 # Index, not "{col}__{check}": the latter is ambiguous, since a column named
@@ -545,7 +545,6 @@ class ColumnCheckPhase(PipelinePhase):
 
     def _reject_reserved_or_duplicate_check(
         self,
-        schema: SchemaModel,
         check_masks: dict[tuple[str, str], str],
         col_name: str,
         check_name: str,
@@ -553,20 +552,18 @@ class ColumnCheckPhase(PipelinePhase):
         """Reject check names that would collide in the (column, check) mask key.
 
         Args:
-            schema: The schema being validated.
             check_masks: Masks registered so far, keyed on (column, check name).
             col_name: Column the check is declared on.
             check_name: Declared name of the check.
 
         Raises:
-            PipelineError: If the name is reserved for coercion tracking, or if the
+            PipelineError: If the name is reserved for internal tracking, or if the
                 column already has a check registered under the same name.
         """
-        if check_name == COERCION_CHECK and schema.resolve_coerce(col_name):
+        if check_name in {COERCION_CHECK, NOT_NULL_CHECK}:
             raise PipelineError(
-                f"Column '{col_name}' has coercion enabled and also has a check named "
-                f"'{COERCION_CHECK}'. The name is reserved for the built-in coercion "
-                f"failure tracking. Rename the check.",
+                f"Column '{col_name}' has a check named '{check_name}'. The name is "
+                "reserved for built-in failure tracking. Rename the check.",
                 phase=self.name,
             )
 
