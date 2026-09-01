@@ -155,22 +155,26 @@ class SchemaValidator:
             aggregate_engine=aggregate_engine,
         )
 
-        # Execute pipeline (fully lazy — no collects inside phases)
+        # Execute pipeline. Phases build the lazy graph without collecting, except
+        # ColumnCheckPhase._enforce_notnull, which still does its own raise-check
+        # collect (tracked separately, see #38 follow-up).
         context = self.pipeline.execute(context)
 
-        # Enforce on_failure=raise (targeted collect of counts only)
-        self._enforce_coercion_raise(context)
-        self._enforce_check_raise(context)
+        # Single collect for every aggregate this call needs: on_failure=raise counts
+        # (coercion and check), on_failure=null fail counts, and the report's own
+        # aggregates. Raises PipelineError here if any on_failure=raise column failed.
+        row, null_fail_exprs = self._run_aggregates_and_raise(context)
 
         # Build errors before nulling failures, so the report reflects the
         # original failing values (targeted collect of mask + relevant columns only)
         errors = self._build_errors(context)
 
-        # Apply on_failure=null: null out values that failed a check
-        self._apply_check_null(context)
+        # Apply on_failure=null: null out values that failed a check (no collect,
+        # reuses the counts already collected above)
+        self._apply_check_null(context, row, null_fail_exprs)
 
-        # Build report (targeted collect of row count only)
-        report = self._build_report(context)
+        # Build report from the row already collected above
+        report = self._build_report(context, row)
 
         # Strip only the helper columns this run generated. Prefix matching would also
         # drop a legitimate user column that happens to start with one of the prefixes.
@@ -188,43 +192,6 @@ class SchemaValidator:
             errors=errors,
             report=report,
         )
-
-    def _enforce_coercion_raise(self, context: PipelineContext) -> None:
-        """Raise PipelineError if on_failure=raise columns gained nulls from coercion.
-
-        Uses a targeted collect of only the failure counts (1-row aggregation), not
-        the full data.
-
-        Args:
-            context: Pipeline context with check_masks populated (CoercionPhase
-                registers one coercion mask per cast column).
-
-        Raises:
-            PipelineError: If any on_failure=raise column has coercion-introduced nulls.
-        """
-        schema = context.schema
-
-        raise_cols = {
-            col_name: alias
-            for (col_name, check_name), alias in context.check_masks.items()
-            if check_name == COERCION_CHECK and schema.resolve_on_failure(col_name) == "raise"
-        }
-        if not raise_cols:
-            return
-
-        count_exprs = [
-            (~pl.col(alias)).sum().alias(f"__new_nulls__{col_name}") for col_name, alias in raise_cols.items()
-        ]
-        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
-        for col_name in raise_cols:
-            new_nulls = int(counts[f"__new_nulls__{col_name}"].item())
-            if new_nulls > 0:
-                raise PipelineError(
-                    f"Coercion failed for column '{col_name}': "
-                    f"{new_nulls} value(s) could not be cast to "
-                    f"{schema.columns[col_name].dtype}",
-                    phase="coercion",
-                )
 
     def _check_masks_by_column(self, context: PipelineContext, on_failure: str) -> dict[str, list[str]]:
         """Group check mask aliases by column for columns resolving to the given on_failure.
@@ -256,89 +223,26 @@ class SchemaValidator:
             grouped.setdefault(col_name, []).append(alias)
         return grouped
 
-    def _enforce_check_raise(self, context: PipelineContext) -> None:
-        """Raise PipelineError if any on_failure=raise column failed a check.
-
-        Uses a targeted collect of only the per-column failure counts (1-row
-        aggregation), not the full data.
+    def _build_aggregate_exprs(
+        self,
+        context: PipelineContext,
+        coercion_raise_cols: dict[str, str],
+        check_raise_cols: dict[str, list[str]],
+        null_fail_exprs: dict[str, pl.Expr],
+    ) -> list[pl.Expr]:
+        """Build every aggregate expression for ``_run_aggregates_and_raise``'s single collect.
 
         Args:
             context: Pipeline context with check_masks populated.
-
-        Raises:
-            PipelineError: If any on_failure=raise column has a failing check.
-        """
-        raise_cols = self._check_masks_by_column(context, "raise")
-        if not raise_cols:
-            return
-
-        count_exprs = [
-            pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__check_fail__{col_name}")
-            for col_name, aliases in raise_cols.items()
-        ]
-        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
-        for col_name in raise_cols:
-            fail_count = int(counts[f"__check_fail__{col_name}"].item())
-            if fail_count > 0:
-                raise PipelineError(
-                    f"Check failed for column '{col_name}': {fail_count} value(s) failed "
-                    f"validation and on_failure is 'raise'.",
-                    phase="column_checks",
-                )
-
-    def _apply_check_null(self, context: PipelineContext) -> None:
-        """Null out values that failed a check on an on_failure=null column.
-
-        A value is nulled if any of its column's checks failed. Runs after
-        ``_build_errors`` so the error report still reflects the original
-        failing values.
-
-        Args:
-            context: Pipeline context with check_masks populated. Mutates
-                ``context.data`` and ``context.nullified_counts`` in place.
-        """
-        null_cols = self._check_masks_by_column(context, "null")
-        if not null_cols:
-            return
-
-        fail_exprs = {
-            col_name: pl.any_horizontal([~pl.col(alias) for alias in aliases])
-            for col_name, aliases in null_cols.items()
-        }
-        counts = _collect_aggregate(
-            context.data.select(
-                [expr.sum().alias(f"__check_fail__{col_name}") for col_name, expr in fail_exprs.items()]
-            ),
-            context.aggregate_engine,
-        )
-        for col_name in null_cols:
-            context.nullified_counts[col_name] = context.nullified_counts.get(col_name, 0) + int(
-                counts[f"__check_fail__{col_name}"].item()
-            )
-
-        null_exprs = [
-            pl.when(fail_expr).then(None).otherwise(pl.col(col_name)).alias(col_name)
-            for col_name, fail_expr in fail_exprs.items()
-        ]
-        context.data = context.data.with_columns(null_exprs)
-
-    def _build_report(self, context: PipelineContext) -> ValidationReport:
-        """Build the validation report from the same check masks used by ``_build_errors``.
-
-        Coercion failures get their own column stat but still count toward rows_failed.
-
-        Uses a single targeted collect of per-column/per-row aggregations, never the
-        full data.
-
-        Args:
-            context: Pipeline context with check_masks and nullified_counts populated.
+            coercion_raise_cols: Column name to coercion mask alias, for on_failure=raise columns.
+            check_raise_cols: Column name to check mask aliases, for on_failure=raise columns.
+            null_fail_exprs: Column name to combined-failure expression, for on_failure=null columns.
 
         Returns:
-            ValidationReport with row counts and per-column statistics.
+            List of aliased aggregate expressions to select in one pass.
         """
         schema = context.schema
-        lf = context.data
-        col_names = lf.collect_schema().names()
+        col_names = context.data.collect_schema().names()
 
         check_masks_by_col: dict[str, list[str]] = {}
         coercion_alias_by_col: dict[str, str] = {}
@@ -349,7 +253,15 @@ class SchemaValidator:
                 check_masks_by_col.setdefault(col_name, []).append(alias)
 
         exprs: list[pl.Expr] = [pl.len().alias("__total__")]
-
+        exprs.extend(
+            (~pl.col(alias)).sum().alias(f"__coerce_raise__{col_name}")
+            for col_name, alias in coercion_raise_cols.items()
+        )
+        exprs.extend(
+            pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__raise_fail__{col_name}")
+            for col_name, aliases in check_raise_cols.items()
+        )
+        exprs.extend(fail_expr.sum().alias(f"__nullify__{col_name}") for col_name, fail_expr in null_fail_exprs.items())
         for col_name, aliases in check_masks_by_col.items():
             # Sum of per-check failure counts, not distinct failing rows, so this
             # matches the totals in `errors` for the same column: a row failing two
@@ -361,15 +273,133 @@ class SchemaValidator:
             (~pl.col(alias)).sum().alias(f"__coercion_fail__{col_name}")
             for col_name, alias in coercion_alias_by_col.items()
         )
-
         if context.check_masks:
             all_aliases = list(context.check_masks.values())
             exprs.append(pl.any_horizontal([~pl.col(alias) for alias in all_aliases]).sum().alias("__rows_failed__"))
 
         report_cols = [c for c in schema.columns if c in col_names]
-        exprs.extend(pl.col(col_name).is_null().sum().alias(f"__final_null__{col_name}") for col_name in report_cols)
+        for col_name in report_cols:
+            # Reflects the null count *after* nullification, without needing the
+            # mutation to have happened yet: replicate the same when/then the
+            # mutation will apply, rather than adding pre-null and nullified counts
+            # (which would double-count a value that was already null and also
+            # mask-failed).
+            null_expr = pl.col(col_name)
+            if col_name in null_fail_exprs:
+                null_expr = pl.when(null_fail_exprs[col_name]).then(None).otherwise(null_expr)
+            exprs.append(null_expr.is_null().sum().alias(f"__final_null__{col_name}"))
 
-        row = _collect_aggregate(lf.select(exprs), context.aggregate_engine)
+        return exprs
+
+    def _run_aggregates_and_raise(self, context: PipelineContext) -> tuple[pl.DataFrame, dict[str, pl.Expr]]:
+        """Collect every non-row-level aggregate this validate() call needs in one pass.
+
+        Combines what were previously four separate collects -- coercion-raise counts,
+        check-raise counts, on_failure=null fail counts, and the report's own
+        aggregates -- into a single ``select()`` on the aggregate engine, since none of
+        them need row-level data and all run against the same lazy graph. ``_build_errors``
+        stays a separate collect: its row/cell modes need the default engine, not the
+        aggregate engine (see ``_collect_aggregate``'s docstring).
+
+        Coercion-raise and check-raise are checked in that order after the single
+        collect, matching the previous two-collect call order, so raise precedence
+        between them is unchanged.
+
+        Args:
+            context: Pipeline context with check_masks populated.
+
+        Returns:
+            Tuple of the collected aggregate row and the on_failure=null fail
+            expressions, needed by the caller to apply nullification afterward
+            without a second collect.
+
+        Raises:
+            PipelineError: If any on_failure=raise column has coercion-introduced
+                nulls or a failing check.
+        """
+        schema = context.schema
+
+        coercion_raise_cols = {
+            col_name: alias
+            for (col_name, check_name), alias in context.check_masks.items()
+            if check_name == COERCION_CHECK and schema.resolve_on_failure(col_name) == "raise"
+        }
+        check_raise_cols = self._check_masks_by_column(context, "raise")
+        null_cols = self._check_masks_by_column(context, "null")
+        null_fail_exprs = {
+            col_name: pl.any_horizontal([~pl.col(alias) for alias in aliases])
+            for col_name, aliases in null_cols.items()
+        }
+
+        exprs = self._build_aggregate_exprs(context, coercion_raise_cols, check_raise_cols, null_fail_exprs)
+        row = _collect_aggregate(context.data.select(exprs), context.aggregate_engine)
+
+        for col_name in coercion_raise_cols:
+            new_nulls = int(row[f"__coerce_raise__{col_name}"].item())
+            if new_nulls > 0:
+                raise PipelineError(
+                    f"Coercion failed for column '{col_name}': "
+                    f"{new_nulls} value(s) could not be cast to "
+                    f"{schema.columns[col_name].dtype}",
+                    phase="coercion",
+                )
+        for col_name in check_raise_cols:
+            fail_count = int(row[f"__raise_fail__{col_name}"].item())
+            if fail_count > 0:
+                raise PipelineError(
+                    f"Check failed for column '{col_name}': {fail_count} value(s) failed "
+                    f"validation and on_failure is 'raise'.",
+                    phase="column_checks",
+                )
+
+        return row, null_fail_exprs
+
+    def _apply_check_null(
+        self, context: PipelineContext, row: pl.DataFrame, null_fail_exprs: dict[str, pl.Expr]
+    ) -> None:
+        """Null out values that failed a check on an on_failure=null column.
+
+        Uses the nullify counts already collected by ``_run_aggregates_and_raise``;
+        applying the ``.with_columns()`` mutation itself stays fully lazy, no collect.
+        Runs after ``_build_errors`` so the error report still reflects the original
+        failing values.
+
+        Args:
+            context: Pipeline context. Mutates ``context.data`` and
+                ``context.nullified_counts`` in place.
+            row: The aggregate row from ``_run_aggregates_and_raise``.
+            null_fail_exprs: Per-column on_failure=null fail expressions, from
+                ``_run_aggregates_and_raise``.
+        """
+        if not null_fail_exprs:
+            return
+
+        for col_name in null_fail_exprs:
+            context.nullified_counts[col_name] = context.nullified_counts.get(col_name, 0) + int(
+                row[f"__nullify__{col_name}"].item()
+            )
+
+        null_exprs = [
+            pl.when(fail_expr).then(None).otherwise(pl.col(col_name)).alias(col_name)
+            for col_name, fail_expr in null_fail_exprs.items()
+        ]
+        context.data = context.data.with_columns(null_exprs)
+
+    def _build_report(self, context: PipelineContext, row: pl.DataFrame) -> ValidationReport:
+        """Build the validation report from the aggregate row already collected.
+
+        Coercion failures get their own column stat but still count toward rows_failed.
+
+        Args:
+            context: Pipeline context with check_masks and nullified_counts populated.
+            row: The aggregate row from ``_run_aggregates_and_raise``.
+
+        Returns:
+            ValidationReport with row counts and per-column statistics.
+        """
+        schema = context.schema
+        col_names = context.data.collect_schema().names()
+        report_cols = [c for c in schema.columns if c in col_names]
 
         total = int(row["__total__"].item())
         rows_failed = int(row["__rows_failed__"].item()) if "__rows_failed__" in row.columns else 0

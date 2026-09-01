@@ -295,6 +295,59 @@ class TestCollectEngineSelection:
 
 
 # ---------------------------------------------------------------------------
+# Collect count regression (#38)
+# ---------------------------------------------------------------------------
+
+
+def test_collect_count_with_raise_and_null_columns(registry, collect_calls):
+    """_run_aggregates_and_raise must perform a single aggregate collect covering
+    on_failure=raise counts, on_failure=null counts, and report aggregates. _build_errors
+    keeps its own collect, since row/cell modes need the default engine (see
+    TestCollectEngineSelection).
+    """
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "on_failure": "null",
+                    "checks": [{"name": "min_value", "args": {"min": 0}}],
+                },
+                "score": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "on_failure": "raise",
+                    "checks": [{"name": "min_value", "args": {"min": 0}}],
+                },
+            }
+        }
+    )
+    df = pl.DataFrame({"age": [1, -1], "score": [1, 2]})
+    schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="summary"))
+    assert len(collect_calls) == 2
+
+
+def test_collect_count_minimal_schema(registry, collect_calls):
+    """No raise/null columns: only _build_errors and _build_report should collect."""
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "age": {
+                    "dtype": "Int64",
+                    "nullable": True,
+                    "on_failure": "ignore",
+                    "checks": [{"name": "min_value", "args": {"min": 0}}],
+                }
+            }
+        }
+    )
+    df = pl.DataFrame({"age": [1, -1]})
+    schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="summary"))
+    assert len(collect_calls) == 2
+
+
+# ---------------------------------------------------------------------------
 # Full pipeline integration
 # ---------------------------------------------------------------------------
 
@@ -308,24 +361,29 @@ class TestFullPipeline:
         assert len(result.errors) == 0
 
     def test_collect_count_bounded(self, simple_schema, registry, collect_calls):
-        """#11: guards against silently regaining wasted collects.
+        """#11/#38: guards against silently regaining wasted collects.
 
-        4 today: _enforce_notnull, _enforce_check_raise, _build_errors, _build_report.
-        Expected to drop once #38 merges these into one pass -- update this count
-        deliberately when that lands, don't just raise the bound to make it pass.
+        3 today: ColumnCheckPhase._enforce_notnull (its own raise-check collect,
+        still separate -- moving it post-pipeline would change the wrapped
+        PipelineError message shape, tracked as a #38 follow-up rather than done
+        here), _run_aggregates_and_raise (coercion-raise counts, check-raise counts,
+        on_failure=null counts, and the report's own aggregates, merged into one
+        collect by #38), and _build_errors (its own collect, since row/cell modes
+        need the default engine, not the aggregate engine). Update this count
+        deliberately if it changes, don't just raise the bound to make it pass.
         """
         df = pl.DataFrame({"age": [25, 30, 40], "name": ["Alice", "Bob", "Carol"]})
         simple_schema.validate(df, registry)
 
-        assert len(collect_calls) == 4
+        assert len(collect_calls) == 3
 
     def test_collect_count_bounded_with_coercion(self, registry, collect_calls):
         """Same guard as above, but for the path with coercion's own raise-check active.
 
-        5 today: _enforce_notnull, _enforce_coercion_raise, _enforce_check_raise,
-        _build_errors, _build_report. The issue this guards against (#11) specifically
-        called out that this path, not the no-coercion one, is the one most likely to
-        regain a collect.
+        3 today: ColumnCheckPhase._enforce_notnull, _run_aggregates_and_raise (now
+        including coercion-raise counts), and _build_errors. The issue this guards
+        against (#11) specifically called out that this path, not the no-coercion
+        one, is the one most likely to regain a collect.
         """
         schema = SchemaModel.from_dict(
             {
@@ -342,7 +400,7 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": ["10", "20", "30"]})
         schema.validate(df, registry)
 
-        assert len(collect_calls) == 5
+        assert len(collect_calls) == 3
 
     def test_small_df_uses_default_engine(self, simple_schema, registry, collect_calls):
         """Below schema.streaming_row_threshold, an eager DataFrame stays on the
