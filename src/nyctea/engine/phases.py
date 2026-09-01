@@ -549,7 +549,7 @@ class ColumnCheckPhase(PipelinePhase):
         col_name: str,
         check_name: str,
     ) -> None:
-        """Reject check names that would collide in the (column, check) mask key.
+        """Reject check names reserved for internal failure tracking, or duplicate names per column.
 
         Args:
             check_masks: Masks registered so far, keyed on (column, check name).
