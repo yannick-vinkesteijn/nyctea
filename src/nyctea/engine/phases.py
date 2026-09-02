@@ -329,7 +329,7 @@ class ColumnParsingPhase(PipelinePhase):
             transformations.append(expr.alias(col_name))
             parsed_columns.append(col_name)
 
-        # Apply all transformations in a single with_columns call
+        # Apply pre-parse snapshots, transformations, and parse-failure masks via with_columns.
         if transformations:
             pre_null_exprs = [
                 pl.col(col_name).is_null().alias(f"__pre_parse_null__{col_name}") for col_name in parsed_columns
