@@ -27,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Column parsers that turn non-null input into null now produce a `parse` error with the original failing value, reduce `rows_valid`, obey `on_failure`, and populate `parse_failures`. Reports now also populate `original_null_count` from the resolved input before frame and column transformations. Parser, coercion, and nullability failures are enforced together in pipeline order without a separate nullability collect (#63, #65).
 - Frame parsers can no longer remove required schema columns, and Nyctea now rebuilds private row tracking after frame transformations so every error report mode remains available (#62).
 - User checks named `coerce` or `not_null` are now rejected in every schema configuration because those names identify built-in failures throughout enforcement and reporting (#71).
 - Absent optional columns now skip configured parsers and checks instead of failing with a missing-column error (#59).

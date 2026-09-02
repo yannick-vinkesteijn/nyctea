@@ -156,6 +156,18 @@ Per-column settings override the schema default:
 }
 ```
 
+## Parser failures and null counts
+
+A parser failure occurs when a non-null value becomes null anywhere across a
+column's parser chain. Nyctea reports it under the reserved check name `parse`,
+counts it in `report.columns[column].parse_failures`, and marks the row invalid.
+Input values that were already null are not parser failures.
+
+`original_null_count` counts nulls after synonyms are resolved but before frame
+parsers and column parsers run. `final_null_count` counts nulls in the validated
+output. A frame parser that filters rows can therefore make the original count
+larger than the final row count.
+
 ## Error reporting
 
 `ErrorReportConfig` controls the detail level of the errors DataFrame returned by `validate()`.

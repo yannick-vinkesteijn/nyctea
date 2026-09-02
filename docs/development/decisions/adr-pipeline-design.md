@@ -59,10 +59,9 @@ A `Callable[[LazyFrame], LazyFrame]` chain works for pure transformations. It br
 ```python
 # PipelineContext fields and their owners:
 #   data (LazyFrame)       - resolution, parsing, coercion, checks
-#   check_masks            - column_checks only
-#   coercion_failures      - coercion only
+#   original_data          - column resolution only
+#   check_masks            - parsing, coercion, column checks
 #   nullified_counts       - nullification only
-#   original_nulls         - null tracking only
 ```
 
 The `LazyFrame` is a Polars query plan, not materialized data. Passing it between phases is cheap. Users who `.collect()` early own that cost.

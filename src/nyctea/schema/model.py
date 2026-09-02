@@ -125,10 +125,10 @@ class ColumnSchema(BaseModel):
     on_failure: OnFailureBehavior | None = Field(
         None,
         description=(
-            "How to handle coercion/check failures for this column:\n"
+            "How to handle parsing/coercion/check failures for this column:\n"
             "- 'raise': error, stop\n"
-            "- 'null': value becomes null (requires nullable=True)\n"
-            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported\n"
+            "- 'null': failure value becomes or remains null (requires nullable=True)\n"
+            "- 'ignore': parser/coercion nulls remain, check failures are kept and reported\n"
             "- None: inherit from schema on_failure"
         ),
     )
@@ -174,8 +174,8 @@ class SchemaModel(BaseModel):
         description=(
             "Default failure handling for all columns:\n"
             "- 'raise': error, stop\n"
-            "- 'null': value becomes null\n"
-            "- 'ignore': coercion nulls forced by dtype, check failures kept and reported"
+            "- 'null': failure value becomes or remains null\n"
+            "- 'ignore': parser/coercion nulls remain, check failures are kept and reported"
         ),
     )
 

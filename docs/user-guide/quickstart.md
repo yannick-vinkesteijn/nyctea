@@ -105,8 +105,11 @@ Per-column statistics:
 ```python
 for col_name, stats in result.report.columns.items():
     print(f"{col_name}:")
+    print(f"  Parse failures: {stats.parse_failures}")
+    print(f"  Coercion failures: {stats.coercion_failures}")
     print(f"  Check failures: {stats.check_failures}")
     print(f"  Nullified: {stats.nullified}")
+    print(f"  Original nulls: {stats.original_null_count}")
     print(f"  Final nulls: {stats.final_null_count}")
 ```
 
