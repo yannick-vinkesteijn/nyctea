@@ -11,6 +11,7 @@ from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.engine.utils import _declared_column_names
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import AggregateEngine, SchemaModel
 from nyctea.validators.registry import Registry
@@ -144,6 +145,13 @@ class SchemaValidator:
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
         # Add row index for error tracking
+        occupied_columns = set(lf.collect_schema().names()) | _declared_column_names(self.schema)
+        if "__row_index__" in occupied_columns:
+            raise PipelineError(
+                "Cannot build row tracking: the data or schema already contains "
+                "a column named '__row_index__'. Rename it before validating.",
+                phase="row_tracking",
+            )
         lf = lf.with_row_index("__row_index__")
 
         # Create pipeline context

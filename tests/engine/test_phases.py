@@ -591,6 +591,41 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
 
+    def test_notnull_mask_alias_collision_with_absent_optional_column_raises(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False},
+                    "__notnull__age": {
+                        "dtype": "Boolean",
+                        "nullable": True,
+                        "required": False,
+                    },
+                }
+            }
+        )
+
+        with pytest.raises(PipelineError, match="schema already contains a column named"):
+            schema.validate(pl.DataFrame({"age": [1]}), registry)
+
+    def test_notnull_mask_alias_collision_with_schema_synonym_raises(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False},
+                    "flag": {
+                        "dtype": "Boolean",
+                        "nullable": True,
+                        "required": False,
+                        "synonyms": ["__notnull__age"],
+                    },
+                }
+            }
+        )
+
+        with pytest.raises(PipelineError, match="schema already contains a column named"):
+            schema.validate(pl.DataFrame({"age": [1]}), registry)
+
     def test_from_python_preserves_subclass(self):
         """from_python must honour the receiving class, not hardcode SchemaModel."""
 
@@ -606,6 +641,30 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": [1, 2], "__notnull__zzz": [7, 8], "__check__foo": [1, 2]})
         result = schema.validate(df, registry)
         assert result.data.collect_schema().names() == ["age", "__notnull__zzz", "__check__foo"]
+
+    @pytest.mark.parametrize("declaration", ["input", "canonical", "synonym"])
+    def test_row_index_alias_collision_raises(self, registry, declaration):
+        columns = {"age": {"dtype": "Int64", "nullable": True}}
+        data = {"age": [1]}
+        if declaration == "canonical":
+            columns["__row_index__"] = {
+                "dtype": "UInt32",
+                "nullable": True,
+                "required": False,
+            }
+        elif declaration == "synonym":
+            columns["id"] = {
+                "dtype": "UInt32",
+                "nullable": True,
+                "required": False,
+                "synonyms": ["__row_index__"],
+            }
+        else:
+            data["__row_index__"] = [0]
+        schema = SchemaModel.from_dict({"columns": columns})
+
+        with pytest.raises(PipelineError, match="already contains a column named"):
+            schema.validate(pl.DataFrame(data), registry)
 
     def test_generated_masks_are_still_stripped(self, registry):
         schema = SchemaModel.from_dict(
@@ -631,6 +690,24 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": ["1", "2"], "__pre_null__age": [9, 9]})
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
+
+    @pytest.mark.parametrize("alias", ["__pre_null__age", "__coercion_ok__age"])
+    def test_coercion_alias_collision_with_absent_optional_column_raises(self, registry, alias):
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": True},
+                    alias: {
+                        "dtype": "Boolean",
+                        "nullable": True,
+                        "required": False,
+                    },
+                }
+            }
+        )
+
+        with pytest.raises(PipelineError, match="schema already contains a column named"):
+            schema.validate(pl.DataFrame({"age": ["1"]}), registry)
 
     def test_duplicate_check_name_on_one_column_raises(self, registry):
         """Two same-named checks collided in check_masks and the second silently won.
@@ -724,6 +801,28 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": [1, 2], "__check__0": [9, 9]})
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
+
+    def test_check_mask_alias_collision_with_absent_optional_column_raises(self, registry):
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "ignore",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": True,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    },
+                    "__check__0": {
+                        "dtype": "Boolean",
+                        "nullable": True,
+                        "required": False,
+                    },
+                },
+            }
+        )
+
+        with pytest.raises(PipelineError, match="schema already contains a column named"):
+            schema.validate(pl.DataFrame({"age": [1]}), registry)
 
     def test_check_mask_alias_collision_raises_with_coercion_active(self, registry):
         """A pre-seeded coercion mask must not shift the check-mask alias counter.
