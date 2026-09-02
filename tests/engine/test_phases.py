@@ -897,6 +897,7 @@ def test_parser_introduced_null_is_reported(registry, mode, on_failure):
     assert result.report.columns["age"].check_failures == 0
     assert result.report.columns["age"].original_null_count == 1
     assert result.report.columns["age"].final_null_count == 2
+    assert "Parse failures: 1" in result.report.summary()
 
 
 def test_parser_introduced_null_raises(registry):

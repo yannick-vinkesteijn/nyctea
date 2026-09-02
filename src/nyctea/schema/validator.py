@@ -196,11 +196,10 @@ class SchemaValidator:
         """Group check mask aliases by column for columns resolving to the given on_failure.
 
         Excludes parser, coercion, and built-in not-null failures because each has
-        separate enforcement and report accounting. The not-null check is enforced directly in
-        ``ColumnCheckPhase`` and can never resolve to ``'null'`` (nullable=False is
-        required for that check to exist, and the guard in ``resolve_on_failure``
-        rewrites ``'null'`` to ``'raise'`` for non-nullable columns; ``'ignore'`` is
-        unaffected and can still apply).
+        separate enforcement and report accounting in
+        ``_run_aggregates_and_raise``. The not-null check can never resolve to
+        ``'null'``: it only exists for non-nullable columns, whose ``'null'``
+        behavior resolves to ``'raise'``. ``'ignore'`` remains unaffected.
 
         Parser and coercion failures have their own raise paths. Their failed values
         are already null, so nulling them again here would double-count them in

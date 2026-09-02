@@ -8,6 +8,8 @@ This is a minimal implementation with core phases. Additional phases
 will be added in future iterations.
 """
 
+from collections.abc import Collection
+
 import polars as pl
 
 from nyctea.engine.context import PipelineContext
@@ -27,7 +29,7 @@ PARSING_CHECK = "parse"
 """Check name reported when a parser turns a non-null value into null."""
 
 
-def _reject_alias_collision(alias: str, occupied_columns: list[str], phase: str, what: str) -> None:
+def _reject_alias_collision(alias: str, occupied_columns: Collection[str], phase: str, what: str) -> None:
     """Raise if a generated internal column would overwrite a declared or input column.
 
     Args:
@@ -265,7 +267,7 @@ class ColumnParsingPhase(PipelinePhase):
         # Collect all transformations to apply in batch
         transformations: list[pl.Expr] = []
         parsed_columns: list[str] = []
-        reserved_columns = list(current_columns | set(schema.columns))
+        reserved_columns = current_columns | set(schema.columns)
         capture_error_values = (
             context.error_report_config is not None
             and context.error_report_config.mode == "cells"
