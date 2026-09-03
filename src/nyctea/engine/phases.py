@@ -14,7 +14,7 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
-from nyctea.engine.utils import _declared_column_names, _resolve_dtype
+from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.schema.model import Check, SchemaModel
 from nyctea.validators.registry import Registry
@@ -51,7 +51,7 @@ def _reject_alias_collision(alias: str, occupied_columns: Collection[str], phase
 
 def _occupied_columns(context: PipelineContext) -> set[str]:
     """Return every input and schema column name unavailable to internal helpers."""
-    return set(context.data.collect_schema().names()) | _declared_column_names(context.schema)
+    return set(context.data.collect_schema().names()) | context.schema.accepted_names
 
 
 __all__ = [
@@ -97,54 +97,25 @@ class ColumnResolutionPhase(PipelinePhase):
         schema = context.schema
         lf = context.data
 
-        # Get current columns
-        current_columns = set(lf.collect_schema().names())
+        resolution = schema.resolve_columns(lf.collect_schema().names())
 
-        # Build mapping from physical to canonical names
-        mapping: dict[str, str] = {}
-        used: set[str] = set()
+        for canonical, physicals in resolution.ambiguous.items():
+            raise ValidationError(
+                f"Ambiguous columns for '{canonical}': {list(physicals)}. Only one canonical/synonym is allowed.",
+                column=canonical,
+                phase=self.name,
+            )
 
-        for canonical, col_schema in schema.columns.items():
-            # Candidates include canonical name and all synonyms
-            candidates = {canonical} | set(col_schema.synonyms)
+        for canonical in resolution.missing_required:
+            raise ValidationError(
+                f"Required column '{canonical}' is missing. "
+                f"Looked for: {sorted(schema.column(canonical).accepted_names)}",
+                column=canonical,
+                phase=self.name,
+            )
 
-            # Find which candidates exist in the data
-            found = [c for c in current_columns if c in candidates]
-
-            if not found:
-                if col_schema.required:
-                    raise ValidationError(
-                        f"Required column '{canonical}' is missing. Looked for: {sorted(candidates)}",
-                        column=canonical,
-                        phase=self.name,
-                    )
-                continue
-
-            if len(found) > 1:
-                raise ValidationError(
-                    f"Ambiguous columns for '{canonical}': {found}. Only one canonical/synonym is allowed.",
-                    column=canonical,
-                    phase=self.name,
-                )
-
-            physical = found[0]
-
-            # Check for duplicate mappings
-            if physical in used:
-                raise ValidationError(
-                    f"Column '{physical}' is mapped multiple times.",
-                    phase=self.name,
-                )
-
-            used.add(physical)
-
-            # Only add to mapping if renaming is needed
-            if physical != canonical:
-                mapping[physical] = canonical
-
-        # Apply renaming if needed
-        if mapping:
-            context.data = lf.rename(mapping)
+        if resolution.rename:
+            context.data = lf.rename(dict(resolution.rename))
 
         context.original_data = context.data
         return context
@@ -202,11 +173,7 @@ class FrameParsingPhase(PipelinePhase):
                 ) from e
 
         output_columns = set(lf.collect_schema().names())
-        missing_required = [
-            col_name
-            for col_name, col_schema in context.schema.columns.items()
-            if col_schema.required and col_name not in output_columns
-        ]
+        missing_required = [name for name in context.schema.required_columns if name not in output_columns]
         if missing_required:
             raise PipelineError(
                 f"Frame parsers removed required columns: {missing_required}",
@@ -215,7 +182,7 @@ class FrameParsingPhase(PipelinePhase):
 
         _reject_alias_collision(
             "__row_index__",
-            output_columns | _declared_column_names(context.schema),
+            output_columns | context.schema.accepted_names,
             self.name,
             "row tracking after frame parsing",
         )
@@ -278,8 +245,8 @@ class ColumnParsingPhase(PipelinePhase):
             and context.error_report_config.include_values
         )
 
-        for col_name, col_schema in schema.columns.items():
-            if col_name not in current_columns or not col_schema.parsers:
+        for col_name in schema.columns_with_parsers:
+            if col_name not in current_columns:
                 continue
 
             pre_null_alias = f"__pre_parse_null__{col_name}"
@@ -308,7 +275,7 @@ class ColumnParsingPhase(PipelinePhase):
             expr = pl.col(col_name)
 
             # Chain parsers
-            for parser_spec in col_schema.parsers:
+            for parser_spec in schema.column(col_name).parsers:
                 # Look up parser validator
                 try:
                     parser = registry.column_parsers.get(parser_spec.name)
@@ -374,7 +341,7 @@ class ColumnParsingPhase(PipelinePhase):
         Returns:
             True if no columns have parsers defined.
         """
-        return not any(col_schema.parsers for col_schema in context.schema.columns.values())
+        return not context.schema.columns_with_parsers
 
 
 class CoercionPhase(PipelinePhase):
@@ -418,18 +385,16 @@ class CoercionPhase(PipelinePhase):
         occupied_columns = _occupied_columns(context)
         cast_exprs: list[pl.Expr] = []
 
-        for col_name, col_schema in schema.columns.items():
+        for col_name in schema.columns_to_coerce:
             if col_name not in current_dtypes:
                 continue
 
-            if not schema.resolve_coerce(col_name):
-                continue
-
+            dtype = schema.column(col_name).dtype
             try:
-                target = _resolve_dtype(col_schema.dtype)
+                target = _resolve_dtype(dtype)
             except ValueError as e:
                 raise PipelineError(
-                    f"Invalid dtype '{col_schema.dtype}' for column '{col_name}': {e}",
+                    f"Invalid dtype '{dtype}' for column '{col_name}': {e}",
                     phase=self.name,
                 ) from e
 
@@ -474,7 +439,7 @@ class CoercionPhase(PipelinePhase):
         Returns:
             True if no column will be coerced.
         """
-        return not any(context.schema.resolve_coerce(col_name) for col_name in context.schema.columns)
+        return not context.schema.columns_to_coerce
 
 
 class FrameCheckPhase(PipelinePhase):
@@ -593,10 +558,10 @@ class ColumnCheckPhase(PipelinePhase):
         # Independent of check_masks' size, so seeded coercion entries don't shift aliases.
         check_index = 0
 
-        for col_name, col_schema in schema.columns.items():
+        for col_name in schema.columns_with_checks:
             if col_name not in current_columns:
                 continue
-            for check_spec in col_schema.checks or []:
+            for check_spec in schema.column(col_name).checks:
                 self._reject_reserved_or_duplicate_check(check_masks, col_name, check_spec.name)
                 check_expr = self._resolve_check_expr(registry, col_name, check_spec)
 
@@ -722,19 +687,18 @@ class ColumnCheckPhase(PipelinePhase):
             Mapping of column name to its not-null mask alias.
         """
         notnull_aliases: dict[str, str] = {}
-        for col_name, col_schema in schema.columns.items():
+        for col_name in schema.non_nullable_columns:
             if col_name not in current_columns:
                 continue
-            if col_schema.nullable is False:
-                alias = f"__notnull__{col_name}"
-                _reject_alias_collision(
-                    alias,
-                    occupied_columns,
-                    "column_checks",
-                    f"the not-null mask for column '{col_name}'",
-                )
-                mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
-                notnull_aliases[col_name] = alias
+            alias = f"__notnull__{col_name}"
+            _reject_alias_collision(
+                alias,
+                occupied_columns,
+                "column_checks",
+                f"the not-null mask for column '{col_name}'",
+            )
+            mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
+            notnull_aliases[col_name] = alias
         return notnull_aliases
 
     def can_skip(self, context: PipelineContext) -> bool:
@@ -746,4 +710,4 @@ class ColumnCheckPhase(PipelinePhase):
         Returns:
             True if no columns have checks defined.
         """
-        return not any(col_schema.checks or not col_schema.nullable for col_schema in context.schema.columns.values())
+        return not context.schema.columns_needing_check_phase

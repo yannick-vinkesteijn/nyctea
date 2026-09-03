@@ -6,7 +6,6 @@ from nyctea.schema.model import SchemaModel
 
 __all__ = [
     "SchemaResolutionError",
-    "_declared_column_names",
     "_resolve_dtype",
     "resolve_column_names",
 ]
@@ -14,13 +13,6 @@ __all__ = [
 
 class SchemaResolutionError(ValueError):
     """Raised when columns cannot be resolved from schema definitions."""
-
-
-def _declared_column_names(schema: SchemaModel) -> set[str]:
-    """Return canonical column names and every accepted synonym."""
-    return set(schema.columns) | {
-        synonym for column_schema in schema.columns.values() for synonym in column_schema.synonyms
-    }
 
 
 def resolve_column_names(schema: SchemaModel, df: pl.DataFrame | pl.LazyFrame) -> pl.DataFrame | pl.LazyFrame:

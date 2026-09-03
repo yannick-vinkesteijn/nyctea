@@ -24,6 +24,7 @@ Nyctea is a Polars-based data validation library with a validator architecture. 
 - Batch Polars operations: combine multiple column expressions into a single `with_columns` or `select` call rather than looping.
 - ALWAYS verify Polars expressions and methods against https://docs.pola.rs/api/python/stable/reference/index.html when writing new Polars code. Do not rely on memory for Polars API.
 - Polars evolves fast. Do not assume deprecated patterns still work. Verify against current docs.
+- This repo's `.mcp.json` configures a `polars` MCP server. Prefer it over a raw docs fetch when it's available.
 
 ## Python
 
@@ -40,6 +41,13 @@ Nyctea is a Polars-based data validation library with a validator architecture. 
 - Run commands with `uv run` (e.g., `uv run pytest`, `uv run ruff check .`).
 - Use `ty` for type checking and enforcement.
 - Use `just` recipes for common tasks.
+
+## GitHub project
+
+- Track Nyctea work in the [Nyctea backlog](https://github.com/users/yannick-vinkesteijn/projects/2).
+- Create implementation branches from the issue with GitHub's Development linkage, for example `gh issue develop <number> --base main --name <branch>`.
+- Open pull requests from the linked development branch and add the pull request to the project. Do not use `Closes`, `Fixes`, or `Resolves` references in pull request bodies.
+- Move the pull request and its linked issues to `In review` when the pull request is ready for review. Let the Development linkage update the issue when the pull request merges.
 
 ## Code organization
 
@@ -72,6 +80,23 @@ with a `Date | File | Summary` table, newest first. Add a row when you add a doc
 This repository is public. Agent working notes include adversarial audits and unshipped design
 drafts that do not belong in a public history. Anything that should be public goes in an issue,
 or in `docs/development/decisions/` as a dated ADR once the decision is implemented.
+
+## Working from the plan
+
+- Read the newest `.agents/plan/` document and the newest `.agents/memory/` handover before
+  starting work. The plan's "Order of work" is the ordering authority. If another document
+  disagrees with it, the plan wins and the other document needs fixing.
+- Do the current step, not the next one. If the work would touch something the current step does
+  not name, stop and ask rather than folding it in.
+- Report a step's exit criterion even when it fails. A step that did not deliver what it promised
+  is a signal to stop and reconsider, not to keep building.
+- Before reversing a decision recorded in `.agents/design/`, say so explicitly and get agreement.
+  Do not quietly build the other thing.
+- Record rejected options and why, not just the chosen one. A decision with only a conclusion
+  cannot be audited later; one that names its alternatives can be rechecked when the constraints
+  change.
+- Prefer a test to a sentence. A rule in prose drifts as context is compacted; a rule in `tests/`
+  fails loudly. `tests/test_import_structure.py` is the model.
 
 ## Documentation
 

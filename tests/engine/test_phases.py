@@ -12,10 +12,11 @@ from nyctea.engine.phases import (
     NOT_NULL_CHECK,
     PARSING_CHECK,
     CoercionPhase,
+    ColumnResolutionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
-from nyctea.exceptions import PipelineError
+from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.validators.decorators import ValidatorDecorator
 
 
@@ -86,6 +87,117 @@ class TestResolveColumnNames:
 
 
 # ---------------------------------------------------------------------------
+# ColumnResolutionPhase
+#
+# Characterization tests for the production resolution path. The
+# resolve_column_names tests above cover a separate implementation in
+# engine/utils.py that no production code calls, so before #86 these three
+# error paths (phases.py:116, 124, 134) had no coverage at all.
+# ---------------------------------------------------------------------------
+
+
+def _resolution_context(schema, data):
+    """Build a context positioned exactly as ColumnResolutionPhase expects it."""
+    return PipelineContext(data=data.lazy(), schema=schema, registry=Registry())
+
+
+def test_resolution_phase_renames_synonym_to_canonical():
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"Age": [1, 2]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.data.collect_schema().names() == ["age"]
+
+
+def test_resolution_phase_sets_original_data():
+    """original_data is the post-resolution snapshot the report's null stats read from."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"Age": [1, 2]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.original_data is not None
+    assert result.original_data.collect_schema().names() == ["age"]
+
+
+def test_resolution_phase_leaves_frame_untouched_when_no_rename_needed():
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"age": [1, 2]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.data.collect_schema().names() == ["age"]
+
+
+def test_resolution_phase_skips_missing_optional_column():
+    schema = SchemaModel.from_dict(
+        {"columns": {"age": {"dtype": "Int64", "required": False}, "name": {"dtype": "Utf8"}}}
+    )
+    ctx = _resolution_context(schema, pl.DataFrame({"name": ["Alice"]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.data.collect_schema().names() == ["name"]
+
+
+def test_resolution_phase_raises_on_missing_required_column():
+    """Covers phases.py:116."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": True}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"name": ["Alice"]}))
+
+    with pytest.raises(ValidationError, match="Required column 'age' is missing") as exc:
+        ColumnResolutionPhase().execute(ctx)
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "column_resolution"
+
+
+def test_resolution_phase_raises_when_canonical_and_synonym_both_present():
+    """Covers phases.py:124. Two accepted names for one column is ambiguous, not a preference."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["years"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"age": [1], "years": [2]}))
+
+    with pytest.raises(ValidationError, match="Ambiguous columns for 'age'") as exc:
+        ColumnResolutionPhase().execute(ctx)
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "column_resolution"
+
+
+def test_resolution_phase_cannot_map_two_columns_to_one_physical_name():
+    """A schema that could produce this is now rejected before any data is touched.
+
+    Two columns claiming one name used to construct fine and fail here at
+    runtime, and only if the data happened to contain the contested name. See
+    test_name_ownership.py; the runtime guard is gone because it is unreachable.
+    """
+    with pytest.raises(ValueError, match="exactly one owner"):
+        SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "synonyms": ["x"]},
+                    "years": {"dtype": "Int64", "synonyms": ["x"]},
+                }
+            }
+        )
+
+
+def test_resolution_phase_is_independent_of_column_order():
+    """Column order must not affect resolution (#86 invariant 4)."""
+    schema = SchemaModel.from_dict(
+        {"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}, "name": {"dtype": "Utf8"}}}
+    )
+    forward = _resolution_context(schema, pl.DataFrame({"Age": [1], "name": ["a"]}))
+    reverse = _resolution_context(schema, pl.DataFrame({"name": ["a"], "Age": [1]}))
+
+    forward_names = ColumnResolutionPhase().execute(forward).data.collect_schema().names()
+    reverse_names = ColumnResolutionPhase().execute(reverse).data.collect_schema().names()
+
+    assert sorted(forward_names) == sorted(reverse_names) == ["age", "name"]
+
+
+# ---------------------------------------------------------------------------
 # _resolve_dtype
 # ---------------------------------------------------------------------------
 
@@ -137,18 +249,21 @@ class TestCoercionPhase:
             registry=Registry(),
         )
 
-    def test_skipped_when_coerce_false(self, simple_schema):
+    def _coerce_schema(self, coerce):
+        return SchemaModel.from_dict(
+            {"coerce": coerce, "columns": {"age": {"dtype": "Int64"}, "name": {"dtype": "Utf8"}}}
+        )
+
+    def test_skipped_when_coerce_false(self):
         phase = CoercionPhase()
-        simple_schema.coerce = False
         df = pl.DataFrame({"age": [1, 2], "name": ["a", "b"]})
-        ctx = self._context(simple_schema, df)
+        ctx = self._context(self._coerce_schema(False), df)
         assert phase.can_skip(ctx) is True
 
-    def test_not_skipped_when_coerce_true(self, simple_schema):
+    def test_not_skipped_when_coerce_true(self):
         phase = CoercionPhase()
-        simple_schema.coerce = True
         df = pl.DataFrame({"age": [1, 2], "name": ["a", "b"]})
-        ctx = self._context(simple_schema, df)
+        ctx = self._context(self._coerce_schema(True), df)
         assert phase.can_skip(ctx) is False
 
     def test_coercion_with_failures(self):
@@ -258,31 +373,31 @@ class TestCoercionPhase:
 
 class TestCollectEngineSelection:
     def test_collect_aggregate_uses_given_engine(self, collect_calls):
-        from nyctea.schema.validator import _collect_aggregate
+        from nyctea.engine.validator import _collect_aggregate
 
         _collect_aggregate(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
         assert collect_calls[0].get("engine") == "streaming"
 
     def test_collect_uses_default_engine(self, collect_calls):
-        from nyctea.schema.validator import _collect
+        from nyctea.engine.validator import _collect
 
         _collect(pl.LazyFrame({"a": [1, 2, 3]}))
         assert collect_calls[0].get("engine") is None
 
     def test_pick_engine_df_below_threshold(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
+        from nyctea.engine.validator import _pick_aggregate_engine
 
         df = pl.DataFrame({"a": range(100)})
         assert _pick_aggregate_engine(df, threshold=1000) == "in-memory"
 
     def test_pick_engine_df_above_threshold(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
+        from nyctea.engine.validator import _pick_aggregate_engine
 
         df = pl.DataFrame({"a": range(1000)})
         assert _pick_aggregate_engine(df, threshold=1000) == "streaming"
 
     def test_pick_engine_lazyframe_streams(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
+        from nyctea.engine.validator import _pick_aggregate_engine
 
         lf = pl.LazyFrame({"a": [1, 2, 3]})
         assert _pick_aggregate_engine(lf, threshold=1_000_000) == "streaming"

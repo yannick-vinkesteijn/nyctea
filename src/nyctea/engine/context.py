@@ -10,7 +10,8 @@ from typing import Any
 import polars as pl
 
 from nyctea.engine.results import ErrorReportConfig, ValidationReport
-from nyctea.schema.model import AggregateEngine, SchemaModel
+from nyctea.schema.model import SchemaModel
+from nyctea.types import AggregateEngine
 from nyctea.validators.registry import Registry
 
 __all__ = ["PipelineContext"]

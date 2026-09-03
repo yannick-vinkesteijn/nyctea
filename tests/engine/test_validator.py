@@ -6,7 +6,7 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.schema.validator import SchemaValidator
+from nyctea.engine.validator import SchemaValidator
 
 
 @pytest.fixture

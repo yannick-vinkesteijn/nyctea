@@ -6,7 +6,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-from nyctea.schema.model import OnFailureBehavior
+from nyctea.types import OnFailureBehavior
 
 __all__ = [
     "ColumnValidationStats",

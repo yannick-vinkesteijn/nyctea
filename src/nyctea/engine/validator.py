@@ -1,7 +1,8 @@
-"""Schema validator for orchestrating validation.
+"""Validation run orchestration.
 
-This module provides the SchemaValidator class, which is the main entry point
-for validation using the new validator-based pipeline architecture.
+This module provides the SchemaValidator class, which drives one validation run:
+it builds the pipeline for a schema, executes it against the data, and assembles
+the report. It reads the schema and never modifies it.
 """
 
 import polars as pl
@@ -11,9 +12,9 @@ from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport, ValidationResult
-from nyctea.engine.utils import _declared_column_names
 from nyctea.exceptions import PipelineError
-from nyctea.schema.model import AggregateEngine, SchemaModel
+from nyctea.schema.model import SchemaModel
+from nyctea.types import AggregateEngine
 from nyctea.validators.registry import Registry
 
 __all__ = ["SchemaValidator"]
@@ -145,7 +146,7 @@ class SchemaValidator:
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
         # Add row index for error tracking
-        occupied_columns = set(lf.collect_schema().names()) | _declared_column_names(self.schema)
+        occupied_columns = set(lf.collect_schema().names()) | self.schema.accepted_names
         if "__row_index__" in occupied_columns:
             raise PipelineError(
                 "Cannot build row tracking: the data or schema already contains "
@@ -163,6 +164,9 @@ class SchemaValidator:
             aggregate_engine=aggregate_engine,
             original_data=lf,
         )
+        # Row tracking is a generated helper like any other, so it is recorded in
+        # one place rather than special-cased at strip time.
+        context.internal_columns.add("__row_index__")
 
         # Execute pipeline. Phases build the lazy graph without collecting.
         context = self.pipeline.execute(context)
@@ -185,10 +189,8 @@ class SchemaValidator:
 
         # Strip only the helper columns this run generated. Prefix matching would also
         # drop a legitimate user column that happens to start with one of the prefixes.
-        internal_cols = [
-            c for c in context.data.collect_schema().names() if c == "__row_index__" or c in context.internal_columns
-        ]
-        clean = context.data.drop(internal_cols)
+        # strict=False because a custom pipeline may drop a helper before this point.
+        clean = context.data.drop(sorted(context.internal_columns), strict=False)
 
         # Only collect if lazy=False
         use_lazy = lazy if lazy is not None else self.schema.lazy
