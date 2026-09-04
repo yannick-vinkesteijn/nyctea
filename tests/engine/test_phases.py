@@ -7,6 +7,7 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import (
     COERCION_CHECK,
     NOT_NULL_CHECK,
@@ -2171,3 +2172,57 @@ def test_frame_parser_preserves_error_tracking(registry, mode):
         assert result.errors["row_indices"].to_list() == [[0]]
     else:
         assert result.errors["row_index"].to_list() == [0]
+
+
+def test_check_mask_index_counts_per_check(registry):
+    """The `__check__{n}` counter advances per check, not per column.
+
+    `ColumnCheckPhase` iterates `schema.columns_with_checks` and numbers the masks
+    from a counter incremented inside the inner loop over a column's checks. The
+    numbering therefore depends on that view preserving `schema.columns` order and
+    on columns without declared checks being skipped rather than consuming an index.
+
+    Aliases are opaque handles that nothing parses, so a shift here does not fail
+    anything on its own. It surfaces later as a collision or a missed lookup, which
+    is why it is pinned rather than left to the suite. Phase 1.3 rewrites this code.
+    """
+    check = [{"name": "min_value", "args": {"min": 0}}]
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "a": {"dtype": "Int64"},
+                "b": {"dtype": "Int64", "checks": check},
+                "c": {"dtype": "Int64", "nullable": False},
+                "d": {"dtype": "Int64", "checks": [*check, {"name": "unique"}]},
+            }
+        }
+    )
+    df = pl.DataFrame({"a": [1], "b": [1], "c": [1], "d": [1]})
+    context = PipelineContext(data=df.lazy(), schema=schema, registry=registry)
+
+    result = create_pipeline_from_schema(schema).execute(context)
+    declared = {key: alias for key, alias in result.check_masks.items() if key[1] != NOT_NULL_CHECK}
+
+    assert declared == {
+        ("b", "min_value"): "__check__0",
+        ("d", "min_value"): "__check__1",
+        ("d", "unique"): "__check__2",
+    }, "column 'a' has no declared checks and must not consume an index"
+
+
+def test_parsers_apply_in_declared_order(registry):
+    """A column's parsers chain in the order the schema lists them.
+
+    `ColumnParsingPhase` folds them into one expression, `expr = parser(expr)` per
+    step, so the declared order is the applied order. Pinned with a non-commutative
+    pair, because a test using parsers that commute would pass either way and this
+    property fails silently: a reordering produces different data, not an error.
+    """
+
+    def parsed(*names: str) -> list[str]:
+        schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Utf8", "parsers": [{"name": n} for n in names]}}})
+        result = schema.validate(pl.DataFrame({"a": ["MiXeD"]}), registry, lazy=False)
+        return result.data["a"].to_list()
+
+    assert parsed("lower", "upper") == ["MIXED"], "the last parser listed wins"
+    assert parsed("upper", "lower") == ["mixed"]

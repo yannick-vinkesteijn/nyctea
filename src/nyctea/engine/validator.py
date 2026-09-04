@@ -652,19 +652,3 @@ class SchemaValidator:
         if not parts:
             return empty
         return pl.concat(parts)
-
-    def customize_pipeline(self) -> ValidationPipeline:
-        """Get a copy of the pipeline for customization.
-
-        This allows users to modify the pipeline before validation.
-
-        Returns:
-            Copy of the validation pipeline.
-
-        Example:
-            >>> pipeline = validator.customize_pipeline()
-            >>> pipeline.add_phase(MyCustomPhase(), after="column_parsing")
-            >>> validator.pipeline = pipeline
-            >>> result = validator.validate(df)
-        """
-        return self.pipeline.copy()

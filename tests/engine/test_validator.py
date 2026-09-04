@@ -7,6 +7,7 @@ import pytest
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.engine.validator import SchemaValidator
+from nyctea.exceptions import PipelineError
 
 
 @pytest.fixture
@@ -75,14 +76,18 @@ def test_schema_validate_rejects_unknown_kwargs(failing_schema, registry):
         failing_schema.validate(df, registry, strict=True)
 
 
-def test_customize_pipeline_returns_independent_copy(failing_schema, registry):
-    validator = SchemaValidator(failing_schema, registry)
-    original_phase_count = len(validator.pipeline)
+def test_non_nullable_column_raises_the_bare_message(registry):
+    """The not-null raise happens after the pipeline, so it is not phase-wrapped.
 
-    copy = validator.customize_pipeline()
-    assert copy is not validator.pipeline
+    #57 predicted this message change when the not-null enforcement moved out of
+    `ColumnCheckPhase` and into the merged aggregate pass. That move has happened,
+    and the message is user-visible and was unpinned. Phase 1.3 rewrites the raise
+    loops that produce it.
+    """
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
-    copy.remove_phase(copy.list_phases()[-1])
+    with pytest.raises(PipelineError) as exc:
+        schema.validate(pl.DataFrame({"age": [1, None, 3]}), registry)
 
-    assert len(copy) == original_phase_count - 1
-    assert len(validator.pipeline) == original_phase_count
+    assert str(exc.value) == "Column 'age' has nullable=False but contains null values."
+    assert "Phase '" not in str(exc.value), "the raise is post-pipeline, so it must not be phase-wrapped"

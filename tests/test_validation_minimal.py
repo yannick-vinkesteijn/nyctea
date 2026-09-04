@@ -92,6 +92,7 @@ def test_top_level_public_api_exports() -> None:
         "PipelineError",
         "Registry",
         "SchemaModel",
+        "SchemaValidator",
         "ValidationError",
         "ValidationReport",
         "ValidationResult",
