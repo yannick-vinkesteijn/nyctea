@@ -291,6 +291,11 @@ class DataValidator:
             ...     print(f"Found {len(result.errors)} errors")
             >>> print(result.report.summary())
         """
+        # Before anything reads the data. A schema whose checks do not resolve, or whose
+        # arguments do not fit them, is an authoring mistake, and finding it after the
+        # rows are loaded helps nobody. See #25.
+        self.schema.verify(self.registry)
+
         # Decided from the original df (before the LazyFrame conversion below), since
         # only the eager form has a free row count to threshold on.
         aggregate_engine = pick_aggregate_engine(df, self.schema.streaming_row_threshold)

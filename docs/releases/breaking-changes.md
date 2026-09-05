@@ -1,5 +1,31 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: schemas are verified before any data is read
+
+`SchemaModel.verify(registry)` walks every check and parser a schema names, column-level and frame-level, and confirms each against the registry without touching a frame.
+`validate()` calls it first, before the data is even converted to a LazyFrame.
+
+A typo used to surface deep in a run, after the rows were loaded:
+
+```
+PipelineError: Phase 'column_checks' failed: Check 'posiitve' not found in registry.
+```
+
+It now surfaces immediately, with every problem in the schema reported at once rather than one per run:
+
+```
+ConfigurationError: Schema does not verify against the registry:
+  check 'posiitve' on column 'a' is not registered. Available: between, in_set, min_value, unique
+  check 'between' on column 'a' has invalid arguments: Validator 'between' takes (*, min: float, max: float), but got {'min': 0}: missing a required argument: 'max'
+  check 'min_value' is declared more than once on column 'a'. Each check name may appear once per column, since the error report is keyed on (column, check).
+```
+
+Argument checking is new. It is possible because a validator's keyword-only parameters are now its contract, so arguments bind without running anything.
+
+**Migration:** three failures that used to raise `PipelineError` during a run now raise `ConfigurationError` before it.
+An unregistered check or parser name, an unregistered frame check or frame parser, and the same check declared twice on one column.
+Catch `ConfigurationError`, exported from `nyctea`, if you were catching `PipelineError` for these.
+
 ## Within v0.2.0 pre-release: validators are declared by decorator, not by subclass
 
 `ValidatorDecorator` and the nine built-in validator classes are gone.

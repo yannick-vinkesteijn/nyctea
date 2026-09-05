@@ -16,7 +16,7 @@ from nyctea.engine.phases import (
     ColumnResolutionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.exceptions import PipelineError, ValidationError
+from nyctea.exceptions import ConfigurationError, PipelineError, ValidationError
 from nyctea.utils import resolve_dtype
 from nyctea.validators.decorators import checker, frame_checker, frame_parser
 
@@ -759,7 +759,7 @@ class TestFullPipeline:
                 }
             }
         )
-        with pytest.raises(PipelineError, match="more than one check named 'between'"):
+        with pytest.raises(ConfigurationError, match="check 'between' is declared more than once"):
             schema.validate(pl.DataFrame({"a": [1, 30]}), registry)
 
     def test_same_check_name_on_two_columns(self, registry):
@@ -1324,7 +1324,7 @@ class TestFrameValidators:
                 "columns": {"a": {"dtype": "Int64"}},
             }
         )
-        with pytest.raises(PipelineError, match="not found in registry"):
+        with pytest.raises(ConfigurationError, match="is not registered"):
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
     def test_frame_parser_execution_failure_raises(self, registry):
@@ -1384,7 +1384,7 @@ class TestFrameValidators:
                 "columns": {"a": {"dtype": "Int64"}},
             }
         )
-        with pytest.raises(PipelineError, match="not found in registry"):
+        with pytest.raises(ConfigurationError, match="is not registered"):
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
 

@@ -40,6 +40,7 @@ import polars as pl
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from nyctea.exceptions import ConfigurationError
 from nyctea.types import OnFailureBehavior
 from nyctea.validators.registry import Registry
 
@@ -714,6 +715,58 @@ class SchemaModel(BaseModel):
         if suffix in {".yaml", ".yml"}:
             return cls.from_yaml_file(path_obj)
         raise ValueError(f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml")
+
+    def verify(self, registry: Registry) -> None:
+        """Check the schema against a registry, without touching any data.
+
+        A typo in a check name, or an argument that does not fit the check it names,
+        is a schema-authoring mistake. Nothing about catching it depends on the data,
+        so it should not wait until a run is already loading rows.
+
+        Every problem is reported at once. A schema with three typos should take one
+        round trip to fix, not three.
+
+        Args:
+            registry: Registry the schema's checks and parsers must resolve in.
+
+        Raises:
+            ConfigurationError: If any name is unresolved, any argument does not bind,
+                or a column names the same check twice.
+        """
+        problems: list[str] = []
+        pairs = (
+            ("parser", registry.column_parsers, [(c, p) for c, col in self.columns.items() for p in col.parsers]),
+            ("check", registry.column_checks, [(c, k) for c, col in self.columns.items() for k in col.checks]),
+            ("frame parser", registry.frame_parsers, [(None, p) for p in self.frame_parsers]),
+            ("frame check", registry.frame_checks, [(None, k) for k in self.frame_checks]),
+        )
+        for kind, sub_registry, specs in pairs:
+            for column, spec in specs:
+                where = f" on column '{column}'" if column else ""
+                try:
+                    validator = sub_registry.get(spec.name)
+                except KeyError:
+                    available = ", ".join(sorted(sub_registry.list_names())) or "none"
+                    problems.append(f"{kind} '{spec.name}'{where} is not registered. Available: {available}")
+                    continue
+                try:
+                    validator.validate_args(**spec.args)
+                except (TypeError, ValueError) as e:
+                    problems.append(f"{kind} '{spec.name}'{where} has invalid arguments: {e}")
+
+        for column, col_schema in self.columns.items():
+            seen: set[str] = set()
+            for check in col_schema.checks:
+                if check.name in seen:
+                    problems.append(
+                        f"check '{check.name}' is declared more than once on column '{column}'. "
+                        "Each check name may appear once per column, since the error report is "
+                        "keyed on (column, check)."
+                    )
+                seen.add(check.name)
+
+        if problems:
+            raise ConfigurationError("Schema does not verify against the registry:\n  " + "\n  ".join(problems))
 
     def validate(  # ty: ignore[invalid-method-override]
         self,

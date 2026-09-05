@@ -25,6 +25,7 @@ configure_logging()
 from nyctea.engine.results import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.engine.validator import DataValidator
 from nyctea.exceptions import (
+    ConfigurationError,
     NycteaError,
     PipelineError,
     ValidationError,
@@ -36,6 +37,7 @@ from nyctea.validators.decorators import checker, frame_checker, frame_parser, p
 from nyctea.validators.registry import Registry
 
 __all__ = [
+    "ConfigurationError",
     "ErrorReportConfig",
     "NycteaError",
     "PipelineError",
