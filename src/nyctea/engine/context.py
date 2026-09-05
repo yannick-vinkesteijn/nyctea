@@ -95,6 +95,18 @@ class PipelineContext:
         """Get current column names from data."""
         return self.frame_schema().names()
 
+    def report_columns(self) -> list[str]:
+        """Schema columns still present in the frame, in schema order.
+
+        Both the aggregate pass and the report need this, and deriving it from the
+        frame's names as a list made it a scan per schema column.
+
+        Returns:
+            The canonical names the report covers.
+        """
+        present = set(self.get_column_names())
+        return [name for name in self.schema.columns if name in present]
+
     def set_metadata(self, key: str, value: Any) -> None:
         """Set phase-specific metadata.
 
