@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import TypeVar
 
-from nyctea.engine.phases import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
+from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.schema.model import SchemaModel
 
 __all__ = ["MaskIndex", "index_masks", "resolving_to"]

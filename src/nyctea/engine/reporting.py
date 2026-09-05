@@ -6,9 +6,9 @@ validator, so this module sits below it.
 
 import polars as pl
 
+from nyctea.engine.checks import PARSING_CHECK
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.masks import MaskIndex
-from nyctea.engine.phases import PARSING_CHECK
 from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport
 from nyctea.utils.collect import collect
 
