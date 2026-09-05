@@ -1,5 +1,27 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `result.errors` says which kind of failure it is
+
+Every report mode gains a `category` column: `structural` or `check`.
+
+Structural means the data did not meet a precondition: it would not cast, a parser could not read it, or a non-nullable column held a null.
+`check` means a rule the schema author wrote was not satisfied.
+
+```
+┌────────┬───────────────┬────────────┬───────────┬───────┐
+│ column ┆ source_column ┆ category   ┆ check     ┆ count │
+╞════════╪═══════════════╪════════════╪═══════════╪═══════╡
+│ age    ┆ Age           ┆ structural ┆ coerce    ┆ 1     │
+│ age    ┆ Age           ┆ check      ┆ min_value ┆ 1     │
+│ age    ┆ Age           ┆ structural ┆ not_null  ┆ 2     │
+└────────┴───────────────┴────────────┴───────────┴───────┘
+```
+
+Before this, telling the two apart meant knowing that `check in ("coerce", "not_null", "parse")` was the structural set, which was never written down anywhere a user could read.
+
+**Migration:** code reading `result.errors` positionally, or asserting its exact column set, needs updating.
+Reading by name is unaffected, and no existing column changed name or meaning.
+
 ## Within v0.2.0 pre-release: the error report names the header your file used
 
 `result.errors` gains a `source_column` column in all three report modes.

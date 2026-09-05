@@ -231,3 +231,19 @@ If a synonym matches a column in the input data, it is renamed to the canonical 
 ```
 
 Ambiguous matches (both canonical and synonym present) raise `ValidationError` from the column resolution phase.
+
+### Cleaned column matching
+
+Exact matching is the default and is unchanged.
+Set `column_matching: cleaned` on the schema to also accept names that match after trimming whitespace and Unicode case folding, so ` AGE ` resolves to `age` without enumerating every casing as a synonym.
+
+```yaml
+column_matching: cleaned
+columns:
+  age:
+    dtype: Int64
+```
+
+Exact matches always win over cleaned ones.
+If two physical columns match one schema column at the cleaned level, that is ambiguous and resolution fails rather than guessing.
+A schema whose accepted names collide once cleaned, such as a column `age` and a synonym `AGE` on a different column, is rejected when it is constructed.

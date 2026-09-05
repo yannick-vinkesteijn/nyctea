@@ -6,7 +6,7 @@ validator, so this module sits below it.
 
 import polars as pl
 
-from nyctea.engine.checks import PARSING_CHECK
+from nyctea.engine.checks import PARSING_CHECK, category_of
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.masks import MaskIndex
 from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, ValidationReport
@@ -66,8 +66,9 @@ def build_errors(context: PipelineContext, index: MaskIndex) -> pl.DataFrame:
 
     Supports three modes via ``ErrorReportConfig.mode``:
 
-    Every mode carries ``source_column``, the header the input actually used. It
-    equals ``column`` unless the column was matched through a synonym and renamed.
+    Every mode carries ``source_column``, the header the input actually used, and
+    ``category``, which is ``"structural"`` for a dtype, coercion or nullability
+    failure and ``"check"`` for a rule the schema author wrote (#33).
 
     - **summary**: ``column | check | count`` (one row per failing check)
     - **rows**: ``column | check | count | row_indices`` (adds list of failing row indices)
@@ -100,8 +101,17 @@ def _build_errors_summary(
     Single 1-row aggregation collect.
     """
     entries = index.entries
-    empty_schema = {"column": pl.String, "source_column": pl.String, "check": pl.String, "count": pl.UInt32}
-    empty = pl.DataFrame({"column": [], "source_column": [], "check": [], "count": []}, schema=empty_schema)
+    empty_schema = {
+        "column": pl.String,
+        "source_column": pl.String,
+        "category": pl.String,
+        "check": pl.String,
+        "count": pl.UInt32,
+    }
+    empty = pl.DataFrame(
+        {"column": [], "source_column": [], "category": [], "check": [], "count": []},
+        schema=empty_schema,
+    )
     if not entries:
         return empty
 
@@ -116,6 +126,7 @@ def _build_errors_summary(
                 {
                     "column": col_name,
                     "source_column": context.source_name(col_name),
+                    "category": category_of(check_name),
                     "check": check_name,
                     "count": count,
                 }
@@ -144,12 +155,13 @@ def _build_errors_rows(context: PipelineContext, index: MaskIndex, config: Error
     empty_schema = {
         "column": pl.String,
         "source_column": pl.String,
+        "category": pl.String,
         "check": pl.String,
         "count": pl.UInt32,
         "row_indices": pl.List(pl.UInt32),
     }
     empty = pl.DataFrame(
-        {"column": [], "source_column": [], "check": [], "count": [], "row_indices": []},
+        {"column": [], "source_column": [], "category": [], "check": [], "count": [], "row_indices": []},
         schema=empty_schema,
     )
     if not entries:
@@ -175,6 +187,7 @@ def _build_errors_rows(context: PipelineContext, index: MaskIndex, config: Error
             {
                 "column": col_name,
                 "source_column": context.source_name(col_name),
+                "category": category_of(check_name),
                 "check": check_name,
                 "count": count,
                 "row_indices": row[f"__indices__{alias}"].item().to_list(),
@@ -222,6 +235,7 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
     empty_schema = {
         "column": pl.String,
         "source_column": pl.String,
+        "category": pl.String,
         "check": pl.String,
         "row_index": pl.UInt32,
     }
@@ -242,6 +256,7 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
         part: dict[str, object] = {
             "column": [col_name] * len(indices),
             "source_column": [context.source_name(col_name)] * len(indices),
+            "category": [category_of(check_name)] * len(indices),
             "check": [check_name] * len(indices),
             "row_index": indices,
         }

@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 import yaml
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
 # after unpickling, so they never need to travel with the object.
 _DERIVED_VIEWS: tuple[str, ...] = (
     "canonical_by_accepted_name",
+    "canonical_by_cleaned_name",
     "accepted_names",
     "resolved_columns",
     "required_columns",
@@ -66,6 +67,11 @@ _DERIVED_VIEWS: tuple[str, ...] = (
     "columns_needing_check_phase",
     "columns_to_coerce",
 )
+
+
+def _clean_name(name: str) -> str:
+    """Normalise a column name for cleaned matching: trim, then Unicode case fold."""
+    return name.strip().casefold()
 
 
 class Parser(BaseModel):
@@ -271,6 +277,19 @@ class SchemaModel(BaseModel):
         ),
     )
 
+    column_matching: Literal["exact", "cleaned"] = Field(
+        "exact",
+        description=(
+            "How a frame's column names are matched against canonical names and "
+            "synonyms. 'exact' is the default and is unchanged. 'cleaned' also "
+            "accepts names that match after trimming whitespace and Unicode case "
+            "folding, so ' AGE ' resolves to 'age' without enumerating it as a "
+            "synonym. Exact matches always win over cleaned ones, and two physical "
+            "columns matching one schema column is still ambiguous rather than a "
+            "guess."
+        ),
+    )
+
     coerce: bool = Field(
         True,
         description="Whether to coerce columns to the specified dtypes after parsing and validation",
@@ -433,6 +452,29 @@ class SchemaModel(BaseModel):
             }
         )
 
+    @cached_property
+    def canonical_by_cleaned_name(self) -> Mapping[str, str]:
+        """Cleaned accepted name to canonical name, derived from the exact index.
+
+        Built from `canonical_by_accepted_name` rather than as a second matcher, so
+        there is one definition of what names a schema accepts.
+
+        Raises:
+            ValueError: If two accepted names clean to the same string for different
+                columns, which would make a cleaned match a coin toss.
+        """
+        cleaned: dict[str, str] = {}
+        collisions: dict[str, set[str]] = {}
+        for accepted, canonical in self.canonical_by_accepted_name.items():
+            key = _clean_name(accepted)
+            if key in cleaned and cleaned[key] != canonical:
+                collisions.setdefault(key, {cleaned[key]}).add(canonical)
+            cleaned.setdefault(key, canonical)
+        if collisions and self.column_matching == "cleaned":
+            detail = "; ".join(f"'{key}' claimed by {sorted(names)}" for key, names in sorted(collisions.items()))
+            raise ValueError(f"column_matching='cleaned' makes these names ambiguous: {detail}")
+        return MappingProxyType(cleaned)
+
     def resolve_columns(self, physical_names: Iterable[str]) -> ColumnResolution:
         """Match a frame's physical column names against this schema.
 
@@ -452,11 +494,25 @@ class SchemaModel(BaseModel):
             Inspect ``is_valid`` rather than assuming success.
         """
         index = self.canonical_by_accepted_name
-        matched = set(physical_names) & self.accepted_names
+        names = list(physical_names)
+        matched = set(names) & self.accepted_names
 
         claimed: dict[str, list[str]] = {}
         for physical in sorted(matched):
             claimed.setdefault(index[physical], []).append(physical)
+
+        if self.column_matching == "cleaned":
+            # A second pass, so exact always wins. Ambiguity is judged at the winning
+            # level: a column already claimed exactly ignores its cleaned candidates,
+            # while a column claimed only by two cleaned names is a coin toss and
+            # stays unresolved.
+            cleaned_index = self.canonical_by_cleaned_name
+            candidates: dict[str, list[str]] = {}
+            for physical in sorted(set(names) - matched):
+                canonical = cleaned_index.get(_clean_name(physical))
+                if canonical is not None and canonical not in claimed:
+                    candidates.setdefault(canonical, []).append(physical)
+            claimed.update(candidates)
 
         ambiguous = {canonical: tuple(physicals) for canonical, physicals in claimed.items() if len(physicals) > 1}
         rename = {
