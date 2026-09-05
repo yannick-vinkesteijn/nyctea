@@ -5,7 +5,7 @@ it builds the pipeline for a schema, executes it against the data, and assembles
 the report. It reads the schema and never modifies it.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -70,44 +70,67 @@ def _resolving_to(columns: dict[str, _Aliases], schema: SchemaModel, on_failure:
 class _MaskIndex:
     """``context.check_masks`` partitioned once, by kind and by column.
 
+    ``entries`` is the flat view, ``(column, check, alias)`` in registration order.
+    That order reaches the user, since it is the row order of the error report, so
+    nothing derived from it may sort or otherwise reorder.
+
     ``declared`` holds user-declared checks only. Parser, coercion and built-in
     not-null failures are excluded because each has its own enforcement and report
     accounting. Their failed values are already null, so nulling them again through
     an ``on_failure='null'`` column would double-count them in ``nullified_counts``.
     The not-null check can never resolve to ``'null'`` in any case: it exists only
     for non-nullable columns, whose ``'null'`` behaviour resolves to ``'raise'``.
-
-    ``reported`` is the wider grouping behind the per-column ``check_failures`` stat,
-    which does count a not-null failure as a check failure.
     """
 
+    entries: tuple[tuple[str, str, str], ...]
     parsing: dict[str, str]
     coercion: dict[str, str]
     notnull: dict[str, str]
     declared: dict[str, list[str]]
-    reported: dict[str, list[str]]
-    all_aliases: list[str]
+
+    @property
+    def all_aliases(self) -> list[str]:
+        """Every mask alias, in registration order."""
+        return [alias for _, _, alias in self.entries]
+
+    @property
+    def reported(self) -> dict[str, list[str]]:
+        """Aliases behind the per-column ``check_failures`` stat.
+
+        Wider than ``declared``, because that stat counts a not-null failure as a
+        check failure.
+        """
+        grouped: dict[str, list[str]] = {}
+        for column, check, alias in self.entries:
+            if check not in (PARSING_CHECK, COERCION_CHECK):
+                grouped.setdefault(column, []).append(alias)
+        return grouped
 
 
 def _index_masks(check_masks: dict[tuple[str, str], str]) -> _MaskIndex:
     """Partition the mask aliases in one pass over ``check_masks``."""
+    entries: list[tuple[str, str, str]] = []
     parsing: dict[str, str] = {}
     coercion: dict[str, str] = {}
     notnull: dict[str, str] = {}
     declared: dict[str, list[str]] = {}
-    reported: dict[str, list[str]] = {}
     for (col_name, check_name), alias in check_masks.items():
+        entries.append((col_name, check_name, alias))
         if check_name == PARSING_CHECK:
             parsing[col_name] = alias
         elif check_name == COERCION_CHECK:
             coercion[col_name] = alias
+        elif check_name == NOT_NULL_CHECK:
+            notnull[col_name] = alias
         else:
-            reported.setdefault(col_name, []).append(alias)
-            if check_name == NOT_NULL_CHECK:
-                notnull[col_name] = alias
-            else:
-                declared.setdefault(col_name, []).append(alias)
-    return _MaskIndex(parsing, coercion, notnull, declared, reported, list(check_masks.values()))
+            declared.setdefault(col_name, []).append(alias)
+    return _MaskIndex(tuple(entries), parsing, coercion, notnull, declared)
+
+
+def _report_columns(schema: SchemaModel, col_names: Iterable[str]) -> list[str]:
+    """Schema columns still present in the frame, in schema order."""
+    present = set(col_names)
+    return [name for name in schema.columns if name in present]
 
 
 @dataclass(frozen=True)
@@ -230,11 +253,12 @@ class SchemaValidator:
         # Single collect for every aggregate this call needs: on_failure=raise counts
         # (coercion and check), on_failure=null fail counts, and the report's own
         # aggregates. Raises PipelineError here if any on_failure=raise column failed.
-        row, null_fail_exprs = self._run_aggregates_and_raise(context)
+        index = _index_masks(context.check_masks)
+        row, null_fail_exprs = self._run_aggregates_and_raise(context, index)
 
         # Build errors before nulling failures, so the report reflects the
         # original failing values (targeted collect of mask + relevant columns only)
-        errors = self._build_errors(context)
+        errors = self._build_errors(context, index)
 
         # Apply on_failure=null: null out values that failed a check (no collect,
         # reuses the counts already collected above)
@@ -280,7 +304,6 @@ class SchemaValidator:
             rules to apply to the collected row, in pipeline order.
         """
         schema = context.schema
-        col_names = context.get_column_names()
 
         exprs: list[pl.Expr] = [pl.len().alias("__total__")]
         exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
@@ -296,7 +319,7 @@ class SchemaValidator:
                 pl.any_horizontal([~pl.col(alias) for alias in index.all_aliases]).sum().alias("__rows_failed__")
             )
 
-        for col_name in (c for c in schema.columns if c in col_names):
+        for col_name in _report_columns(schema, context.get_column_names()):
             # Reflects the null count *after* nullification, without needing the
             # mutation to have happened yet: replicate the same when/then the
             # mutation will apply, rather than adding pre-null and nullified counts
@@ -359,7 +382,9 @@ class SchemaValidator:
 
         return exprs, raise_plan
 
-    def _run_aggregates_and_raise(self, context: PipelineContext) -> tuple[pl.DataFrame, dict[str, pl.Expr]]:
+    def _run_aggregates_and_raise(
+        self, context: PipelineContext, index: _MaskIndex
+    ) -> tuple[pl.DataFrame, dict[str, pl.Expr]]:
         """Collect every non-row-level aggregate this validate() call needs in one pass.
 
         Combines what were previously four separate collects -- coercion-raise counts,
@@ -371,6 +396,7 @@ class SchemaValidator:
 
         Args:
             context: Pipeline context with check_masks populated.
+            index: The mask aliases, partitioned once by kind and column.
 
         Returns:
             Tuple of the collected aggregate row and the on_failure=null fail
@@ -382,7 +408,6 @@ class SchemaValidator:
                 coercion-introduced nulls, or a failing check.
         """
         schema = context.schema
-        index = _index_masks(context.check_masks)
         null_fail_exprs = {
             col: pl.any_horizontal([~pl.col(alias) for alias in aliases])
             for col, aliases in _resolving_to(index.declared, schema, "null").items()
@@ -453,8 +478,7 @@ class SchemaValidator:
             ValidationReport with row counts and per-column statistics.
         """
         schema = context.schema
-        col_names = context.get_column_names()
-        report_cols = [c for c in schema.columns if c in col_names]
+        report_cols = _report_columns(schema, context.get_column_names())
 
         total = int(row["__total__"].item())
         rows_failed = int(row["__rows_failed__"].item()) if "__rows_failed__" in row.columns else 0
@@ -482,7 +506,7 @@ class SchemaValidator:
             columns=columns,
         )
 
-    def _build_errors(self, context: PipelineContext) -> pl.DataFrame:
+    def _build_errors(self, context: PipelineContext, index: _MaskIndex) -> pl.DataFrame:
         """Build error report from check masks in the requested mode.
 
         Uses targeted collects of only the columns needed for error reporting,
@@ -495,7 +519,8 @@ class SchemaValidator:
         - **cells**: ``column | check | row_index | value`` (one row per failing cell)
 
         Args:
-            context: Pipeline context with check_masks, error_report_config, and LazyFrame.
+            context: Pipeline context with error_report_config and the LazyFrame.
+            index: The mask aliases, partitioned once by kind and column.
 
         Returns:
             DataFrame with errors in the configured format.
@@ -507,24 +532,26 @@ class SchemaValidator:
             "rows": self._build_errors_rows,
             "cells": self._build_errors_cells,
         }
-        return builders[config.mode](context, config)
+        return builders[config.mode](context, index, config)
 
-    def _build_errors_summary(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
+    def _build_errors_summary(
+        self, context: PipelineContext, index: _MaskIndex, config: ErrorReportConfig
+    ) -> pl.DataFrame:
         """Build summary error report: column | check | count.
 
         Single 1-row aggregation collect.
         """
-        check_masks = context.check_masks
+        entries = index.entries
         empty_schema = {"column": pl.String, "check": pl.String, "count": pl.UInt32}
         empty = pl.DataFrame({"column": [], "check": [], "count": []}, schema=empty_schema)
-        if not check_masks:
+        if not entries:
             return empty
 
-        count_exprs = [(~pl.col(alias)).sum().cast(pl.UInt32).alias(alias) for alias in check_masks.values()]
+        count_exprs = [(~pl.col(alias)).sum().cast(pl.UInt32).alias(alias) for _, _, alias in entries]
         counts = _collect(context.data.select(count_exprs), context.aggregate_engine)
 
         rows: list[dict[str, str | int]] = []
-        for (col_name, check_name), alias in check_masks.items():
+        for col_name, check_name, alias in entries:
             count = int(counts[alias].item())
             if count > 0:
                 rows.append({"column": col_name, "check": check_name, "count": count})
@@ -533,7 +560,9 @@ class SchemaValidator:
             return empty
         return pl.DataFrame(rows, schema=empty_schema)
 
-    def _build_errors_rows(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
+    def _build_errors_rows(
+        self, context: PipelineContext, index: _MaskIndex, config: ErrorReportConfig
+    ) -> pl.DataFrame:
         """Build rows error report: column | check | count | row_indices.
 
         The failing-row count is a full aggregation, but ``row_indices`` is limited
@@ -542,7 +571,7 @@ class SchemaValidator:
         truncating output. Row materialization stays on the default engine, unlike
         the summary builder's pure aggregate.
         """
-        check_masks = context.check_masks
+        entries = index.entries
         empty_schema = {
             "column": pl.String,
             "check": pl.String,
@@ -553,11 +582,11 @@ class SchemaValidator:
             {"column": [], "check": [], "count": [], "row_indices": []},
             schema=empty_schema,
         )
-        if not check_masks:
+        if not entries:
             return empty
 
         exprs: list[pl.Expr] = []
-        for alias in check_masks.values():
+        for _, _, alias in entries:
             failed = ~pl.col(alias)
             indices_expr = pl.col("__row_index__").filter(failed).cast(pl.UInt32)
             if config.limit is not None:
@@ -568,7 +597,7 @@ class SchemaValidator:
         row = _collect(context.data.select(exprs))
 
         rows: list[dict[str, object]] = []
-        for (col_name, check_name), alias in check_masks.items():
+        for col_name, check_name, alias in entries:
             count = int(row[f"__count__{alias}"].item())
             if count == 0:
                 continue
@@ -586,10 +615,10 @@ class SchemaValidator:
         return pl.DataFrame(rows, schema=empty_schema)
 
     @staticmethod
-    def _cells_exprs(check_masks: dict[tuple[str, str], str], config: ErrorReportConfig) -> list[pl.Expr]:
+    def _cells_exprs(entries: tuple[tuple[str, str, str], ...], config: ErrorReportConfig) -> list[pl.Expr]:
         """Build the per-alias limited indices (and optional values) list expressions."""
         exprs: list[pl.Expr] = []
-        for (col_name, check_name), alias in check_masks.items():
+        for col_name, check_name, alias in entries:
             failed = ~pl.col(alias)
             indices_expr = pl.col("__row_index__").filter(failed).cast(pl.UInt32)
             if config.limit is not None:
@@ -603,7 +632,9 @@ class SchemaValidator:
                 exprs.append(values_expr.implode().alias(f"__values__{alias}"))
         return exprs
 
-    def _build_errors_cells(self, context: PipelineContext, config: ErrorReportConfig) -> pl.DataFrame:
+    def _build_errors_cells(
+        self, context: PipelineContext, index: _MaskIndex, config: ErrorReportConfig
+    ) -> pl.DataFrame:
         """Build cells error report: column | check | row_index (| value).
 
         Both ``row_index`` and ``value`` lists are limited with ``.head(config.limit)``
@@ -612,7 +643,7 @@ class SchemaValidator:
         only when ``config.include_values`` is set. Cell materialization stays on the
         default engine, unlike the summary builder's pure aggregate.
         """
-        check_masks = context.check_masks
+        entries = index.entries
         empty_schema = {
             "column": pl.String,
             "check": pl.String,
@@ -621,13 +652,13 @@ class SchemaValidator:
         if config.include_values:
             empty_schema["value"] = pl.String
         empty = pl.DataFrame({name: [] for name in empty_schema}, schema=empty_schema)
-        if not check_masks:
+        if not entries:
             return empty
 
-        row = _collect(context.data.select(self._cells_exprs(check_masks, config)))
+        row = _collect(context.data.select(self._cells_exprs(entries, config)))
 
         parts: list[pl.DataFrame] = []
-        for (col_name, check_name), alias in check_masks.items():
+        for col_name, check_name, alias in entries:
             indices = row[f"__indices__{alias}"].item().to_list()
             if not indices:
                 continue

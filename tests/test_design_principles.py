@@ -105,8 +105,6 @@ def test_cached_properties_are_declared_views():
 # Callers that still derive something by walking the authoring shape. Each one
 # should become a named view on `SchemaModel`. The list only shrinks.
 KNOWN_SCHEMA_COLUMN_LOOPS = {
-    # Dead code. `SchemaModel.resolve_columns` supersedes it; phase 1.4 deletes it.
-    "engine/utils.py",
     # Builds a name-to-dtype map including synonyms. Wants a `dtype_by_accepted_name`
     # view rather than a loop over the authoring shape.
     "ingest/readers.py",
