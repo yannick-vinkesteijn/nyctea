@@ -5,7 +5,6 @@ import polars as pl
 from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
-from nyctea.engine.phases.notnull import build_notnull_mask_exprs
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import Check
@@ -54,13 +53,6 @@ class ColumnCheckPhase(PipelinePhase):
         mask_exprs: list[pl.Expr] = []
         # Preserve entries earlier phases (e.g. CoercionPhase) already registered.
         check_masks: dict[tuple[str, str], str] = dict(context.check_masks)
-        notnull_aliases = build_notnull_mask_exprs(
-            schema,
-            self.name,
-            current_columns,
-            occupied_columns,
-            mask_exprs,
-        )
         # Independent of check_masks' size, so seeded coercion entries don't shift aliases.
         check_index = 0
 
@@ -88,19 +80,6 @@ class ColumnCheckPhase(PipelinePhase):
         if mask_exprs:
             context.data = lf.with_columns(mask_exprs)
             context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
-
-        # Register the not-null masks as checks so they appear in the error report.
-        # Without this, on_failure='ignore' would swallow the null entirely.
-        for col_name, alias in notnull_aliases.items():
-            key = (col_name, NOT_NULL_CHECK)
-            if key in check_masks:
-                raise PipelineError(
-                    f"Column '{col_name}' is nullable=False and also has a check named "
-                    f"'{NOT_NULL_CHECK}'. The name is reserved for the built-in not-null "
-                    f"constraint. Rename the check.",
-                    phase=self.name,
-                )
-            check_masks[key] = alias
 
         context.check_masks = check_masks
 

@@ -10,6 +10,7 @@ from nyctea.engine.phases.column_checks import ColumnCheckPhase
 from nyctea.engine.phases.column_parsing import ColumnParsingPhase
 from nyctea.engine.phases.frame_checks import FrameCheckPhase
 from nyctea.engine.phases.frame_parsing import FrameParsingPhase
+from nyctea.engine.phases.notnull_phase import NotNullPhase
 from nyctea.engine.phases.resolution import ColumnResolutionPhase
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "ColumnResolutionPhase",
     "FrameCheckPhase",
     "FrameParsingPhase",
+    "NotNullPhase",
 ]
