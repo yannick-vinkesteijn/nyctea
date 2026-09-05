@@ -32,7 +32,7 @@ from nyctea.exceptions import (
 )
 from nyctea.schema.model import SchemaModel
 from nyctea.validators.builtins.register import register_builtins
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea.validators.decorators import checker, frame_checker, frame_parser, parser
 from nyctea.validators.registry import Registry
 
 __all__ = [
@@ -45,7 +45,10 @@ __all__ = [
     "ValidationError",
     "ValidationReport",
     "ValidationResult",
-    "ValidatorDecorator",
+    "checker",
+    "frame_checker",
+    "frame_parser",
+    "parser",
     "ValidatorError",
     "configure_logging",
     "register_builtins",

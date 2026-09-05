@@ -1,31 +1,21 @@
 """Built-in validators for common validation tasks.
 
-This package provides a set of commonly-used parsers and checks that are
-ready to use out of the box.
+Importing this package is what puts the built-ins in the catalogue, so
+`register_builtins` has something to register. That is the one pitfall of a
+decorator-declared registry, and `tests/validators/builtins/test_register.py` pins it.
 """
 
-from nyctea.validators.builtins.checks import (
-    BetweenCheck,
-    InSetCheck,
-    MinValueCheck,
-    UniqueCheck,
-)
-from nyctea.validators.builtins.parsers import (
-    LowerParser,
-    StripParser,
-    ToFloatParser,
-    ToIntParser,
-    UpperParser,
-)
+from nyctea.validators.builtins.checks import between, in_set, min_value, unique
+from nyctea.validators.builtins.parsers import lower, strip, to_float, to_int, upper
 
 __all__ = [
-    "BetweenCheck",
-    "InSetCheck",
-    "LowerParser",
-    "MinValueCheck",
-    "StripParser",
-    "ToFloatParser",
-    "ToIntParser",
-    "UniqueCheck",
-    "UpperParser",
+    "between",
+    "in_set",
+    "lower",
+    "min_value",
+    "strip",
+    "to_float",
+    "to_int",
+    "unique",
+    "upper",
 ]

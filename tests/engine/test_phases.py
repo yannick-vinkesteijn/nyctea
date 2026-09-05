@@ -18,7 +18,7 @@ from nyctea.engine.phases import (
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.utils import resolve_dtype
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea.validators.decorators import checker, frame_checker, frame_parser
 
 
 @pytest.fixture
@@ -778,9 +778,8 @@ class TestFullPipeline:
 
     def test_not_null_reserved_on_non_nullable(self, registry):
         """A user check named not_null must not silently replace the built-in constraint."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="not_null", tags=[])
+        @checker(name="not_null", tags=[], registry=registry)
         def over_hundred(column: pl.Expr) -> pl.Expr:
             return column > 100
 
@@ -792,9 +791,8 @@ class TestFullPipeline:
 
     def test_not_null_reserved_on_nullable(self, registry):
         """The name stays reserved because downstream consumers always treat it as internal."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="not_null", tags=[])
+        @checker(name="not_null", tags=[], registry=registry)
         def over_hundred(column: pl.Expr) -> pl.Expr:
             return column > 100
 
@@ -883,13 +881,12 @@ class TestFullPipeline:
         Column 'a' with check 'b__c' and column 'a__b' with check 'c' both mapped to
         '__check__a__b__c' under the old naming, which crashed polars.
         """
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="b__c", tags=[])
+        @checker(name="b__c", tags=[], registry=registry)
         def positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
-        @decorators.column_check(name="c", tags=[])
+        @checker(name="c", tags=[], registry=registry)
         def over_thousand(column: pl.Expr) -> pl.Expr:
             return column > 1000
 
@@ -1085,9 +1082,8 @@ def test_parser_chain_uses_prior_null_state(registry):
 
 
 def test_original_nulls_counted_before_frame_parsing(registry):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.frame_parser(name="drop_nulls", preserve_columns=True, preserve_rows=False)
+    @frame_parser(registry=registry, name="drop_nulls", preserve_columns=True, preserve_rows=False)
     def drop_nulls(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.filter(pl.col("age").is_not_null())
 
@@ -1194,9 +1190,8 @@ def test_original_nulls_use_resolved_name(registry):
 
 
 def test_parse_check_name_is_reserved(registry):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.column_check(name="parse", tags=[])
+    @checker(name="parse", tags=[], registry=registry)
     def fake_parse(column: pl.Expr) -> pl.Expr:
         return column > 0
 
@@ -1307,9 +1302,8 @@ def test_parser_failure_distinct_from_original_null(registry):
 
 class TestFrameValidators:
     def test_frame_parser_runs_and_transforms_data(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_parser(name="add_total", preserve_columns=False, preserve_rows=True)
+        @frame_parser(registry=registry, name="add_total", preserve_columns=False, preserve_rows=True)
         def add_total(frame: pl.LazyFrame) -> pl.LazyFrame:
             return frame.with_columns((pl.col("a") + pl.col("b")).alias("total"))
 
@@ -1334,9 +1328,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
     def test_frame_parser_execution_failure_raises(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_parser(name="explode", preserve_columns=False)
+        @frame_parser(registry=registry, name="explode", preserve_columns=False)
         def explode(frame: pl.LazyFrame) -> pl.LazyFrame:  # noqa: ARG001
             raise ValueError("boom")
 
@@ -1350,9 +1343,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
     def test_frame_check_raises_on_failure(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_check(name="min_rows")
+        @frame_checker(registry=registry, name="min_rows")
         def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
             if frame.select(pl.len()).collect().item() < min_rows:
                 raise ValueError("not enough rows")
@@ -1368,9 +1360,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1, 2]}), registry)
 
     def test_frame_check_passes_through_on_success(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_check(name="min_rows")
+        @frame_checker(registry=registry, name="min_rows")
         def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
             if frame.select(pl.len()).collect().item() < min_rows:
                 raise ValueError("not enough rows")
@@ -1539,9 +1530,8 @@ class TestNullification:
 
     def test_coercion_check_name_is_reserved(self, registry):
         """A user check named 'coerce' on a coerced column must not silently collide."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -1558,9 +1548,8 @@ class TestNullification:
 
     def test_coercion_name_reserved_without_a_cast(self, registry):
         """The reservation is a schema property, not conditional on this input needing a cast."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -1577,9 +1566,8 @@ class TestNullification:
 
     def test_coercion_name_reserved_when_disabled(self, registry):
         """The name stays reserved because downstream consumers always treat it as internal."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -2054,9 +2042,8 @@ class TestOnFailure:
 
 
 def test_frame_parser_cannot_remove_required_column(registry):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.frame_parser(name="drop_required", preserve_columns=False)
+    @frame_parser(registry=registry, name="drop_required", preserve_columns=False)
     def drop_required(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.drop("name")
 
@@ -2076,9 +2063,8 @@ def test_frame_parser_cannot_remove_required_column(registry):
 
 @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
 def test_frame_parser_preserves_error_tracking(registry, mode):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.frame_parser(name="select_columns", preserve_columns=False)
+    @frame_parser(registry=registry, name="select_columns", preserve_columns=False)
     def select_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
         assert "__row_index__" not in frame.collect_schema().names()
         return frame.select("age")

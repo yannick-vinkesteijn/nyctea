@@ -17,6 +17,7 @@ __all__ = ["build_notnull_mask_exprs"]
 
 def build_notnull_mask_exprs(
     schema: SchemaModel,
+    phase: str,
     current_columns: Collection[str],
     occupied_columns: Collection[str],
     mask_exprs: list[pl.Expr],
@@ -25,6 +26,9 @@ def build_notnull_mask_exprs(
 
     Args:
         schema: Schema being validated.
+        phase: Name of the phase registering these masks, for the collision error.
+            Passed in rather than hardcoded, so #87 can move the caller without the
+            error attributing a failure to a phase that did not raise it.
         current_columns: Column names currently present in the data.
         occupied_columns: Input and schema column names unavailable to
             internal helpers.
@@ -41,7 +45,7 @@ def build_notnull_mask_exprs(
         reject_alias_collision(
             alias,
             occupied_columns,
-            "column_checks",
+            phase,
             f"the not-null mask for column '{col_name}'",
         )
         mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))

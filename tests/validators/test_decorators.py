@@ -5,7 +5,7 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.exceptions import RegistrationError
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea.validators.decorators import checker, parser
 
 
 class TestColumnParserDecorator:
@@ -14,9 +14,8 @@ class TestColumnParserDecorator:
     def test_basic_registration(self):
         """Test basic parser registration via decorator."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(name="test_trim")
+        @parser(registry=registry, name="test_trim")
         def trim(column: pl.Expr) -> pl.Expr:
             return column.str.strip_chars()
 
@@ -30,9 +29,9 @@ class TestColumnParserDecorator:
     def test_with_metadata(self):
         """Test parser with full metadata."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(
+        @parser(
+            registry=registry,
             name="uppercase",
             description="Convert to uppercase",
             version="2.0.0",
@@ -53,9 +52,8 @@ class TestColumnParserDecorator:
     def test_functional_usage(self):
         """Test that decorated function still works as a function."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(name="double")
+        @parser(registry=registry, name="double")
         def double_val(column: pl.Expr) -> pl.Expr:
             return column * 2
 
@@ -68,9 +66,8 @@ class TestColumnParserDecorator:
         """Test decorator-registered parser works in schema validation."""
         registry = Registry()
         register_builtins(registry)
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(name="custom_trim")
+        @parser(registry=registry, name="custom_trim")
         def trim(column: pl.Expr) -> pl.Expr:
             return column.str.strip_chars()
 
@@ -97,9 +94,8 @@ class TestColumnCheckDecorator:
     def test_basic_registration(self):
         """Test basic check registration via decorator."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="test_positive")
+        @checker(registry=registry, name="test_positive")
         def is_positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -113,9 +109,9 @@ class TestColumnCheckDecorator:
     def test_with_metadata(self):
         """Test check with full metadata."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(
+        @checker(
+            registry=registry,
             name="not_empty",
             description="Check string not empty",
             version="1.5.0",
@@ -134,9 +130,8 @@ class TestColumnCheckDecorator:
         """Test decorator-registered check works in schema validation."""
         registry = Registry()
         register_builtins(registry)
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="positive", tags=["numeric"])
+        @checker(registry=registry, name="positive", tags=["numeric"])
         def is_positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -171,24 +166,22 @@ class TestDecoratorEdgeCases:
     def test_duplicate_registration_raises_error(self):
         """Test that registering duplicate name raises error."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(name="duplicate")
+        @parser(registry=registry, name="duplicate")
         def first(column: pl.Expr) -> pl.Expr:
             return column
 
         with pytest.raises(RegistrationError):
 
-            @decorators.column_parser(name="duplicate")
+            @parser(registry=registry, name="duplicate")
             def second(column: pl.Expr) -> pl.Expr:
                 return column
 
     def test_docstring_as_description(self):
         """Test that function docstring is used if no description provided."""
         registry = Registry()
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_parser(name="documented")
+        @parser(registry=registry, name="documented")
         def parser_with_doc(column: pl.Expr) -> pl.Expr:
             """This is the docstring."""
             return column

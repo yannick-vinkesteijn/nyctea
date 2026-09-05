@@ -56,6 +56,7 @@ class ColumnCheckPhase(PipelinePhase):
         check_masks: dict[tuple[str, str], str] = dict(context.check_masks)
         notnull_aliases = build_notnull_mask_exprs(
             schema,
+            self.name,
             current_columns,
             occupied_columns,
             mask_exprs,

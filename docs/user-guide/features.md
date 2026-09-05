@@ -72,11 +72,10 @@ register_builtins(registry)  # strip, lower, upper, to_int, to_float, min_value,
 Custom validators can be added via OOP classes or the decorator API:
 
 ```python
-from nyctea import ValidatorDecorator
+from nyctea import checker, frame_checker, frame_parser, parser
 
-decorators = ValidatorDecorator(registry)
 
-@decorators.column_check(name="positive", description="Value must be > 0")
+@checker(registry=registry, name="positive", description="Value must be > 0")
 def positive(column: pl.Expr) -> pl.Expr:
     return column > 0
 ```
@@ -112,11 +111,10 @@ operate on the whole DataFrame, for rules that need to see more than one column,
 as cross-column comparisons or a minimum row count.
 
 ```python
-from nyctea import ValidatorDecorator
+from nyctea import checker, frame_checker, frame_parser, parser
 
-decorators = ValidatorDecorator(registry)
 
-@decorators.frame_check(name="min_rows")
+@frame_checker(registry=registry, name="min_rows")
 def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
     if frame.select(pl.len()).collect().item() < min_rows:
         raise ValueError(f"expected at least {min_rows} rows")

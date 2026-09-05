@@ -1,5 +1,36 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: validators are declared by decorator, not by subclass
+
+`ValidatorDecorator` and the nine built-in validator classes are gone.
+Write an expression and decorate it.
+The decorators are module-level, so nothing has to be instantiated against a registry first.
+
+```python
+import polars as pl
+from nyctea import Registry, checker, parser
+
+registry = Registry()
+
+@parser(name="trim", registry=registry)
+def trim(column: pl.Expr) -> pl.Expr:
+    return column.str.strip_chars()
+
+@checker(name="in_range", registry=registry)
+def in_range(column: pl.Expr, *, low: float, high: float) -> pl.Expr:
+    return column.is_between(low, high, closed="both")
+```
+
+**The signature is the argument contract.**
+Keyword-only parameters are what a schema's `args` bind against, so a missing, extra or misspelled argument is reported before any data is read rather than as a failure mid-run.
+This replaces the hand-written `validate_args` method every validator used to need.
+
+**Migration.**
+`ValidatorDecorator(registry).column_check(name=...)` becomes `@checker(name=..., registry=registry)`, and the same for `parser`, `frame_checker` and `frame_parser`.
+Subclasses of `ColumnCheck`, `ColumnParser`, `FrameCheck` and `FrameParser` still work and are still how the decorators are implemented, but they are no longer the documented way to write a validator.
+The built-in classes `BetweenCheck`, `InSetCheck`, `MinValueCheck`, `UniqueCheck`, `StripParser`, `ToIntParser`, `ToFloatParser`, `LowerParser` and `UpperParser` were removed.
+Their names are unchanged in schemas, so no schema needs editing.
+
 ## Within v0.2.0 pre-release: `SchemaValidator` is now `DataValidator`
 
 The class validates data against a schema, but its name said it validated schemas.

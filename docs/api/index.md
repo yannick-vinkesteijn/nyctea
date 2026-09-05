@@ -52,7 +52,7 @@ The root package contains the common workflow:
 
 ```python
 from nyctea import (
-    SchemaModel, Registry, register_builtins, ValidatorDecorator,
+    SchemaModel, Registry, register_builtins, checker, parser,
     ErrorReportConfig, ValidationReport, ValidationResult,
     NycteaError, PipelineError, ValidationError, ValidatorError,
 )

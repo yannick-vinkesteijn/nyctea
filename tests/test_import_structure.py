@@ -100,7 +100,7 @@ def test_package_root_is_only_composition_point():
 def test_import_cycles_trace_to_one_cause():
     """Ratchet on the known cycles, all of which have one cause.
 
-    `SchemaModel.validate()` and `create_validator()` construct engine objects, so
+    `SchemaModel.validate()` constructs engine objects, so
     `nyctea.schema.model` imports `nyctea.engine.*` under `TYPE_CHECKING` and in
     two function bodies. That single upward edge closes every cycle the softer
     graph reports. None of them break at runtime, see
@@ -152,7 +152,7 @@ def test_no_module_scope_import_cycles():
 def test_api_boundary_is_only_upward_dependency():
     """Discount the one sanctioned exception, and nothing else points upward.
 
-    `SchemaModel.validate()` and `create_validator()` construct engine objects,
+    `SchemaModel.validate()` constructs engine objects,
     so `nyctea.schema.model` names `nyctea.engine` in a `TYPE_CHECKING` block and
     two function bodies. That is deliberate and stays: it is what makes
     `schema.validate(df, registry)` the first thing a user writes.

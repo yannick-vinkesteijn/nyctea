@@ -1,90 +1,50 @@
-"""Tests for built-in parsers."""
+"""Built-in parsers, exercised through the registry they are declared into."""
 
 import polars as pl
 import pytest
 
-from nyctea.validators.builtins.parsers import (
-    LowerParser,
-    StripParser,
-    ToFloatParser,
-    ToIntParser,
-    UpperParser,
-)
+from nyctea import Registry, register_builtins
 
 
-def test_strip_parser():
-    """Test StripParser removes whitespace."""
-    parser = StripParser()
-    assert parser.name == "strip"
-
-    df = pl.DataFrame({"col": ["  hello  ", "  world  "]}).lazy()
-    result = df.select(parser(pl.col("col"))).collect()
-
-    assert result["col"].to_list() == ["hello", "world"]
+@pytest.fixture
+def parsers():
+    registry = Registry()
+    register_builtins(registry)
+    return registry.column_parsers
 
 
-def test_to_int_parser():
-    """Test ToIntParser converts to integer."""
-    parser = ToIntParser()
-    assert parser.name == "to_int"
-
-    df = pl.DataFrame({"col": ["42", "123"]}).lazy()
-    result = df.select(parser(pl.col("col"))).collect()
-
-    assert result["col"].to_list() == [42, 123]
-    assert result["col"].dtype == pl.Int64
+def _apply(parsers, name, values):
+    frame = pl.DataFrame({"col": values}).lazy()
+    return frame.select(parsers.get(name)(pl.col("col")).alias("col")).collect()["col"].to_list()
 
 
-def test_to_float_parser():
-    """Test ToFloatParser converts to float."""
-    parser = ToFloatParser()
-    assert parser.name == "to_float"
-
-    df = pl.DataFrame({"col": ["3.14", "2.71"]}).lazy()
-    result = df.select(parser(pl.col("col"))).collect()
-
-    assert result["col"].to_list() == [3.14, 2.71]
-    assert result["col"].dtype == pl.Float64
+def test_strip_removes_whitespace(parsers):
+    assert _apply(parsers, "strip", ["  hello  ", "  world  "]) == ["hello", "world"]
 
 
-def test_lower_parser():
-    """Test LowerParser converts to lowercase."""
-    parser = LowerParser()
-    assert parser.name == "lower"
-
-    df = pl.DataFrame({"col": ["HELLO", "WORLD"]}).lazy()
-    result = df.select(parser(pl.col("col"))).collect()
-
-    assert result["col"].to_list() == ["hello", "world"]
+def test_to_int_casts_and_nulls_failures(parsers):
+    assert _apply(parsers, "to_int", ["1", "2", "notanumber"]) == [1, 2, None]
 
 
-def test_upper_parser():
-    """Test UpperParser converts to uppercase."""
-    parser = UpperParser()
-    assert parser.name == "upper"
-
-    df = pl.DataFrame({"col": ["hello", "world"]}).lazy()
-    result = df.select(parser(pl.col("col"))).collect()
-
-    assert result["col"].to_list() == ["HELLO", "WORLD"]
+def test_to_float_casts_and_nulls_failures(parsers):
+    assert _apply(parsers, "to_float", ["1.5", "oops"]) == [1.5, None]
 
 
-def test_parsers_reject_arguments():
-    """Test that parsers reject unexpected arguments."""
-    parser = StripParser()
-
-    with pytest.raises(ValueError, match="does not accept arguments"):
-        parser.validate_args(unexpected="value")
+def test_lower_lowercases(parsers):
+    assert _apply(parsers, "lower", ["ABC", "Def"]) == ["abc", "def"]
 
 
-def test_parsers_chain():
-    """Test that parsers can be chained."""
-    strip = StripParser()
-    lower = LowerParser()
+def test_upper_uppercases(parsers):
+    assert _apply(parsers, "upper", ["abc", "Def"]) == ["ABC", "DEF"]
 
-    df = pl.DataFrame({"col": ["  HELLO  ", "  WORLD  "]}).lazy()
 
-    # Chain: strip then lower
-    result = df.select(lower(strip(pl.col("col")))).collect()
+def test_parsers_reject_arguments(parsers):
+    """The empty signature after `column` is the contract, so an argument cannot bind."""
+    with pytest.raises(ValueError, match="unexpected keyword argument"):
+        parsers.get("strip")(pl.col("col"), extra=1)
 
-    assert result["col"].to_list() == ["hello", "world"]
+
+def test_parsers_chain(parsers):
+    frame = pl.DataFrame({"col": ["  ABC  "]}).lazy()
+    expr = parsers.get("lower")(parsers.get("strip")(pl.col("col")))
+    assert frame.select(expr.alias("col")).collect()["col"].to_list() == ["abc"]

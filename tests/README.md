@@ -48,7 +48,7 @@ uv run pytest tests/test_validation_minimal.py::test_parsers_applied_correctly -
 | `engine/validator.py`            | 95%      | DataValidator          |
 | `validators/builtins/parsers.py` | 84%      | Built-in parsers       |
 | `validators/registry.py`         | 81%      | Validator registration |
-| `engine/phases.py`               | 83%      | Pipeline phases        |
+| `engine/phases/`                 | 83%      | Pipeline phases        |
 | `engine/pipeline.py`             | 59%      | Pipeline orchestration |
 
 ## Adding New Tests
