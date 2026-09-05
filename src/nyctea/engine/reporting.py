@@ -124,6 +124,11 @@ def _build_errors_rows(context: PipelineContext, index: MaskIndex, config: Error
     small ``limit`` also bounds how much is materialized rather than only
     truncating output. Row materialization stays on the default engine, unlike
     the summary builder's pure aggregate.
+
+    The default engine is not incidental. `context.aggregate_engine` is only sound
+    for pure reductions, and this query materialises row indices through `implode()`.
+    That is also why this builder cannot share one `collect_all()` with the aggregate
+    pass, which #84 otherwise proposes.
     """
     entries = index.entries
     empty_schema = {
@@ -195,6 +200,11 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
     much is materialized rather than only truncating output. ``value`` is included
     only when ``config.include_values`` is set. Cell materialization stays on the
     default engine, unlike the summary builder's pure aggregate.
+
+    The default engine is not incidental. `context.aggregate_engine` is only sound
+    for pure reductions, and this query materialises row indices through `implode()`.
+    That is also why this builder cannot share one `collect_all()` with the aggregate
+    pass, which #84 otherwise proposes.
     """
     entries = index.entries
     empty_schema = {

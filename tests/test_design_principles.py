@@ -39,6 +39,9 @@ STATEFUL_BY_DESIGN = {
     # to another. It refreshes itself when `data` is replaced, so it cannot go
     # stale, and the context is the design document's named stateful exception.
     ("PipelineContext", "frame_schema"),
+    # A context manager has to remember what to put back, which is its whole contract.
+    ("Config", "__enter__"),
+    ("Config", "__exit__"),
 }
 
 

@@ -70,7 +70,7 @@ def read_csv(
     Args:
         path: Path to CSV file.
         schema: SchemaModel describing the expected columns.
-        lazy: Optional override. Defaults to schema.lazy.
+        lazy: Optional override. Defaults to the schema, then `nyctea.Config`.
         typed: When True, read with schema-declared dtypes (like Pandera/Patito).
             When False (default), read all columns as Utf8 and rely on parsing/coercion.
 
@@ -82,7 +82,7 @@ def read_csv(
         which is more efficient than building a full schema_overrides dict.
         When typed=True, uses schema_overrides with synonym support.
     """
-    use_lazy = schema.lazy if lazy is None else lazy
+    use_lazy = schema.resolved_lazy if lazy is None else lazy
 
     if typed:
         # Build dtype dict using all possible column names (canonical + synonyms)
@@ -115,12 +115,12 @@ def read_parquet(
     Args:
         path: Path or paths to Parquet files.
         schema: SchemaModel describing the expected columns.
-        lazy: Optional override. Defaults to schema.lazy.
+        lazy: Optional override. Defaults to the schema, then `nyctea.Config`.
 
     Returns:
         pl.LazyFrame or pl.DataFrame depending on lazy flag.
     """
-    use_lazy = schema.lazy if lazy is None else lazy
+    use_lazy = schema.resolved_lazy if lazy is None else lazy
     if use_lazy:
         return pl.scan_parquet(path)
     return pl.read_parquet(path)

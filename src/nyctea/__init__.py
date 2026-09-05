@@ -22,6 +22,7 @@ from nyctea.utils import configure_logging
 configure_logging()
 
 # Core API exports
+from nyctea.config import Config
 from nyctea.engine.results import ErrorReportConfig, ValidationReport, ValidationResult
 from nyctea.engine.validator import DataValidator
 from nyctea.exceptions import (
@@ -37,6 +38,7 @@ from nyctea.validators.decorators import checker, frame_checker, frame_parser, p
 from nyctea.validators.registry import Registry
 
 __all__ = [
+    "Config",
     "ConfigurationError",
     "ErrorReportConfig",
     "NycteaError",

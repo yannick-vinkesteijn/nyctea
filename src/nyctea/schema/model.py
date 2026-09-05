@@ -29,6 +29,7 @@ Note:
 
 import copy
 import json
+import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
@@ -40,6 +41,7 @@ import polars as pl
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from nyctea.config import Config
 from nyctea.exceptions import ConfigurationError
 from nyctea.types import OnFailureBehavior
 from nyctea.validators.registry import Registry
@@ -259,9 +261,14 @@ class SchemaModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    lazy: bool = Field(
-        True,
-        description="Whether to use Polars lazy execution during validation",
+    lazy: bool | None = Field(
+        None,
+        description=(
+            "Deprecated. Whether to use Polars lazy execution during validation. "
+            "This is a property of the run, not of what valid data looks like, so it "
+            "belongs in `nyctea.Config`. Kept as a fallback for one release: when set "
+            "it still wins over the config value. Read `resolved_lazy` rather than this."
+        ),
     )
 
     coerce: bool = Field(
@@ -279,10 +286,11 @@ class SchemaModel(BaseModel):
         ),
     )
 
-    streaming_row_threshold: int = Field(
-        100_000,
+    streaming_row_threshold: int | None = Field(
+        None,
         ge=0,
         description=(
+            "Deprecated, set it on `nyctea.Config` instead. "
             "Row count at or above which internal reduction-only aggregates (check "
             "and coercion enforcement, summary error counts, report building) use "
             "Polars' streaming engine instead of the in-memory one. Below this, an "
@@ -715,6 +723,31 @@ class SchemaModel(BaseModel):
         if suffix in {".yaml", ".yml"}:
             return cls.from_yaml_file(path_obj)
         raise ValueError(f"Unsupported file extension '{suffix}'. Use .json, .yaml, or .yml")
+
+    @property
+    def resolved_lazy(self) -> bool:
+        """Whether this run stays lazy, from the schema if set, else `nyctea.Config`."""
+        return Config.lazy() if self.lazy is None else self.lazy
+
+    @property
+    def resolved_streaming_row_threshold(self) -> int:
+        """The streaming threshold, from the schema if set, else `nyctea.Config`."""
+        return (
+            Config.streaming_row_threshold() if self.streaming_row_threshold is None else self.streaming_row_threshold
+        )
+
+    @model_validator(mode="after")
+    def warn_on_run_settings_in_schema(self) -> "SchemaModel":
+        """Warn once, at construction, that a run setting is living in a data contract."""
+        moved = [name for name in ("lazy", "streaming_row_threshold") if getattr(self, name) is not None]
+        if moved:
+            warnings.warn(
+                f"{', '.join(moved)} on a schema is deprecated and will be removed. "
+                "These describe the run, not the data, so set them on `nyctea.Config`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self
 
     def verify(self, registry: Registry) -> None:
         """Check the schema against a registry, without touching any data.

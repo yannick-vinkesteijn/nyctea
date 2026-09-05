@@ -276,7 +276,8 @@ class DataValidator:
         Args:
             df: Input DataFrame to validate.
             error_report_config: Configuration for error reporting.
-            lazy: Return LazyFrame (True) or DataFrame (False). If None, uses schema.lazy.
+            lazy: Return LazyFrame (True) or DataFrame (False). If None, uses the
+                schema's setting, then `nyctea.Config`.
 
         Returns:
             ValidationResult with validated data, errors, and report.
@@ -298,7 +299,7 @@ class DataValidator:
 
         # Decided from the original df (before the LazyFrame conversion below), since
         # only the eager form has a free row count to threshold on.
-        aggregate_engine = pick_aggregate_engine(df, self.schema.streaming_row_threshold)
+        aggregate_engine = pick_aggregate_engine(df, self.schema.resolved_streaming_row_threshold)
 
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
@@ -348,7 +349,7 @@ class DataValidator:
         clean = context.data.drop(sorted(context.internal_columns), strict=False)
 
         # Only collect if lazy=False
-        use_lazy = lazy if lazy is not None else self.schema.lazy
+        use_lazy = lazy if lazy is not None else self.schema.resolved_lazy
         final_data: pl.DataFrame | pl.LazyFrame = clean if use_lazy else collect(clean)
 
         return ValidationResult(

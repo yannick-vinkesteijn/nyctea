@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
 
+import polars as pl
+
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.observability import PhaseMetrics, PipelineObserver
 from nyctea.exceptions import PipelineError
@@ -286,9 +288,14 @@ class ValidationPipeline:
             for observer in self.observers:
                 observer.on_pipeline_start(context)
 
+            # One pass for the whole run, not one per phase. No phase adds or removes
+            # rows, so the count cannot change between them, and reading it per phase
+            # meant re-executing the upstream plan once per phase for a metric. See #84.
+            row_count = self._count_rows(context) if self.observers else 0
+
             # Execute each phase
             for phase in self.phases:
-                context = self._execute_phase(phase, context)
+                context = self._execute_phase(phase, context, row_count)
 
         except Exception as e:
             # Notify observers of error
@@ -308,12 +315,31 @@ class ValidationPipeline:
             # Unlock pipeline after execution
             self._locked = False
 
-    def _execute_phase(self, phase: PipelinePhase, context: PipelineContext) -> PipelineContext:
+    @staticmethod
+    def _count_rows(context: PipelineContext) -> int:
+        """Count the rows once, projecting no columns.
+
+        `select(pl.len())` reads a single number. Materialising a column to take its
+        height allocates the whole column for the same answer.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            Row count, or 0 when row tracking is not in place.
+        """
+        if "__row_index__" not in context.get_column_names():
+            return 0
+        return int(context.data.select(pl.len()).collect().item())
+
+    def _execute_phase(self, phase: PipelinePhase, context: PipelineContext, row_count: int = 0) -> PipelineContext:
         """Run a single phase, notifying observers and collecting metrics.
 
         Args:
             phase: Phase to execute.
             context: Current pipeline context.
+            row_count: The run's row count, taken once before the first phase. Only
+                read when observers are attached.
 
         Returns:
             Updated pipeline context.
@@ -341,9 +367,7 @@ class ValidationPipeline:
             metrics = PhaseMetrics(
                 phase_name=phase.name,
                 duration_seconds=phase_duration,
-                rows_processed=context.data.select("__row_index__").collect().height
-                if "__row_index__" in context.data.collect_schema().names()
-                else 0,
+                rows_processed=row_count,
             )
             for observer in self.observers:
                 observer.on_phase_end(phase.name, context, metrics)

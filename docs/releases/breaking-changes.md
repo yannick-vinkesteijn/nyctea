@@ -1,5 +1,30 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: run settings moved to `nyctea.Config`
+
+`lazy` and `streaming_row_threshold` describe the machine and the run, not what valid data looks like, so they no longer belong on a schema.
+Setting them per schema meant writing them into every schema file and keeping them in sync by hand, and it made batch validation over several schemas unable to share a threshold at all.
+
+`nyctea.Config` mirrors `pl.Config`, so the idiom is one Polars users already know.
+
+```python
+import nyctea
+
+nyctea.Config.set_streaming_row_threshold(0)          # globally
+
+with nyctea.Config(lazy=False):                        # scoped to a block
+    result = schema.validate(df, registry)
+
+@nyctea.Config(lazy=False)                             # scoped to a function
+def run(): ...
+```
+
+`save()`, `load()` and `restore_defaults()` work as they do in Polars.
+
+**Migration:** move `lazy` and `streaming_row_threshold` out of your schema files and set them once through `nyctea.Config`.
+Both fields still work for one release and still win over the config value when set, but constructing such a schema now emits a `DeprecationWarning`.
+Read `schema.resolved_lazy` and `schema.resolved_streaming_row_threshold` for the effective values; `schema.lazy` and `schema.streaming_row_threshold` are now the raw fields and are `None` when unset.
+
 ## Within v0.2.0 pre-release: schemas are verified before any data is read
 
 `SchemaModel.verify(registry)` walks every check and parser a schema names, column-level and frame-level, and confirms each against the registry without touching a frame.

@@ -65,3 +65,20 @@ def test_schema_resolves_at_most_four_times(schema, registry, frame, schema_reso
     schema.validate(frame, registry)
 
     assert len(schema_resolutions) <= 4
+
+
+def test_observers_add_one_collect(schema, registry, frame, collect_calls):
+    """The row count for phase metrics is taken once per run, not once per phase.
+
+    It used to materialise the whole `__row_index__` column inside `_execute_phase`,
+    so a six-phase run re-executed the upstream plan six times for one number (#84).
+    """
+    from nyctea.engine.factory import create_pipeline_from_schema
+    from nyctea.engine.observability import LoggingObserver
+    from nyctea.engine.validator import DataValidator
+
+    pipeline = create_pipeline_from_schema(schema)
+    pipeline.observers = [LoggingObserver()]
+    DataValidator(schema, registry, pipeline=pipeline).validate(frame)
+
+    assert len(collect_calls) <= 3

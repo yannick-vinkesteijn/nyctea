@@ -87,6 +87,7 @@ def test_schema_loads_successfully(sample_schema):
 def test_top_level_public_api_exports() -> None:
     """The root package stays focused on the common validation workflow."""
     assert set(nyctea.__all__) == {
+        "Config",
         "ConfigurationError",
         "ErrorReportConfig",
         "NycteaError",
