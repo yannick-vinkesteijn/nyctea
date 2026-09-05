@@ -14,9 +14,9 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
-from nyctea.engine.utils import _resolve_dtype
 from nyctea.exceptions import PipelineError, ValidationError
 from nyctea.schema.model import Check, SchemaModel
+from nyctea.utils import occupied_columns, resolve_dtype
 from nyctea.validators.registry import Registry
 
 NOT_NULL_CHECK = "not_null"
@@ -51,7 +51,7 @@ def _reject_alias_collision(alias: str, occupied_columns: Collection[str], phase
 
 def _occupied_columns(context: PipelineContext) -> set[str]:
     """Return every input and schema column name unavailable to internal helpers."""
-    return set(context.data.collect_schema().names()) | context.schema.accepted_names
+    return occupied_columns(context.data, context.schema.accepted_names)
 
 
 __all__ = [
@@ -391,7 +391,7 @@ class CoercionPhase(PipelinePhase):
 
             dtype = schema.column(col_name).dtype
             try:
-                target = _resolve_dtype(dtype)
+                target = resolve_dtype(dtype)
             except ValueError as e:
                 raise PipelineError(
                     f"Invalid dtype '{dtype}' for column '{col_name}': {e}",

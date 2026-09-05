@@ -232,4 +232,4 @@ If a synonym matches a column in the input data, it is renamed to the canonical 
 "name": {"dtype": "Utf8", "synonyms": ["Name", "NAME", "full_name"]}
 ```
 
-Ambiguous matches (both canonical and synonym present) raise `SchemaResolutionError`.
+Ambiguous matches (both canonical and synonym present) raise `ValidationError` from the column resolution phase.

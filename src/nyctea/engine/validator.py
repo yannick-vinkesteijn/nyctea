@@ -19,6 +19,7 @@ from nyctea.engine.results import ColumnValidationStats, ErrorReportConfig, Vali
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import SchemaModel
 from nyctea.types import AggregateEngine
+from nyctea.utils import occupied_columns
 from nyctea.validators.registry import Registry
 
 __all__ = ["SchemaValidator"]
@@ -203,8 +204,7 @@ class SchemaValidator:
 
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
-        occupied_columns = set(lf.collect_schema().names()) | self.schema.accepted_names
-        if "__row_index__" in occupied_columns:
+        if "__row_index__" in occupied_columns(lf, self.schema.accepted_names):
             raise PipelineError(
                 "Cannot build row tracking: the data or schema already contains "
                 "a column named '__row_index__'. Rename it before validating.",

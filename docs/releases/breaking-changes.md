@@ -1,5 +1,24 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `resolve_column_names` and `SchemaResolutionError` were removed
+
+Both were exported from `nyctea.engine` but no code in the package called them.
+`resolve_column_names` was a second implementation of column resolution, superseded by `SchemaModel.resolve_columns` and the `ColumnResolutionPhase` that applies it.
+`SchemaResolutionError` existed only to be raised by that function.
+Neither was ever marked deprecated, so this is the removal of dead code rather than the end of a deprecation cycle.
+
+The resolution the pipeline actually runs raises `ValidationError` for a missing required column or an ambiguous match.
+
+**Migration:** validate through `SchemaModel.validate()`, which resolves columns as its first phase.
+To resolve names without validating, use `SchemaModel.resolve_columns()` and apply the rename yourself.
+
+```python
+resolution = schema.resolve_columns(df.collect_schema().names())
+if not resolution.is_valid:
+    ...  # inspect resolution.missing_required and resolution.ambiguous
+df = df.rename(dict(resolution.rename))
+```
+
 ## Within v0.2.0 pre-release: `SchemaValidator.customize_pipeline()` was removed
 
 The method was a one-line `return self.pipeline.copy()` with a name that promised a customisation API it did not provide.

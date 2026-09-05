@@ -16,8 +16,8 @@ from nyctea.engine.phases import (
     ColumnResolutionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
 from nyctea.exceptions import PipelineError, ValidationError
+from nyctea.utils import resolve_dtype
 from nyctea.validators.decorators import ValidatorDecorator
 
 
@@ -45,55 +45,12 @@ def simple_schema():
 
 
 # ---------------------------------------------------------------------------
-# resolve_column_names
-# ---------------------------------------------------------------------------
-
-
-class TestResolveColumnNames:
-    def test_no_renaming_needed(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
-        df = pl.DataFrame({"age": [1, 2, 3]})
-        result = resolve_column_names(schema, df)
-        assert result.columns == ["age"]
-
-    def test_synonym_renaming(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age", "AGE"]}}})
-        df = pl.DataFrame({"Age": [1, 2, 3]})
-        result = resolve_column_names(schema, df)
-        assert "age" in result.columns
-
-    def test_missing_required_column_raises(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": True}}})
-        df = pl.DataFrame({"name": ["Alice"]})
-        with pytest.raises(SchemaResolutionError, match="Required column"):
-            resolve_column_names(schema, df)
-
-    def test_ambiguous_columns_raises(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["years"]}}})
-        df = pl.DataFrame({"age": [1], "years": [2]})
-        with pytest.raises(SchemaResolutionError, match="Ambiguous"):
-            resolve_column_names(schema, df)
-
-    def test_missing_optional_column_skipped(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": False}}})
-        df = pl.DataFrame({"name": ["Alice"]})
-        result = resolve_column_names(schema, df)
-        assert result.columns == ["name"]
-
-    def test_lazyframe_supported(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
-        lf = pl.LazyFrame({"Age": [1, 2]})
-        result = resolve_column_names(schema, lf)
-        assert "age" in result.collect_schema().names()
-
-
-# ---------------------------------------------------------------------------
 # ColumnResolutionPhase
 #
-# Characterization tests for the production resolution path. The
-# resolve_column_names tests above cover a separate implementation in
-# engine/utils.py that no production code calls, so before #86 these three
-# error paths (phases.py:116, 124, 134) had no coverage at all.
+# Characterization tests for the production resolution path. Before #86 the
+# three error paths (phases.py:116, 124, 134) had no coverage at all, because
+# the only resolution tests exercised a duplicate implementation in
+# engine/utils.py that no production code called. That duplicate is now deleted.
 # ---------------------------------------------------------------------------
 
 
@@ -205,19 +162,19 @@ def test_resolution_independent_of_column_order():
 
 class TestResolveDtype:
     def test_polars_instance_passthrough(self):
-        result = _resolve_dtype(pl.Int64())
+        result = resolve_dtype(pl.Int64())
         assert result == pl.Int64()
 
     def test_string_resolution(self):
-        assert _resolve_dtype("Utf8") == pl.Utf8
+        assert resolve_dtype("Utf8") == pl.Utf8
 
     def test_unknown_string_raises(self):
         with pytest.raises(ValueError, match="Unknown dtype string"):
-            _resolve_dtype("NotAType")
+            resolve_dtype("NotAType")
 
     def test_unsupported_type_raises(self):
         with pytest.raises(ValueError, match="Unsupported dtype specification"):
-            _resolve_dtype(123)
+            resolve_dtype(123)
 
 
 # ---------------------------------------------------------------------------

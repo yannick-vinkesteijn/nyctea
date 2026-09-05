@@ -112,7 +112,7 @@ def validate_data(df, schema, registry):
         ValidationResult with data, errors, and report.
 
     Raises:
-        SchemaResolutionError: If columns cannot be resolved.
+        ValidationError: If columns cannot be resolved.
 
     Example:
         >>> result = validate_data(df, schema, registry)
