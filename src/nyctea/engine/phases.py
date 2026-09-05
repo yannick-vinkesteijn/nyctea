@@ -51,7 +51,7 @@ def _reject_alias_collision(alias: str, occupied_columns: Collection[str], phase
 
 def _occupied_columns(context: PipelineContext) -> set[str]:
     """Return every input and schema column name unavailable to internal helpers."""
-    return occupied_columns(context.data, context.schema.accepted_names)
+    return occupied_columns(context.get_column_names(), context.schema.accepted_names)
 
 
 __all__ = [
@@ -97,7 +97,7 @@ class ColumnResolutionPhase(PipelinePhase):
         schema = context.schema
         lf = context.data
 
-        resolution = schema.resolve_columns(lf.collect_schema().names())
+        resolution = schema.resolve_columns(context.get_column_names())
 
         for canonical, physicals in resolution.ambiguous.items():
             raise ValidationError(
@@ -151,7 +151,7 @@ class FrameParsingPhase(PipelinePhase):
             PipelineError: If a frame parser is unregistered or fails.
         """
         registry = context.registry
-        input_columns = context.data.collect_schema().names()
+        input_columns = context.get_column_names()
         lf = context.data.drop("__row_index__") if "__row_index__" in input_columns else context.data
 
         for parser_spec in context.schema.frame_parsers:
@@ -233,7 +233,7 @@ class ColumnParsingPhase(PipelinePhase):
         schema = context.schema
         registry = context.registry
         lf = context.data
-        current_columns = set(lf.collect_schema().names())
+        current_columns = set(context.get_column_names())
 
         # Build the parser expressions before adding snapshots and failure masks.
         transformations: list[pl.Expr] = []
@@ -381,7 +381,7 @@ class CoercionPhase(PipelinePhase):
         schema = context.schema
         lf = context.data
 
-        current_dtypes = lf.collect_schema()
+        current_dtypes = context.frame_schema()
         occupied_columns = _occupied_columns(context)
         cast_exprs: list[pl.Expr] = []
 
@@ -541,7 +541,7 @@ class ColumnCheckPhase(PipelinePhase):
         schema = context.schema
         registry = context.registry
         lf = context.data
-        current_columns = set(lf.collect_schema().names())
+        current_columns = set(context.get_column_names())
         occupied_columns = _occupied_columns(context)
 
         # Build boolean mask columns for each check (True = passed)

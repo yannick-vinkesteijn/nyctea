@@ -204,7 +204,7 @@ class SchemaValidator:
 
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
-        if "__row_index__" in occupied_columns(lf, self.schema.accepted_names):
+        if "__row_index__" in occupied_columns(lf.collect_schema().names(), self.schema.accepted_names):
             raise PipelineError(
                 "Cannot build row tracking: the data or schema already contains "
                 "a column named '__row_index__'. Rename it before validating.",
@@ -280,7 +280,7 @@ class SchemaValidator:
             rules to apply to the collected row, in pipeline order.
         """
         schema = context.schema
-        col_names = context.data.collect_schema().names()
+        col_names = context.get_column_names()
 
         exprs: list[pl.Expr] = [pl.len().alias("__total__")]
         exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
@@ -453,7 +453,7 @@ class SchemaValidator:
             ValidationReport with row counts and per-column statistics.
         """
         schema = context.schema
-        col_names = context.data.collect_schema().names()
+        col_names = context.get_column_names()
         report_cols = [c for c in schema.columns if c in col_names]
 
         total = int(row["__total__"].item())

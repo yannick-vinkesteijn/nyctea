@@ -35,6 +35,10 @@ STATEFUL_BY_DESIGN = {
     ("MetricsCollector", "on_pipeline_error"),
     # A re-entrancy guard, not a value passed from one method to another.
     ("ValidationPipeline", "execute"),
+    # A cache keyed on the frame it describes, not a value passed from one method
+    # to another. It refreshes itself when `data` is replaced, so it cannot go
+    # stale, and the context is the design document's named stateful exception.
+    ("PipelineContext", "frame_schema"),
 }
 
 
