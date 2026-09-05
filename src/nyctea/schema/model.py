@@ -147,7 +147,7 @@ class ColumnSchema(BaseModel):
 
     @field_validator("dtype")
     @classmethod
-    def validate_dtype(cls, v: str) -> str:
+    def verify_dtype(cls, v: str) -> str:
         """Validate that dtype is a valid Polars dtype."""
         if not hasattr(pl, v):
             raise ValueError(f"'{v}' is not a valid Polars dtype")
@@ -157,7 +157,7 @@ class ColumnSchema(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_on_failure_nullable_consistency(self) -> "ColumnSchema":
+    def verify_on_failure_nullable_consistency(self) -> "ColumnSchema":
         """Ensure on_failure='null' requires nullable=True."""
         if self.on_failure == "null" and not self.nullable:
             raise ValueError(
@@ -304,7 +304,7 @@ class SchemaModel(BaseModel):
     frame_checks: list[FrameCheck] = Field(default_factory=list, description="DataFrame-level checks")
 
     @model_validator(mode="after")
-    def validate_name_ownership(self) -> "SchemaModel":
+    def verify_name_ownership(self) -> "SchemaModel":
         """Ensure every accepted column name is claimed by exactly one column.
 
         A schema whose names overlap cannot be resolved unambiguously, so it is
@@ -357,7 +357,7 @@ class SchemaModel(BaseModel):
     def build_indexes(self) -> "SchemaModel":
         """Compute every derived view now, so a constructed schema is complete.
 
-        Runs after ``validate_name_ownership``, which the indexes rely on: they
+        Runs after ``verify_name_ownership``, which the indexes rely on: they
         assume every accepted name has exactly one owner.
 
         The views are ``cached_property``, so touching each one here populates
@@ -729,7 +729,7 @@ class SchemaModel(BaseModel):
         Args:
             df: DataFrame to validate.
             registry: Validator registry with parsers and checks.
-            **kwargs: Additional validation options passed to SchemaValidator.
+            **kwargs: Additional validation options passed to DataValidator.
 
         Returns:
             ValidationResult with validated data, errors, and report.
@@ -746,7 +746,7 @@ class SchemaModel(BaseModel):
             >>> result = schema.validate(df, registry)
             >>> print(result.report.summary())
         """
-        from nyctea.engine.validator import SchemaValidator
+        from nyctea.engine.validator import DataValidator
 
-        validator = SchemaValidator(self, registry)
+        validator = DataValidator(self, registry)
         return validator.validate(df, **kwargs)

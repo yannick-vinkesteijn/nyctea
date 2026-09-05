@@ -1,6 +1,6 @@
 """Validation run orchestration.
 
-This module provides the SchemaValidator class, which drives one validation run:
+This module provides the DataValidator class, which drives one validation run:
 it builds the pipeline for a schema, executes it against the data, and assembles
 the report. It reads the schema and never modifies it.
 """
@@ -22,7 +22,7 @@ from nyctea.utils import occupied_columns
 from nyctea.utils.collect import collect, pick_aggregate_engine
 from nyctea.validators.registry import Registry
 
-__all__ = ["SchemaValidator"]
+__all__ = ["DataValidator"]
 
 
 @dataclass(frozen=True)
@@ -217,7 +217,7 @@ def apply_check_null(context: PipelineContext, row: pl.DataFrame, null_fail_expr
     context.data = context.data.with_columns(null_exprs)
 
 
-class SchemaValidator:
+class DataValidator:
     """Validates data against a schema using the validator pipeline.
 
     This class orchestrates the validation process, managing the pipeline
@@ -236,7 +236,7 @@ class SchemaValidator:
         >>> registry = Registry()
         >>> # ... register validators ...
         >>>
-        >>> validator = SchemaValidator(schema, registry)
+        >>> validator = DataValidator(schema, registry)
         >>> result = validator.validate(df)
     """
 

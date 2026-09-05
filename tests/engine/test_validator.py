@@ -1,4 +1,4 @@
-"""Tests for SchemaValidator: error report config, kwargs, and pipeline customization."""
+"""Tests for DataValidator: error report config, kwargs, and pipeline customization."""
 
 import polars as pl
 import pydantic
@@ -6,7 +6,7 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.engine.validator import SchemaValidator
+from nyctea.engine.validator import DataValidator
 from nyctea.exceptions import PipelineError
 
 
@@ -64,7 +64,7 @@ def test_error_report_config_rejects_negative_limit():
 
 
 def test_validate_rejects_unknown_kwargs(failing_schema, registry):
-    validator = SchemaValidator(failing_schema, registry)
+    validator = DataValidator(failing_schema, registry)
     df = pl.DataFrame({"age": [1, 2]})
     with pytest.raises(TypeError):
         validator.validate(df, strict=True)  # ty: ignore[unknown-argument]

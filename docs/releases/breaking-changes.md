@@ -1,5 +1,24 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `SchemaValidator` is now `DataValidator`
+
+The class validates data against a schema, but its name said it validated schemas.
+Nyctea now uses one verb for each job: data is validated, a schema is verified.
+`SchemaModel.verify(registry)` will check that a schema's checks and parsers resolve, and `DataValidator` checks that data conforms.
+
+Plain `Validator` was not available, since it is already the base class of the column and frame validator hierarchy.
+
+Most code never names the class. `SchemaModel.validate(df, registry)` is unchanged and remains the entry point.
+
+**Migration:** rename the import and the constructor call. Nothing else changes.
+
+```python
+from nyctea import DataValidator
+
+validator = DataValidator(schema, registry)
+result = validator.validate(df)
+```
+
 ## Within v0.2.0 pre-release: `resolve_column_names` and `SchemaResolutionError` were removed
 
 Both were exported from `nyctea.engine` but no code in the package called them.
@@ -22,7 +41,7 @@ df = df.rename(dict(resolution.rename))
 ## Within v0.2.0 pre-release: `SchemaValidator.customize_pipeline()` was removed
 
 The method was a one-line `return self.pipeline.copy()` with a name that promised a customisation API it did not provide.
-`SchemaValidator.pipeline` is a plain attribute, so a copy is available directly.
+`DataValidator.pipeline` is a plain attribute, so a copy is available directly.
 
 **Migration:** replace `validator.customize_pipeline()` with `validator.pipeline.copy()`.
 
@@ -182,7 +201,7 @@ from nyctea.engine.validate import validate
 result = validate(df, schema, registry)
 ```
 
-v0.2.0 uses `schema.validate(df, registry)` via `SchemaValidator`:
+v0.2.0 uses `schema.validate(df, registry)` via `DataValidator`:
 
 ```python
 result = schema.validate(df, registry)
