@@ -49,12 +49,12 @@ def test_columns_with_parsers(schema):
     assert schema.columns_with_parsers == ("email",)
 
 
-def test_columns_with_checks_excludes_generated_not_null(schema):
+def test_columns_with_checks_excludes_not_null(schema):
     """A non-nullable column with no declared checks is not a column 'with checks'."""
     assert schema.columns_with_checks == ("age",)
 
 
-def test_columns_needing_check_phase_includes_non_nullable(schema):
+def test_needing_check_phase_includes_non_nullable(schema):
     """The check phase must run for a non-nullable column even with no declared checks."""
     assert schema.columns_needing_check_phase == ("age",)
 
@@ -67,12 +67,12 @@ def test_columns_to_coerce_respects_resolution(schema):
     assert schema.columns_to_coerce == ("age", "email", "score")
 
 
-def test_columns_to_coerce_empty_when_schema_disables_coercion():
+def test_columns_to_coerce_empty_when_disabled():
     schema = SchemaModel.from_dict({"coerce": False, "columns": {"age": {"dtype": "Int64"}}})
     assert schema.columns_to_coerce == ()
 
 
-def test_columns_to_coerce_honours_a_column_level_override():
+def test_columns_to_coerce_honours_override():
     schema = SchemaModel.from_dict(
         {
             "coerce": False,
@@ -86,7 +86,7 @@ def test_accepted_names_covers_canonicals_and_synonyms(schema):
     assert schema.accepted_names == frozenset({"age", "Age", "AGE", "email", "score"})
 
 
-def test_canonical_by_accepted_name_maps_synonyms_and_self(schema):
+def test_accepted_name_maps_synonyms_and_self(schema):
     index = schema.canonical_by_accepted_name
 
     assert index["Age"] == "age"
@@ -110,7 +110,7 @@ def test_queries_preserve_schema_declaration_order():
     assert schema.non_nullable_columns == ("zebra", "apple")
 
 
-def test_queries_are_empty_for_a_schema_with_no_matching_columns():
+def test_queries_empty_without_matching_columns():
     schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64", "nullable": True}}})
 
     assert schema.columns_with_parsers == ()
@@ -135,7 +135,7 @@ def test_schema_is_frozen():
         schema.columns["age"].nullable = True  # ty: ignore[invalid-assignment]
 
 
-def test_query_views_cannot_be_mutated_through_their_return_value():
+def test_query_views_cannot_be_mutated():
     """Cached views hand back read-only proxies, so a caller cannot corrupt the cache."""
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
 
@@ -180,20 +180,20 @@ def test_resolved_column_honours_its_own_overrides():
     assert column.on_failure == "raise"
 
 
-def test_resolved_column_applies_the_non_nullable_guard():
+def test_resolved_column_applies_non_nullable_guard():
     """A non-nullable column inheriting on_failure='null' resolves to 'raise'. See #25."""
     schema = SchemaModel.from_dict({"on_failure": "null", "columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
     assert schema.column("age").on_failure == "raise"
 
 
-def test_resolved_column_accepted_names_puts_canonical_first():
+def test_accepted_names_put_canonical_first():
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age", "AGE"]}}})
 
     assert schema.column("age").accepted_names == ("age", "Age", "AGE")
 
 
-def test_resolved_column_needs_check_phase_covers_the_generated_not_null():
+def test_resolved_column_needs_check_phase():
     schema = SchemaModel.from_dict(
         {"columns": {"a": {"dtype": "Int64", "nullable": False}, "b": {"dtype": "Int64", "nullable": True}}}
     )
@@ -218,7 +218,7 @@ def test_column_raises_for_an_unknown_name():
         schema.column("nope")
 
 
-def test_resolve_methods_agree_with_the_resolved_view():
+def test_resolve_methods_match_resolved_view():
     """The old per-name API is kept, and now reads the same resolved values."""
     schema = SchemaModel.from_dict({"coerce": False, "columns": {"age": {"dtype": "Int64", "coerce": True}}})
 
@@ -243,7 +243,7 @@ DERIVED_VIEWS = (
 )
 
 
-def test_every_derived_view_is_built_at_construction():
+def test_derived_views_built_at_construction():
     """A constructed schema is complete: nothing is deferred to first use."""
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
 
@@ -264,7 +264,7 @@ def test_derived_views_are_never_rebuilt():
     assert first == second
 
 
-def test_indexes_are_built_only_after_ownership_is_validated():
+def test_indexes_built_after_ownership_check():
     """An invalid schema must fail on the conflict, not on a half-built index."""
     with pytest.raises(ValueError, match="exactly one owner"):
         SchemaModel.from_dict(
@@ -295,7 +295,7 @@ def test_schema_survives_copying_and_pickling():
         assert deferred == [], f"clone did not rebuild: {deferred}"
 
 
-def test_a_deep_copy_is_independent_and_still_frozen():
+def test_deep_copy_is_independent_and_frozen():
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
     clone = copy.deepcopy(schema)
 

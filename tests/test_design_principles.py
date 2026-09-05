@@ -38,7 +38,7 @@ STATEFUL_BY_DESIGN = {
 }
 
 
-def test_no_method_stores_working_state_on_self():
+def test_no_method_stores_state_on_self():
     """Methods pass data by argument and return value.
 
     The rule bans *intermediate* state, meaning a value one method writes and
@@ -64,7 +64,7 @@ def test_no_method_stores_working_state_on_self():
     assert offenders == [], "methods must not stash working values on self:\n" + "\n".join(offenders)
 
 
-def test_every_cached_property_on_the_schema_is_a_declared_derived_view():
+def test_cached_properties_are_declared_views():
     """A view missing from `_DERIVED_VIEWS` is lazy and can be rebuilt mid-run.
 
     The schema is frozen so that every derived view is computed once, at
@@ -109,7 +109,7 @@ KNOWN_SCHEMA_COLUMN_LOOPS = {
 }
 
 
-def test_no_new_caller_derives_by_looping_the_authoring_shape():
+def test_no_caller_loops_the_authoring_shape():
     """`schema.columns` is the authoring shape. Consumers read named views.
 
     Re-deriving a predicate from `columns.items()` is the duplication #86 exists to
@@ -140,7 +140,7 @@ def test_no_new_caller_derives_by_looping_the_authoring_shape():
     )
 
 
-def test_no_new_row_data_is_pulled_into_python_lists():
+def test_no_row_data_in_python_lists():
     """Data-scale values stay in Polars.
 
     Measured at a consistent 10x memory for the round trip out of Arrow, and

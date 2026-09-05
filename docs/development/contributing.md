@@ -105,6 +105,9 @@ uv run pytest tests/ -v
 Write tests as plain functions, not classes, and use fixtures for shared setup.
 Keep each test to one behavior.
 Test files mirror the `src/` structure under `tests/`.
+Test function names use at most six words after the `test_` prefix.
+A name is a label read in a failure line, so put the detail in the docstring instead of the name.
+`tests/test_naming_conventions.py` enforces the cap, with no exemptions.
 
 ## Documentation
 

@@ -40,7 +40,7 @@ def test_cells_mode_includes_value_by_default(failing_schema, registry):
     assert result.errors["value"].to_list() == ["-1"]
 
 
-def test_cells_mode_omits_value_when_include_values_false(failing_schema, registry):
+def test_cells_mode_omits_value_when_disabled(failing_schema, registry):
     df = pl.DataFrame({"age": [1, -1]})
     result = failing_schema.validate(
         df, registry, error_report_config=ErrorReportConfig(mode="cells", include_values=False)
@@ -49,7 +49,7 @@ def test_cells_mode_omits_value_when_include_values_false(failing_schema, regist
     assert result.errors["row_index"].to_list() == [1]
 
 
-def test_cells_mode_omits_value_on_empty_result(failing_schema, registry):
+def test_cells_mode_omits_value_when_empty(failing_schema, registry):
     df = pl.DataFrame({"age": [1, 2]})
     result = failing_schema.validate(
         df, registry, error_report_config=ErrorReportConfig(mode="cells", include_values=False)
@@ -76,7 +76,7 @@ def test_schema_validate_rejects_unknown_kwargs(failing_schema, registry):
         failing_schema.validate(df, registry, strict=True)
 
 
-def test_non_nullable_column_raises_the_bare_message(registry):
+def test_non_nullable_raises_bare_message(registry):
     """The not-null raise happens after the pipeline, so it is not phase-wrapped.
 
     #57 predicted this message change when the not-null enforcement moved out of

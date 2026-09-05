@@ -24,7 +24,7 @@ def schema():
     )
 
 
-def test_renames_only_where_physical_differs_from_canonical(schema):
+def test_renames_only_differing_physical_names(schema):
     resolution = schema.resolve_columns(["Age", "name"])
 
     assert resolution.is_valid
@@ -54,7 +54,7 @@ def test_absent_optional_column_is_not_missing(schema):
     assert resolution.missing_required == ()
 
 
-def test_two_accepted_names_for_one_column_is_ambiguous(schema):
+def test_two_accepted_names_are_ambiguous(schema):
     resolution = schema.resolve_columns(["age", "Age", "name"])
 
     assert not resolution.is_valid
@@ -91,7 +91,7 @@ def test_resolution_result_is_immutable(schema):
         resolution.rename["x"] = "y"
 
 
-def test_resolution_does_not_rebuild_the_schema_index(schema):
+def test_resolution_does_not_rebuild_index(schema):
     """The whole point: the per-run cost is the intersection, not rebuilding the index."""
     index_before = schema.canonical_by_accepted_name
     names_before = schema.accepted_names

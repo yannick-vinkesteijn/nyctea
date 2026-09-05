@@ -45,7 +45,7 @@ def test_to_dtype_rejects_unsupported_spec_type():
         _to_dtype(123)
 
 
-def test_read_csv_untyped_reads_all_columns_as_utf8(tmp_path, schema):
+def test_read_csv_untyped_gives_utf8(tmp_path, schema):
     path = tmp_path / "data.csv"
     path.write_text("passenger_id,name\n1,Alice\n2,Bob\n")
 
@@ -65,7 +65,7 @@ def test_read_csv_typed_applies_declared_dtypes(tmp_path, schema):
     assert df.schema["name"] == pl.Utf8
 
 
-def test_read_csv_typed_matches_synonym_column_names(tmp_path, schema):
+def test_read_csv_typed_matches_synonyms(tmp_path, schema):
     path = tmp_path / "data.csv"
     path.write_text("PassengerId,name\n1,Alice\n2,Bob\n")
 

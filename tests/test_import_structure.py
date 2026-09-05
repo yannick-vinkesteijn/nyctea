@@ -84,7 +84,7 @@ def _find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     return cycles
 
 
-def test_the_package_root_is_the_only_composition_point():
+def test_package_root_is_only_composition_point():
     """Nothing may import `nyctea` itself.
 
     The root is allowed to import everything, which is what lets a convenience
@@ -97,7 +97,7 @@ def test_the_package_root_is_the_only_composition_point():
     assert importers == [], f"these import the package root, which would create a cycle: {importers}"
 
 
-def test_every_import_cycle_traces_to_the_schema_reaching_into_the_engine():
+def test_import_cycles_trace_to_one_cause():
     """Ratchet on the known cycles, all of which have one cause.
 
     `SchemaModel.validate()` and `create_validator()` construct engine objects, so
@@ -117,7 +117,7 @@ def test_every_import_cycle_traces_to_the_schema_reaching_into_the_engine():
     )
 
 
-def test_the_schema_package_does_not_import_the_engine_at_module_scope():
+def test_schema_never_imports_engine_eagerly():
     """The one-way rule, enforced with no exemptions.
 
     `nyctea.schema` describes what a valid schema is. `nyctea.engine` runs
@@ -149,7 +149,7 @@ def test_no_module_scope_import_cycles():
     assert cycles == [], "module-scope import cycle:\n" + "\n".join(" -> ".join(c) for c in cycles)
 
 
-def test_the_api_boundary_is_the_only_upward_dependency():
+def test_api_boundary_is_only_upward_dependency():
     """Discount the one sanctioned exception, and nothing else points upward.
 
     `SchemaModel.validate()` and `create_validator()` construct engine objects,
@@ -172,7 +172,7 @@ def test_the_api_boundary_is_the_only_upward_dependency():
     )
 
 
-def test_the_only_type_checking_block_is_the_api_boundary():
+def test_type_checking_block_only_at_boundary():
     """A new `TYPE_CHECKING` block is a question, and this is where it gets asked.
 
     The design document treats a deferred or `TYPE_CHECKING` import as a signal

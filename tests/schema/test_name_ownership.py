@@ -24,7 +24,7 @@ def test_distinct_synonyms_are_accepted():
     assert schema.accepted_names == frozenset({"age", "Age", "AGE", "name", "Name"})
 
 
-def test_two_columns_cannot_claim_the_same_synonym():
+def test_two_columns_cannot_share_a_synonym():
     with pytest.raises(ValueError, match=r"'x' is claimed by more than one column: 'age', 'years'"):
         SchemaModel.from_dict(
             {
@@ -36,7 +36,7 @@ def test_two_columns_cannot_claim_the_same_synonym():
         )
 
 
-def test_a_synonym_cannot_shadow_another_columns_canonical_name():
+def test_synonym_cannot_shadow_canonical_name():
     with pytest.raises(ValueError, match=r"'age' is claimed by more than one column: 'age', 'years'"):
         SchemaModel.from_dict(
             {
@@ -48,7 +48,7 @@ def test_a_synonym_cannot_shadow_another_columns_canonical_name():
         )
 
 
-def test_a_column_cannot_list_its_own_canonical_name_as_a_synonym():
+def test_column_cannot_alias_its_own_name():
     with pytest.raises(ValueError, match=r"'age' is declared more than once by column 'age'"):
         SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["age"]}}})
 

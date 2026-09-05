@@ -62,6 +62,9 @@ Nyctea is a Polars-based data validation library with a validator architecture. 
 - Only test our own code, not functionality from external packages/libraries.
 - Test files mirror the source structure under `tests/`.
 - Keep tests simple and focused on one behavior per test.
+- Test function names use at most six words after the `test_` prefix.
+  A name is a label read in a failure line, so put the detail in the docstring instead of the name.
+  `tests/test_naming_conventions.py` enforces the cap, with no exemptions.
 
 ## Agent documents
 

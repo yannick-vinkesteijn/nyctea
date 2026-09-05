@@ -159,7 +159,7 @@ def _context_with_row_index():
     return PipelineContext(data=lf, schema=SchemaModel(columns={}), registry=Registry())
 
 
-def test_execute_phase_skips_metrics_collect_without_observers(collect_calls):
+def test_metrics_skipped_without_observers(collect_calls):
     """#11 step 1: the per-phase metrics block must not collect when nothing observes it."""
     pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
     pipeline.execute(_context_with_row_index())
