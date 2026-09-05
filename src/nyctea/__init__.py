@@ -23,6 +23,7 @@ configure_logging()
 
 # Core API exports
 from nyctea.engine.results import ErrorReportConfig, ValidationReport, ValidationResult
+from nyctea.engine.validator import DataValidator
 from nyctea.exceptions import (
     NycteaError,
     PipelineError,
@@ -31,7 +32,7 @@ from nyctea.exceptions import (
 )
 from nyctea.schema.model import SchemaModel
 from nyctea.validators.builtins.register import register_builtins
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea.validators.decorators import checker, frame_checker, frame_parser, parser
 from nyctea.validators.registry import Registry
 
 __all__ = [
@@ -40,10 +41,14 @@ __all__ = [
     "PipelineError",
     "Registry",
     "SchemaModel",
+    "DataValidator",
     "ValidationError",
     "ValidationReport",
     "ValidationResult",
-    "ValidatorDecorator",
+    "checker",
+    "frame_checker",
+    "frame_parser",
+    "parser",
     "ValidatorError",
     "configure_logging",
     "register_builtins",

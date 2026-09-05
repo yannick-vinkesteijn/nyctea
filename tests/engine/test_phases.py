@@ -7,16 +7,18 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import (
     COERCION_CHECK,
     NOT_NULL_CHECK,
     PARSING_CHECK,
     CoercionPhase,
+    ColumnResolutionPhase,
 )
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.engine.utils import SchemaResolutionError, _resolve_dtype, resolve_column_names
-from nyctea.exceptions import PipelineError
-from nyctea.validators.decorators import ValidatorDecorator
+from nyctea.exceptions import PipelineError, ValidationError
+from nyctea.utils import resolve_dtype
+from nyctea.validators.decorators import checker, frame_checker, frame_parser
 
 
 @pytest.fixture
@@ -43,46 +45,114 @@ def simple_schema():
 
 
 # ---------------------------------------------------------------------------
-# resolve_column_names
+# ColumnResolutionPhase
+#
+# Characterization tests for the production resolution path. Before #86 the
+# three error paths (phases.py:116, 124, 134) had no coverage at all, because
+# the only resolution tests exercised a duplicate implementation in
+# engine/utils.py that no production code called. That duplicate is now deleted.
 # ---------------------------------------------------------------------------
 
 
-class TestResolveColumnNames:
-    def test_no_renaming_needed(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
-        df = pl.DataFrame({"age": [1, 2, 3]})
-        result = resolve_column_names(schema, df)
-        assert result.columns == ["age"]
+def _resolution_context(schema, data):
+    """Build a context positioned exactly as ColumnResolutionPhase expects it."""
+    return PipelineContext(data=data.lazy(), schema=schema, registry=Registry())
 
-    def test_synonym_renaming(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age", "AGE"]}}})
-        df = pl.DataFrame({"Age": [1, 2, 3]})
-        result = resolve_column_names(schema, df)
-        assert "age" in result.columns
 
-    def test_missing_required_column_raises(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": True}}})
-        df = pl.DataFrame({"name": ["Alice"]})
-        with pytest.raises(SchemaResolutionError, match="Required column"):
-            resolve_column_names(schema, df)
+def test_resolution_phase_renames_synonym_to_canonical():
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"Age": [1, 2]}))
 
-    def test_ambiguous_columns_raises(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["years"]}}})
-        df = pl.DataFrame({"age": [1], "years": [2]})
-        with pytest.raises(SchemaResolutionError, match="Ambiguous"):
-            resolve_column_names(schema, df)
+    result = ColumnResolutionPhase().execute(ctx)
 
-    def test_missing_optional_column_skipped(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": False}}})
-        df = pl.DataFrame({"name": ["Alice"]})
-        result = resolve_column_names(schema, df)
-        assert result.columns == ["name"]
+    assert result.data.collect_schema().names() == ["age"]
 
-    def test_lazyframe_supported(self):
-        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
-        lf = pl.LazyFrame({"Age": [1, 2]})
-        result = resolve_column_names(schema, lf)
-        assert "age" in result.collect_schema().names()
+
+def test_resolution_phase_sets_original_data():
+    """original_data is the post-resolution snapshot the report's null stats read from."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"Age": [1, 2]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.original_data is not None
+    assert result.original_data.collect_schema().names() == ["age"]
+
+
+def test_resolution_leaves_frame_untouched():
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"age": [1, 2]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.data.collect_schema().names() == ["age"]
+
+
+def test_resolution_phase_skips_missing_optional_column():
+    schema = SchemaModel.from_dict(
+        {"columns": {"age": {"dtype": "Int64", "required": False}, "name": {"dtype": "Utf8"}}}
+    )
+    ctx = _resolution_context(schema, pl.DataFrame({"name": ["Alice"]}))
+
+    result = ColumnResolutionPhase().execute(ctx)
+
+    assert result.data.collect_schema().names() == ["name"]
+
+
+def test_resolution_raises_on_missing_column():
+    """Covers phases.py:116."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "required": True}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"name": ["Alice"]}))
+
+    with pytest.raises(ValidationError, match="Required column 'age' is missing") as exc:
+        ColumnResolutionPhase().execute(ctx)
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "column_resolution"
+
+
+def test_resolution_raises_on_ambiguous_names():
+    """Covers phases.py:124. Two accepted names for one column is ambiguous, not a preference."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "synonyms": ["years"]}}})
+    ctx = _resolution_context(schema, pl.DataFrame({"age": [1], "years": [2]}))
+
+    with pytest.raises(ValidationError, match="Ambiguous columns for 'age'") as exc:
+        ColumnResolutionPhase().execute(ctx)
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "column_resolution"
+
+
+def test_resolution_rejects_colliding_physical_names():
+    """A schema that could produce this is now rejected before any data is touched.
+
+    Two columns claiming one name used to construct fine and fail here at
+    runtime, and only if the data happened to contain the contested name. See
+    test_name_ownership.py; the runtime guard is gone because it is unreachable.
+    """
+    with pytest.raises(ValueError, match="exactly one owner"):
+        SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "synonyms": ["x"]},
+                    "years": {"dtype": "Int64", "synonyms": ["x"]},
+                }
+            }
+        )
+
+
+def test_resolution_independent_of_column_order():
+    """Column order must not affect resolution (#86 invariant 4)."""
+    schema = SchemaModel.from_dict(
+        {"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}, "name": {"dtype": "Utf8"}}}
+    )
+    forward = _resolution_context(schema, pl.DataFrame({"Age": [1], "name": ["a"]}))
+    reverse = _resolution_context(schema, pl.DataFrame({"name": ["a"], "Age": [1]}))
+
+    forward_names = ColumnResolutionPhase().execute(forward).data.collect_schema().names()
+    reverse_names = ColumnResolutionPhase().execute(reverse).data.collect_schema().names()
+
+    assert sorted(forward_names) == sorted(reverse_names) == ["age", "name"]
 
 
 # ---------------------------------------------------------------------------
@@ -92,19 +162,19 @@ class TestResolveColumnNames:
 
 class TestResolveDtype:
     def test_polars_instance_passthrough(self):
-        result = _resolve_dtype(pl.Int64())
+        result = resolve_dtype(pl.Int64())
         assert result == pl.Int64()
 
     def test_string_resolution(self):
-        assert _resolve_dtype("Utf8") == pl.Utf8
+        assert resolve_dtype("Utf8") == pl.Utf8
 
     def test_unknown_string_raises(self):
         with pytest.raises(ValueError, match="Unknown dtype string"):
-            _resolve_dtype("NotAType")
+            resolve_dtype("NotAType")
 
     def test_unsupported_type_raises(self):
         with pytest.raises(ValueError, match="Unsupported dtype specification"):
-            _resolve_dtype(123)
+            resolve_dtype(123)
 
 
 # ---------------------------------------------------------------------------
@@ -137,18 +207,21 @@ class TestCoercionPhase:
             registry=Registry(),
         )
 
-    def test_skipped_when_coerce_false(self, simple_schema):
+    def _coerce_schema(self, coerce):
+        return SchemaModel.from_dict(
+            {"coerce": coerce, "columns": {"age": {"dtype": "Int64"}, "name": {"dtype": "Utf8"}}}
+        )
+
+    def test_skipped_when_coerce_false(self):
         phase = CoercionPhase()
-        simple_schema.coerce = False
         df = pl.DataFrame({"age": [1, 2], "name": ["a", "b"]})
-        ctx = self._context(simple_schema, df)
+        ctx = self._context(self._coerce_schema(False), df)
         assert phase.can_skip(ctx) is True
 
-    def test_not_skipped_when_coerce_true(self, simple_schema):
+    def test_not_skipped_when_coerce_true(self):
         phase = CoercionPhase()
-        simple_schema.coerce = True
         df = pl.DataFrame({"age": [1, 2], "name": ["a", "b"]})
-        ctx = self._context(simple_schema, df)
+        ctx = self._context(self._coerce_schema(True), df)
         assert phase.can_skip(ctx) is False
 
     def test_coercion_with_failures(self):
@@ -252,58 +325,11 @@ class TestCoercionPhase:
 
 
 # ---------------------------------------------------------------------------
-# _collect / _collect_aggregate engine selection (#11 step 4)
-# ---------------------------------------------------------------------------
-
-
-class TestCollectEngineSelection:
-    def test_collect_aggregate_uses_given_engine(self, collect_calls):
-        from nyctea.schema.validator import _collect_aggregate
-
-        _collect_aggregate(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
-        assert collect_calls[0].get("engine") == "streaming"
-
-    def test_collect_uses_default_engine(self, collect_calls):
-        from nyctea.schema.validator import _collect
-
-        _collect(pl.LazyFrame({"a": [1, 2, 3]}))
-        assert collect_calls[0].get("engine") is None
-
-    def test_pick_engine_df_below_threshold(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
-
-        df = pl.DataFrame({"a": range(100)})
-        assert _pick_aggregate_engine(df, threshold=1000) == "in-memory"
-
-    def test_pick_engine_df_above_threshold(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
-
-        df = pl.DataFrame({"a": range(1000)})
-        assert _pick_aggregate_engine(df, threshold=1000) == "streaming"
-
-    def test_pick_engine_lazyframe_streams(self):
-        from nyctea.schema.validator import _pick_aggregate_engine
-
-        lf = pl.LazyFrame({"a": [1, 2, 3]})
-        assert _pick_aggregate_engine(lf, threshold=1_000_000) == "streaming"
-
-    def test_threshold_rejects_negative(self):
-        """A negative row count is meaningless and would silently invert engine choice."""
-        with pytest.raises(ValueError, match="greater than or equal to 0"):
-            SchemaModel.from_dict({"streaming_row_threshold": -1, "columns": {"a": {"dtype": "Int64"}}})
-
-    def test_threshold_allows_zero(self):
-        """0 is the deliberate boundary: stream everything, including empty frames."""
-        schema = SchemaModel.from_dict({"streaming_row_threshold": 0, "columns": {"a": {"dtype": "Int64"}}})
-        assert schema.streaming_row_threshold == 0
-
-
-# ---------------------------------------------------------------------------
 # Collect count regression (#38)
 # ---------------------------------------------------------------------------
 
 
-def test_collect_count_with_raise_and_null_columns(registry, collect_calls):
+def test_aggregates_use_one_collect(registry, collect_calls):
     """_run_aggregates_and_raise must perform a single aggregate collect covering
     on_failure=raise counts, on_failure=null counts, and report aggregates. _build_errors
     keeps its own collect, since row/cell modes need the default engine (see
@@ -484,7 +510,7 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="nullable=False"):
             schema.validate(df, registry)
 
-    def test_nullable_false_does_not_leak_internal_columns(self, registry):
+    def test_nullable_false_leaks_no_internals(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
         df = pl.DataFrame({"age": [1, 2, 3]})
         result = schema.validate(df, registry)
@@ -560,7 +586,7 @@ class TestFullPipeline:
         result = schema.validate(pl.DataFrame({"age": [-1]}), registry)
         assert result.errors["count"].item() == 1
 
-    def test_nullable_false_on_failure_ignore_does_not_raise(self, registry):
+    def test_nullable_false_ignore_does_not_raise(self, registry):
         schema = SchemaModel.from_dict(
             {"columns": {"age": {"dtype": "Int64", "nullable": False, "on_failure": "ignore"}}}
         )
@@ -568,7 +594,7 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         assert result.data.collect_schema().names() == ["age"]
 
-    def test_nullable_false_on_failure_ignore_reports_the_null(self, registry):
+    def test_nullable_false_ignore_reports_null(self, registry):
         """on_failure='ignore' must report the null, not swallow it."""
         schema = SchemaModel.from_dict(
             {"columns": {"age": {"dtype": "Int64", "nullable": False, "on_failure": "ignore"}}}
@@ -591,7 +617,8 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
 
-    def test_notnull_mask_alias_collision_with_absent_optional_column_raises(self, registry):
+    def test_notnull_alias_collides_with_optional(self, registry):
+        """A `__notnull__` alias is taken by a declared optional column that this frame omits."""
         schema = SchemaModel.from_dict(
             {
                 "columns": {
@@ -608,7 +635,8 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="schema already contains a column named"):
             schema.validate(pl.DataFrame({"age": [1]}), registry)
 
-    def test_notnull_mask_alias_collision_with_schema_synonym_raises(self, registry):
+    def test_notnull_alias_collides_with_synonym(self, registry):
+        """A `__notnull__` alias is taken by another column's schema synonym."""
         schema = SchemaModel.from_dict(
             {
                 "columns": {
@@ -635,7 +663,7 @@ class TestFullPipeline:
         result = MySchema.from_python({"columns": {"age": {"dtype": "Int64"}}})
         assert isinstance(result, MySchema)
 
-    def test_user_columns_with_internal_prefixes_are_preserved(self, registry):
+    def test_user_prefixed_columns_are_preserved(self, registry):
         """Only columns this run generated are stripped, not everything matching a prefix."""
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
         df = pl.DataFrame({"age": [1, 2], "__notnull__zzz": [7, 8], "__check__foo": [1, 2]})
@@ -692,7 +720,8 @@ class TestFullPipeline:
             schema.validate(df, registry)
 
     @pytest.mark.parametrize("alias", ["__pre_null__age", "__coercion_ok__age"])
-    def test_coercion_alias_collision_with_absent_optional_column_raises(self, registry, alias):
+    def test_coercion_alias_collides_with_optional(self, registry, alias):
+        """A coercion alias is taken by a declared optional column that this frame omits."""
         schema = SchemaModel.from_dict(
             {
                 "columns": {
@@ -709,7 +738,7 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="schema already contains a column named"):
             schema.validate(pl.DataFrame({"age": ["1"]}), registry)
 
-    def test_duplicate_check_name_on_one_column_raises(self, registry):
+    def test_duplicate_check_name_raises(self, registry):
         """Two same-named checks collided in check_masks and the second silently won.
 
         The first check was dropped from reporting AND enforcement: a declared
@@ -733,7 +762,7 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="more than one check named 'between'"):
             schema.validate(pl.DataFrame({"a": [1, 30]}), registry)
 
-    def test_same_check_name_on_different_columns_is_fine(self, registry):
+    def test_same_check_name_on_two_columns(self, registry):
         """The key is (column, check), so the same check name on two columns must still work."""
         schema = SchemaModel.from_dict(
             {
@@ -747,11 +776,10 @@ class TestFullPipeline:
         result = schema.validate(pl.DataFrame({"a": [1, -1], "b": [50, 5]}), registry)
         assert sorted(result.errors["column"].to_list()) == ["a", "b"]
 
-    def test_not_null_check_name_is_reserved_on_non_nullable_column(self, registry):
+    def test_not_null_reserved_on_non_nullable(self, registry):
         """A user check named not_null must not silently replace the built-in constraint."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="not_null", tags=[])
+        @checker(name="not_null", tags=[], registry=registry)
         def over_hundred(column: pl.Expr) -> pl.Expr:
             return column > 100
 
@@ -761,11 +789,10 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="reserved"):
             schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
 
-    def test_not_null_check_name_is_reserved_on_nullable_column(self, registry):
+    def test_not_null_reserved_on_nullable(self, registry):
         """The name stays reserved because downstream consumers always treat it as internal."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="not_null", tags=[])
+        @checker(name="not_null", tags=[], registry=registry)
         def over_hundred(column: pl.Expr) -> pl.Expr:
             return column > 100
 
@@ -776,7 +803,7 @@ class TestFullPipeline:
             schema.validate(pl.DataFrame({"age": [1, 300]}), registry)
 
     @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
-    def test_not_null_reported_in_every_error_mode(self, registry, mode):
+    def test_not_null_in_every_error_mode(self, registry, mode):
         """Registering not-null masks must not break any error report mode."""
         schema = SchemaModel.from_dict(
             {"on_failure": "ignore", "columns": {"age": {"dtype": "Int64", "nullable": False}}}
@@ -802,7 +829,8 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="already contains a column named"):
             schema.validate(df, registry)
 
-    def test_check_mask_alias_collision_with_absent_optional_column_raises(self, registry):
+    def test_check_alias_collides_with_optional(self, registry):
+        """A `__check__` alias is taken by a declared optional column that this frame omits."""
         schema = SchemaModel.from_dict(
             {
                 "on_failure": "ignore",
@@ -824,7 +852,7 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="schema already contains a column named"):
             schema.validate(pl.DataFrame({"age": [1]}), registry)
 
-    def test_check_mask_alias_collision_raises_with_coercion_active(self, registry):
+    def test_check_alias_collision_under_coercion(self, registry):
         """A pre-seeded coercion mask must not shift the check-mask alias counter.
 
         Otherwise the first real check gets '__check__1' instead of '__check__0',
@@ -853,13 +881,12 @@ class TestFullPipeline:
         Column 'a' with check 'b__c' and column 'a__b' with check 'c' both mapped to
         '__check__a__b__c' under the old naming, which crashed polars.
         """
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="b__c", tags=[])
+        @checker(name="b__c", tags=[], registry=registry)
         def positive(column: pl.Expr) -> pl.Expr:
             return column > 0
 
-        @decorators.column_check(name="c", tags=[])
+        @checker(name="c", tags=[], registry=registry)
         def over_thousand(column: pl.Expr) -> pl.Expr:
             return column > 1000
 
@@ -905,7 +932,7 @@ class TestFullPipeline:
         result = schema.validate(df, registry)
         assert result.report.columns["score"].check_failures == 2
 
-    def test_check_failures_sum_matches_errors_with_multiple_checks(self, registry):
+    def test_two_failing_checks_count_twice(self, registry):
         """A row failing two checks on the same column must count as two failures.
 
         report.columns[col].check_failures must equal the sum of errors["count"]
@@ -1016,7 +1043,7 @@ def test_parser_introduced_null_raises(registry):
         schema.validate(pl.DataFrame({"age": ["1", "bad"]}), registry)
 
 
-def test_parser_introduced_null_precedes_not_null_failure(registry):
+def test_parser_null_precedes_not_null(registry):
     schema = SchemaModel.from_dict(
         {
             "columns": {
@@ -1033,7 +1060,7 @@ def test_parser_introduced_null_precedes_not_null_failure(registry):
         schema.validate(pl.DataFrame({"age": ["1", "bad"]}), registry)
 
 
-def test_parser_chain_uses_null_state_before_first_parser(registry):
+def test_parser_chain_uses_prior_null_state(registry):
     schema = SchemaModel.from_dict(
         {
             "on_failure": "ignore",
@@ -1054,10 +1081,9 @@ def test_parser_chain_uses_null_state_before_first_parser(registry):
     assert result.report.columns["age"].parse_failures == 1
 
 
-def test_original_null_count_is_before_frame_parsing(registry):
-    decorators = ValidatorDecorator(registry)
+def test_original_nulls_counted_before_frame_parsing(registry):
 
-    @decorators.frame_parser(name="drop_nulls", preserve_columns=True, preserve_rows=False)
+    @frame_parser(registry=registry, name="drop_nulls", preserve_columns=True, preserve_rows=False)
     def drop_nulls(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.filter(pl.col("age").is_not_null())
 
@@ -1144,7 +1170,7 @@ def test_original_null_count_without_column_parsers(registry):
     assert result.report.columns["age"].final_null_count == 1
 
 
-def test_original_null_count_uses_resolved_column_name(registry):
+def test_original_nulls_use_resolved_name(registry):
     schema = SchemaModel.from_dict(
         {
             "on_failure": "ignore",
@@ -1164,9 +1190,8 @@ def test_original_null_count_uses_resolved_column_name(registry):
 
 
 def test_parse_check_name_is_reserved(registry):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.column_check(name="parse", tags=[])
+    @checker(name="parse", tags=[], registry=registry)
     def fake_parse(column: pl.Expr) -> pl.Expr:
         return column > 0
 
@@ -1218,7 +1243,8 @@ def test_parser_mask_alias_collision_raises(registry, alias):
     "alias",
     ["__pre_parse_null__age", "__pre_parse_value__age", "__parse_ok__age"],
 )
-def test_parser_mask_alias_collision_with_absent_optional_column_raises(registry, alias):
+def test_parser_alias_collides_with_optional(registry, alias):
+    """A parser alias is taken by a declared optional column that this frame omits."""
     schema = SchemaModel.from_dict(
         {
             "on_failure": "ignore",
@@ -1245,7 +1271,7 @@ def test_parser_mask_alias_collision_with_absent_optional_column_raises(registry
         )
 
 
-def test_parser_failure_and_original_null_are_distinct_on_non_nullable_column(registry):
+def test_parser_failure_distinct_from_original_null(registry):
     schema = SchemaModel.from_dict(
         {
             "on_failure": "ignore",
@@ -1276,9 +1302,8 @@ def test_parser_failure_and_original_null_are_distinct_on_non_nullable_column(re
 
 class TestFrameValidators:
     def test_frame_parser_runs_and_transforms_data(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_parser(name="add_total", preserve_columns=False, preserve_rows=True)
+        @frame_parser(registry=registry, name="add_total", preserve_columns=False, preserve_rows=True)
         def add_total(frame: pl.LazyFrame) -> pl.LazyFrame:
             return frame.with_columns((pl.col("a") + pl.col("b")).alias("total"))
 
@@ -1303,9 +1328,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
     def test_frame_parser_execution_failure_raises(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_parser(name="explode", preserve_columns=False)
+        @frame_parser(registry=registry, name="explode", preserve_columns=False)
         def explode(frame: pl.LazyFrame) -> pl.LazyFrame:  # noqa: ARG001
             raise ValueError("boom")
 
@@ -1319,9 +1343,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1]}), registry)
 
     def test_frame_check_raises_on_failure(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_check(name="min_rows")
+        @frame_checker(registry=registry, name="min_rows")
         def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
             if frame.select(pl.len()).collect().item() < min_rows:
                 raise ValueError("not enough rows")
@@ -1337,9 +1360,8 @@ class TestFrameValidators:
             schema.validate(pl.DataFrame({"a": [1, 2]}), registry)
 
     def test_frame_check_passes_through_on_success(self, registry):
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.frame_check(name="min_rows")
+        @frame_checker(registry=registry, name="min_rows")
         def min_rows(frame: pl.LazyFrame, min_rows: int = 1) -> pl.LazyFrame:
             if frame.select(pl.len()).collect().item() < min_rows:
                 raise ValueError("not enough rows")
@@ -1394,7 +1416,7 @@ class TestNullification:
         assert ages[2] == 5
         assert result.report.columns["age"].nullified == 2
 
-    def test_check_nullified_values_not_counted_as_coercion_failures(self, registry):
+    def test_nullified_values_are_not_coercion_failures(self, registry):
         """A value nulled by a failing check must not also be reported as a coercion failure.
 
         Both look identical from the __pre_null__ snapshot alone (wasn't null before
@@ -1487,7 +1509,7 @@ class TestNullification:
         with pytest.raises(PipelineError, match="Coercion failed for column 'age'"):
             schema.validate(df, registry)
 
-    def test_coercion_failure_on_non_nullable_column_reports_both_and_counts_once(self, registry):
+    def test_non_nullable_coercion_failure_counts_once(self, registry):
         """A coercion-failed cell on a nullable=False column is null: both constraints fail.
 
         Both should be reported, but the row must only count as invalid once.
@@ -1508,9 +1530,8 @@ class TestNullification:
 
     def test_coercion_check_name_is_reserved(self, registry):
         """A user check named 'coerce' on a coerced column must not silently collide."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -1525,11 +1546,10 @@ class TestNullification:
         with pytest.raises(PipelineError, match="reserved"):
             schema.validate(pl.DataFrame({"age": ["1", "2"]}), registry)
 
-    def test_coercion_check_name_is_reserved_even_when_no_cast_is_needed(self, registry):
+    def test_coercion_name_reserved_without_a_cast(self, registry):
         """The reservation is a schema property, not conditional on this input needing a cast."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -1544,11 +1564,10 @@ class TestNullification:
         with pytest.raises(PipelineError, match="reserved"):
             schema.validate(pl.DataFrame({"age": [1, 2]}), registry)
 
-    def test_coercion_check_name_is_reserved_when_coercion_is_disabled(self, registry):
+    def test_coercion_name_reserved_when_disabled(self, registry):
         """The name stays reserved because downstream consumers always treat it as internal."""
-        decorators = ValidatorDecorator(registry)
 
-        @decorators.column_check(name="coerce", tags=[])
+        @checker(name="coerce", tags=[], registry=registry)
         def fake_coerce(column: pl.Expr) -> pl.Expr:
             return column > 0
 
@@ -1743,7 +1762,7 @@ class TestValidationReportSummary:
         text = result.report.summary()
         assert "3/3 valid" in text
 
-    def test_summary_empty_frame_does_not_divide_by_zero(self, registry):
+    def test_empty_frame_summary_avoids_zero_division(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": True}}})
         df = pl.DataFrame({"age": []}, schema={"age": pl.Int64})
         result = schema.validate(df, registry)
@@ -1871,7 +1890,7 @@ class TestOnFailure:
         values = result.data.collect()["age"].to_list()
         assert values == [25, None]
 
-    def test_per_column_raise_fails_while_schema_null(self, registry):
+    def test_column_raise_overrides_schema_null(self, registry):
         """Column-level on_failure=raise overrides schema-level null."""
         schema = SchemaModel.from_dict(
             {
@@ -1917,7 +1936,30 @@ class TestOnFailure:
         with pytest.raises(PipelineError, match="Check failed for column 'age'"):
             schema.validate(df, registry)
 
-    def test_check_ignore_on_failure_does_not_raise(self, registry):
+    def test_not_null_precedes_check_raise(self, registry):
+        """The not-null raise wins when a column fails both, matching pipeline order.
+
+        Both raises carry phase='column_checks' and sit next to each other in the
+        post-collect raise pass, so a reordering there would swap which message the
+        caller sees without failing anything else.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "raise",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [None, -5, 3]}, schema={"age": pl.Int64})
+        with pytest.raises(PipelineError, match="has nullable=False but contains null values"):
+            schema.validate(df, registry)
+
+    def test_check_ignore_does_not_raise(self, registry):
         """on_failure=ignore records the failure but does not raise or nullify."""
         schema = SchemaModel.from_dict(
             {
@@ -1936,7 +1978,7 @@ class TestOnFailure:
         assert result.data.collect()["age"].to_list() == [1, -5, 3]
         assert result.errors["count"].item() == 1
 
-    def test_check_null_on_failure_nullifies_failing_values(self, registry):
+    def test_check_null_nullifies_failing_values(self, registry):
         """on_failure=null nulls out values that failed a check, keeps passing values."""
         schema = SchemaModel.from_dict(
             {
@@ -1954,7 +1996,7 @@ class TestOnFailure:
         result = schema.validate(df, registry)
         assert result.data.collect()["age"].to_list() == [10, None, 5, None]
 
-    def test_check_null_on_failure_error_report_keeps_original_value(self, registry):
+    def test_check_null_reports_original_value(self, registry):
         """The error report reflects the original failing value, not the post-nullification null."""
         schema = SchemaModel.from_dict(
             {
@@ -1972,7 +2014,7 @@ class TestOnFailure:
         result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode="cells"))
         assert result.errors["value"].to_list() == ["-1"]
 
-    def test_check_null_on_failure_only_nullifies_own_column(self, registry):
+    def test_check_null_nullifies_own_column_only(self, registry):
         """Nullifying a failing on_failure=null column does not affect an unrelated ignore column."""
         schema = SchemaModel.from_dict(
             {
@@ -2000,9 +2042,8 @@ class TestOnFailure:
 
 
 def test_frame_parser_cannot_remove_required_column(registry):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.frame_parser(name="drop_required", preserve_columns=False)
+    @frame_parser(registry=registry, name="drop_required", preserve_columns=False)
     def drop_required(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.drop("name")
 
@@ -2022,9 +2063,8 @@ def test_frame_parser_cannot_remove_required_column(registry):
 
 @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
 def test_frame_parser_preserves_error_tracking(registry, mode):
-    decorators = ValidatorDecorator(registry)
 
-    @decorators.frame_parser(name="select_columns", preserve_columns=False)
+    @frame_parser(registry=registry, name="select_columns", preserve_columns=False)
     def select_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
         assert "__row_index__" not in frame.collect_schema().names()
         return frame.select("age")
@@ -2056,3 +2096,57 @@ def test_frame_parser_preserves_error_tracking(registry, mode):
         assert result.errors["row_indices"].to_list() == [[0]]
     else:
         assert result.errors["row_index"].to_list() == [0]
+
+
+def test_check_mask_index_counts_per_check(registry):
+    """The `__check__{n}` counter advances per check, not per column.
+
+    `ColumnCheckPhase` iterates `schema.columns_with_checks` and numbers the masks
+    from a counter incremented inside the inner loop over a column's checks. The
+    numbering therefore depends on that view preserving `schema.columns` order and
+    on columns without declared checks being skipped rather than consuming an index.
+
+    Aliases are opaque handles that nothing parses, so a shift here does not fail
+    anything on its own. It surfaces later as a collision or a missed lookup, which
+    is why it is pinned rather than left to the suite. Phase 1.3 rewrites this code.
+    """
+    check = [{"name": "min_value", "args": {"min": 0}}]
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "a": {"dtype": "Int64"},
+                "b": {"dtype": "Int64", "checks": check},
+                "c": {"dtype": "Int64", "nullable": False},
+                "d": {"dtype": "Int64", "checks": [*check, {"name": "unique"}]},
+            }
+        }
+    )
+    df = pl.DataFrame({"a": [1], "b": [1], "c": [1], "d": [1]})
+    context = PipelineContext(data=df.lazy(), schema=schema, registry=registry)
+
+    result = create_pipeline_from_schema(schema).execute(context)
+    declared = {key: alias for key, alias in result.check_masks.items() if key[1] != NOT_NULL_CHECK}
+
+    assert declared == {
+        ("b", "min_value"): "__check__0",
+        ("d", "min_value"): "__check__1",
+        ("d", "unique"): "__check__2",
+    }, "column 'a' has no declared checks and must not consume an index"
+
+
+def test_parsers_apply_in_declared_order(registry):
+    """A column's parsers chain in the order the schema lists them.
+
+    `ColumnParsingPhase` folds them into one expression, `expr = parser(expr)` per
+    step, so the declared order is the applied order. Pinned with a non-commutative
+    pair, because a test using parsers that commute would pass either way and this
+    property fails silently: a reordering produces different data, not an error.
+    """
+
+    def parsed(*names: str) -> list[str]:
+        schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Utf8", "parsers": [{"name": n} for n in names]}}})
+        result = schema.validate(pl.DataFrame({"a": ["MiXeD"]}), registry, lazy=False)
+        return result.data["a"].to_list()
+
+    assert parsed("lower", "upper") == ["MIXED"], "the last parser listed wins"
+    assert parsed("upper", "lower") == ["mixed"]

@@ -1,4 +1,4 @@
-"""Tests for SchemaValidator: error report config, kwargs, and pipeline customization."""
+"""Tests for DataValidator: error report config, kwargs, and pipeline customization."""
 
 import polars as pl
 import pydantic
@@ -6,7 +6,8 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.engine.results import ErrorReportConfig
-from nyctea.schema.validator import SchemaValidator
+from nyctea.engine.validator import DataValidator
+from nyctea.exceptions import PipelineError
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def test_cells_mode_includes_value_by_default(failing_schema, registry):
     assert result.errors["value"].to_list() == ["-1"]
 
 
-def test_cells_mode_omits_value_when_include_values_false(failing_schema, registry):
+def test_cells_mode_omits_value_when_disabled(failing_schema, registry):
     df = pl.DataFrame({"age": [1, -1]})
     result = failing_schema.validate(
         df, registry, error_report_config=ErrorReportConfig(mode="cells", include_values=False)
@@ -48,7 +49,7 @@ def test_cells_mode_omits_value_when_include_values_false(failing_schema, regist
     assert result.errors["row_index"].to_list() == [1]
 
 
-def test_cells_mode_omits_value_on_empty_result(failing_schema, registry):
+def test_cells_mode_omits_value_when_empty(failing_schema, registry):
     df = pl.DataFrame({"age": [1, 2]})
     result = failing_schema.validate(
         df, registry, error_report_config=ErrorReportConfig(mode="cells", include_values=False)
@@ -63,7 +64,7 @@ def test_error_report_config_rejects_negative_limit():
 
 
 def test_validate_rejects_unknown_kwargs(failing_schema, registry):
-    validator = SchemaValidator(failing_schema, registry)
+    validator = DataValidator(failing_schema, registry)
     df = pl.DataFrame({"age": [1, 2]})
     with pytest.raises(TypeError):
         validator.validate(df, strict=True)  # ty: ignore[unknown-argument]
@@ -75,14 +76,18 @@ def test_schema_validate_rejects_unknown_kwargs(failing_schema, registry):
         failing_schema.validate(df, registry, strict=True)
 
 
-def test_customize_pipeline_returns_independent_copy(failing_schema, registry):
-    validator = SchemaValidator(failing_schema, registry)
-    original_phase_count = len(validator.pipeline)
+def test_non_nullable_raises_bare_message(registry):
+    """The not-null raise happens after the pipeline, so it is not phase-wrapped.
 
-    copy = validator.customize_pipeline()
-    assert copy is not validator.pipeline
+    #57 predicted this message change when the not-null enforcement moved out of
+    `ColumnCheckPhase` and into the merged aggregate pass. That move has happened,
+    and the message is user-visible and was unpinned. Phase 1.3 rewrites the raise
+    loops that produce it.
+    """
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
-    copy.remove_phase(copy.list_phases()[-1])
+    with pytest.raises(PipelineError) as exc:
+        schema.validate(pl.DataFrame({"age": [1, None, 3]}), registry)
 
-    assert len(copy) == original_phase_count - 1
-    assert len(validator.pipeline) == original_phase_count
+    assert str(exc.value) == "Column 'age' has nullable=False but contains null values."
+    assert "Phase '" not in str(exc.value), "the raise is post-pipeline, so it must not be phase-wrapped"

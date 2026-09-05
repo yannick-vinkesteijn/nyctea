@@ -10,13 +10,13 @@ def _phase_names(schema_dict):
     return [phase.name for phase in pipeline.phases]
 
 
-def test_no_frame_phases_when_schema_has_none():
+def test_frame_phases_absent_when_undeclared():
     names = _phase_names({"columns": {"a": {"dtype": "Int64"}}})
     assert "frame_parsing" not in names
     assert "frame_checks" not in names
 
 
-def test_frame_parsing_phase_included_and_ordered_before_column_parsing():
+def test_frame_parsing_precedes_column_parsing():
     names = _phase_names(
         {
             "frame_parsers": [{"name": "whatever"}],
@@ -26,7 +26,8 @@ def test_frame_parsing_phase_included_and_ordered_before_column_parsing():
     assert names.index("frame_parsing") < names.index("column_parsing")
 
 
-def test_frame_check_phase_included_and_ordered_between_coercion_and_column_checks():
+def test_frame_check_phase_ordering():
+    """The frame check phase is included, after coercion and before column checks."""
     names = _phase_names(
         {
             "frame_checks": [{"name": "whatever"}],

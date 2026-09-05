@@ -1,5 +1,87 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: validators are declared by decorator, not by subclass
+
+`ValidatorDecorator` and the nine built-in validator classes are gone.
+Write an expression and decorate it.
+The decorators are module-level, so nothing has to be instantiated against a registry first.
+
+```python
+import polars as pl
+from nyctea import Registry, checker, parser
+
+registry = Registry()
+
+@parser(name="trim", registry=registry)
+def trim(column: pl.Expr) -> pl.Expr:
+    return column.str.strip_chars()
+
+@checker(name="in_range", registry=registry)
+def in_range(column: pl.Expr, *, low: float, high: float) -> pl.Expr:
+    return column.is_between(low, high, closed="both")
+```
+
+**The signature is the argument contract.**
+Keyword-only parameters are what a schema's `args` bind against, so a missing, extra or misspelled argument is reported before any data is read rather than as a failure mid-run.
+This replaces the hand-written `validate_args` method every validator used to need.
+
+**Migration.**
+`ValidatorDecorator(registry).column_check(name=...)` becomes `@checker(name=..., registry=registry)`, and the same for `parser`, `frame_checker` and `frame_parser`.
+Subclasses of `ColumnCheck`, `ColumnParser`, `FrameCheck` and `FrameParser` still work and are still how the decorators are implemented, but they are no longer the documented way to write a validator.
+The built-in classes `BetweenCheck`, `InSetCheck`, `MinValueCheck`, `UniqueCheck`, `StripParser`, `ToIntParser`, `ToFloatParser`, `LowerParser` and `UpperParser` were removed.
+Their names are unchanged in schemas, so no schema needs editing.
+
+## Within v0.2.0 pre-release: `SchemaValidator` is now `DataValidator`
+
+The class validates data against a schema, but its name said it validated schemas.
+Nyctea now uses one verb for each job: data is validated, a schema is verified.
+`SchemaModel.verify(registry)` will check that a schema's checks and parsers resolve, and `DataValidator` checks that data conforms.
+
+Plain `Validator` was not available, since it is already the base class of the column and frame validator hierarchy.
+
+Most code never names the class. `SchemaModel.validate(df, registry)` is unchanged and remains the entry point.
+
+**Migration:** rename the import and the constructor call. Nothing else changes.
+
+```python
+from nyctea import DataValidator
+
+validator = DataValidator(schema, registry)
+result = validator.validate(df)
+```
+
+## Within v0.2.0 pre-release: `resolve_column_names` and `SchemaResolutionError` were removed
+
+Both were exported from `nyctea.engine` but no code in the package called them.
+`resolve_column_names` was a second implementation of column resolution, superseded by `SchemaModel.resolve_columns` and the `ColumnResolutionPhase` that applies it.
+`SchemaResolutionError` existed only to be raised by that function.
+Neither was ever marked deprecated, so this is the removal of dead code rather than the end of a deprecation cycle.
+
+The resolution the pipeline actually runs raises `ValidationError` for a missing required column or an ambiguous match.
+
+**Migration:** validate through `SchemaModel.validate()`, which resolves columns as its first phase.
+To resolve names without validating, use `SchemaModel.resolve_columns()` and apply the rename yourself.
+
+```python
+resolution = schema.resolve_columns(df.collect_schema().names())
+if not resolution.is_valid:
+    ...  # inspect resolution.missing_required and resolution.ambiguous
+df = df.rename(dict(resolution.rename))
+```
+
+## Within v0.2.0 pre-release: `SchemaValidator.customize_pipeline()` was removed
+
+The method was a one-line `return self.pipeline.copy()` with a name that promised a customisation API it did not provide.
+`DataValidator.pipeline` is a plain attribute, so a copy is available directly.
+
+**Migration:** replace `validator.customize_pipeline()` with `validator.pipeline.copy()`.
+
+```python
+pipeline = validator.pipeline.copy()
+pipeline.add_phase(MyCustomPhase(), after="column_parsing")
+validator.pipeline = pipeline
+```
+
 ## Within v0.2.0 pre-release: the legacy validation API was removed
 
 Nyctea now has one validation path and one registry. The untested legacy
@@ -150,7 +232,7 @@ from nyctea.engine.validate import validate
 result = validate(df, schema, registry)
 ```
 
-v0.2.0 uses `schema.validate(df, registry)` via `SchemaValidator`:
+v0.2.0 uses `schema.validate(df, registry)` via `DataValidator`:
 
 ```python
 result = schema.validate(df, registry)

@@ -10,9 +10,9 @@ for path in (project_root / "src", project_root):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from examples.titanic_example.functions import registry
 from nyctea import ErrorReportConfig, SchemaModel
 from nyctea.ingest import read_csv
-from examples.titanic_example.functions import registry
 
 
 def main() -> None:

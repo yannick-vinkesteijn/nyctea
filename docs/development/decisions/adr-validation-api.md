@@ -138,7 +138,7 @@ Nyctea is designed for **production data pipelines** where validation, transform
 
 ### 1. Schema owns validation: `schema.validate(df, registry)`
 
-Nyctea's `SchemaValidator` explicitly owns a `ValidationPipeline` that the user can customize. This means:
+Nyctea's `DataValidator` explicitly owns a `ValidationPipeline` that the user can customize. This means:
 - The schema carries its pipeline configuration.
 - Two schemas can have different pipelines (e.g., one for ETL, one for audit).
 - The pipeline can be inspected and modified before running.
@@ -209,7 +209,7 @@ The public entry point is:
 result = schema.validate(df, registry)
 ```
 
-The underlying `SchemaValidator.validate()` signature:
+The underlying `DataValidator.validate()` signature:
 
 ```python
 def validate(

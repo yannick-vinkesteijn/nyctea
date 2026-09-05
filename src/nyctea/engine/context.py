@@ -10,7 +10,8 @@ from typing import Any
 import polars as pl
 
 from nyctea.engine.results import ErrorReportConfig, ValidationReport
-from nyctea.schema.model import AggregateEngine, SchemaModel
+from nyctea.schema.model import SchemaModel
+from nyctea.types import AggregateEngine
 from nyctea.validators.registry import Registry
 
 __all__ = ["PipelineContext"]
@@ -40,6 +41,11 @@ class PipelineContext:
             aggregates (not for materializing rows). Decided once per ``validate()``
             call from ``schema.streaming_row_threshold`` before the pipeline runs,
             so every phase and post-pipeline step uses the same choice.
+
+    Read column names through ``frame_schema()`` or ``get_column_names()`` rather
+    than ``data.collect_schema()``. Resolving a LazyFrame's schema walks its whole
+    plan, and the context caches the result per frame so repeated readers do not
+    each pay for it.
     """
 
     # Input configuration
@@ -62,9 +68,44 @@ class PipelineContext:
     # Phase metadata (arbitrary additional data)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # Cache backing `frame_schema()`. Keyed on the frame object, never on a flag a
+    # phase has to remember to set.
+    _schema_of: pl.LazyFrame | None = field(default=None, repr=False, compare=False)
+    _frame_schema: pl.Schema | None = field(default=None, repr=False, compare=False)
+
+    def frame_schema(self) -> pl.Schema:
+        """Resolve ``data``'s schema, once per change to the frame.
+
+        Resolving a LazyFrame's schema walks its whole plan, so a phase that asks
+        for column names twice pays for it twice. Phases replace ``data`` rather
+        than mutating it, since every Polars operation returns a new frame, so the
+        object's identity changes exactly when the plan does. Keying the cache on
+        that identity means it refreshes itself and cannot go stale, which a flag a
+        phase has to remember to clear could not promise.
+
+        Returns:
+            The Polars schema of the current data.
+        """
+        if self._schema_of is not self.data or self._frame_schema is None:
+            self._schema_of = self.data
+            self._frame_schema = self.data.collect_schema()
+        return self._frame_schema
+
     def get_column_names(self) -> list[str]:
         """Get current column names from data."""
-        return self.data.collect_schema().names()
+        return self.frame_schema().names()
+
+    def report_columns(self) -> list[str]:
+        """Schema columns still present in the frame, in schema order.
+
+        Both the aggregate pass and the report need this, and deriving it from the
+        frame's names as a list made it a scan per schema column.
+
+        Returns:
+            The canonical names the report covers.
+        """
+        present = set(self.get_column_names())
+        return [name for name in self.schema.columns if name in present]
 
     def set_metadata(self, key: str, value: Any) -> None:
         """Set phase-specific metadata.

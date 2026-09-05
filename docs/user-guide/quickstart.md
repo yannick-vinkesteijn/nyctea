@@ -26,11 +26,10 @@ from nyctea import SchemaModel, Registry, register_builtins
 registry = Registry()
 register_builtins(registry)
 
-# 2. Register a custom validation check (using ValidatorDecorator)
-from nyctea import ValidatorDecorator
-decorators = ValidatorDecorator(registry)
+# 2. Register a custom validation check
+from nyctea import checker
 
-@decorators.column_check(name="positive")
+@checker(registry=registry, name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are positive."""
     return col.gt(0)
