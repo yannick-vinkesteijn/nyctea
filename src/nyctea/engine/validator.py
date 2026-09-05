@@ -5,6 +5,10 @@ it builds the pipeline for a schema, executes it against the data, and assembles
 the report. It reads the schema and never modifies it.
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import TypeVar
+
 import polars as pl
 
 from nyctea.engine.context import PipelineContext
@@ -20,34 +24,24 @@ from nyctea.validators.registry import Registry
 __all__ = ["SchemaValidator"]
 
 
-def _collect(lf: pl.LazyFrame) -> pl.DataFrame:
-    """Collect a LazyFrame into a DataFrame.
+def _collect(lf: pl.LazyFrame, engine: AggregateEngine | None = None) -> pl.DataFrame:
+    """Collect a LazyFrame, on a specific engine when one is given.
 
-    Wrapper that narrows the return type for the type checker.
-    Polars' collect() returns ``DataFrame | InProcessQuery`` but we never
-    use ``background=True``, so the result is always a DataFrame.
+    The engine cannot simply be passed through. Polars' own default is
+    ``engine='auto'``, and ``engine=None`` is a ValueError rather than a request for
+    that default, so the unset case has to call ``collect()`` with no argument.
+
+    ``engine`` is for pure reductions (sum/len/all/any_horizontal) only. Streaming
+    roughly halves peak memory on those (#11) with no correctness difference, since
+    none of the reductions used here are approximation-based (unlike e.g.
+    ``approx_n_unique``, which does disagree between engines). Row- and cell-level
+    materialization needs the default engine, so it leaves ``engine`` unset. The
+    value is decided once per ``validate()`` call (see ``schema.streaming_row_threshold``)
+    and threaded in via ``context.aggregate_engine`` rather than hardcoded, since
+    streaming has a fixed per-query setup cost that makes it slower than the default
+    engine on small data.
     """
-    result = lf.collect()
-    assert isinstance(result, pl.DataFrame)
-    return result
-
-
-def _collect_aggregate(lf: pl.LazyFrame, engine: AggregateEngine) -> pl.DataFrame:
-    """Collect a LazyFrame of pure reduction expressions (sum/len/all/any_horizontal).
-
-    Streaming roughly halves peak memory on these (#11) with no correctness
-    difference, since none of the reductions used here are approximation-based
-    (unlike e.g. ``approx_n_unique``, which does disagree between engines). Not for
-    row- or cell-level materialization -- those need the default engine.
-
-    ``engine`` is decided once per ``validate()`` call (see
-    ``schema.streaming_row_threshold``) and threaded in via
-    ``context.aggregate_engine`` rather than hardcoded, since streaming has a fixed
-    per-query setup cost that makes it slower than the default engine on small data.
-    """
-    result = lf.collect(engine=engine)
-    assert isinstance(result, pl.DataFrame)
-    return result
+    return lf.collect() if engine is None else lf.collect(engine=engine)
 
 
 def _pick_aggregate_engine(df: pl.DataFrame | pl.LazyFrame, threshold: int) -> AggregateEngine:
@@ -61,6 +55,72 @@ def _pick_aggregate_engine(df: pl.DataFrame | pl.LazyFrame, threshold: int) -> A
     if isinstance(df, pl.DataFrame) and df.height < threshold:
         return "in-memory"
     return "streaming"
+
+
+_Aliases = TypeVar("_Aliases", str, list[str])
+
+
+def _resolving_to(columns: dict[str, _Aliases], schema: SchemaModel, on_failure: str) -> dict[str, _Aliases]:
+    """The subset of ``columns`` whose resolved on_failure behaviour is ``on_failure``."""
+    return {col: value for col, value in columns.items() if schema.resolve_on_failure(col) == on_failure}
+
+
+@dataclass(frozen=True)
+class _MaskIndex:
+    """``context.check_masks`` partitioned once, by kind and by column.
+
+    ``declared`` holds user-declared checks only. Parser, coercion and built-in
+    not-null failures are excluded because each has its own enforcement and report
+    accounting. Their failed values are already null, so nulling them again through
+    an ``on_failure='null'`` column would double-count them in ``nullified_counts``.
+    The not-null check can never resolve to ``'null'`` in any case: it exists only
+    for non-nullable columns, whose ``'null'`` behaviour resolves to ``'raise'``.
+
+    ``reported`` is the wider grouping behind the per-column ``check_failures`` stat,
+    which does count a not-null failure as a check failure.
+    """
+
+    parsing: dict[str, str]
+    coercion: dict[str, str]
+    notnull: dict[str, str]
+    declared: dict[str, list[str]]
+    reported: dict[str, list[str]]
+    all_aliases: list[str]
+
+
+def _index_masks(check_masks: dict[tuple[str, str], str]) -> _MaskIndex:
+    """Partition the mask aliases in one pass over ``check_masks``."""
+    parsing: dict[str, str] = {}
+    coercion: dict[str, str] = {}
+    notnull: dict[str, str] = {}
+    declared: dict[str, list[str]] = {}
+    reported: dict[str, list[str]] = {}
+    for (col_name, check_name), alias in check_masks.items():
+        if check_name == PARSING_CHECK:
+            parsing[col_name] = alias
+        elif check_name == COERCION_CHECK:
+            coercion[col_name] = alias
+        else:
+            reported.setdefault(col_name, []).append(alias)
+            if check_name == NOT_NULL_CHECK:
+                notnull[col_name] = alias
+            else:
+                declared.setdefault(col_name, []).append(alias)
+    return _MaskIndex(parsing, coercion, notnull, declared, reported, list(check_masks.values()))
+
+
+@dataclass(frozen=True)
+class _RaiseRule:
+    """One on_failure=raise aggregate, paired with what to raise when it is non-zero.
+
+    ``message`` takes the collected count because three of the four kinds interpolate
+    it and the not-null one deliberately does not. The kind and column it was built
+    from are already baked into ``alias`` and into the closure.
+    """
+
+    alias: str
+    phase: str
+    message: Callable[[int], str]
 
 
 class SchemaValidator:
@@ -102,7 +162,6 @@ class SchemaValidator:
         self.schema = schema
         self.registry = registry
 
-        # Create pipeline if not provided
         if pipeline is None:
             self.pipeline = create_pipeline_from_schema(schema)
         else:
@@ -142,10 +201,8 @@ class SchemaValidator:
         # only the eager form has a free row count to threshold on.
         aggregate_engine = _pick_aggregate_engine(df, self.schema.streaming_row_threshold)
 
-        # Convert to LazyFrame
         lf = df.lazy() if isinstance(df, pl.DataFrame) else df
 
-        # Add row index for error tracking
         occupied_columns = set(lf.collect_schema().names()) | self.schema.accepted_names
         if "__row_index__" in occupied_columns:
             raise PipelineError(
@@ -155,7 +212,6 @@ class SchemaValidator:
             )
         lf = lf.with_row_index("__row_index__")
 
-        # Create pipeline context
         context = PipelineContext(
             data=lf,
             schema=self.schema,
@@ -202,105 +258,45 @@ class SchemaValidator:
             report=report,
         )
 
-    def _check_masks_by_column(self, context: PipelineContext, on_failure: str) -> dict[str, list[str]]:
-        """Group check mask aliases by column for columns resolving to the given on_failure.
-
-        Excludes parser, coercion, and built-in not-null failures because each has
-        separate enforcement and report accounting in
-        ``_run_aggregates_and_raise``. The not-null check can never resolve to
-        ``'null'``: it only exists for non-nullable columns, whose ``'null'``
-        behavior resolves to ``'raise'``. ``'ignore'`` remains unaffected.
-
-        Parser and coercion failures have their own raise paths. Their failed values
-        are already null, so nulling them again here would double-count them in
-        ``nullified_counts``.
-
-        Args:
-            context: Pipeline context with populated check_masks.
-            on_failure: The resolved on_failure behavior to filter columns by.
-
-        Returns:
-            Mapping of column name to the list of mask aliases for its checks.
-        """
-        schema = context.schema
-        grouped: dict[str, list[str]] = {}
-        for (col_name, check_name), alias in context.check_masks.items():
-            if check_name in (NOT_NULL_CHECK, COERCION_CHECK, PARSING_CHECK):
-                continue
-            if schema.resolve_on_failure(col_name) != on_failure:
-                continue
-            grouped.setdefault(col_name, []).append(alias)
-        return grouped
-
     def _build_aggregate_exprs(
         self,
         context: PipelineContext,
-        coercion_raise_cols: dict[str, str],
-        notnull_raise_cols: dict[str, str],
-        check_raise_cols: dict[str, list[str]],
+        index: _MaskIndex,
         null_fail_exprs: dict[str, pl.Expr],
-    ) -> list[pl.Expr]:
-        """Build every aggregate expression for ``_run_aggregates_and_raise``'s single collect.
+    ) -> tuple[list[pl.Expr], list[_RaiseRule]]:
+        """Build every aggregate expression for the single collect, and the raise plan.
+
+        The plan pairs each on_failure=raise aggregate with the message and phase to
+        raise when it comes back non-zero, so the caller reads the collected row once
+        in pipeline order instead of re-deriving four sets of aliases with f-strings.
 
         Args:
             context: Pipeline context with check_masks populated.
-            coercion_raise_cols: Column name to coercion mask alias, for on_failure=raise columns.
-            notnull_raise_cols: Column name to not-null mask alias, for on_failure=raise columns.
-            check_raise_cols: Column name to check mask aliases, for on_failure=raise columns.
+            index: The mask aliases, partitioned once by kind and column.
             null_fail_exprs: Column name to combined-failure expression, for on_failure=null columns.
 
         Returns:
-            List of aliased aggregate expressions to select in one pass.
+            The aliased aggregate expressions to select in one pass, and the raise
+            rules to apply to the collected row, in pipeline order.
         """
         schema = context.schema
         col_names = context.data.collect_schema().names()
 
-        check_masks_by_col: dict[str, list[str]] = {}
-        parsing_alias_by_col: dict[str, str] = {}
-        coercion_alias_by_col: dict[str, str] = {}
-        for (col_name, check_name), alias in context.check_masks.items():
-            if check_name == PARSING_CHECK:
-                parsing_alias_by_col[col_name] = alias
-            elif check_name == COERCION_CHECK:
-                coercion_alias_by_col[col_name] = alias
-            else:
-                check_masks_by_col.setdefault(col_name, []).append(alias)
-
         exprs: list[pl.Expr] = [pl.len().alias("__total__")]
-        exprs.extend(
-            (~pl.col(alias)).sum().alias(f"__coerce_raise__{col_name}")
-            for col_name, alias in coercion_raise_cols.items()
-        )
-        exprs.extend(
-            (~pl.col(alias)).sum().alias(f"__notnull_raise__{col_name}")
-            for col_name, alias in notnull_raise_cols.items()
-        )
-        exprs.extend(
-            pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__raise_fail__{col_name}")
-            for col_name, aliases in check_raise_cols.items()
-        )
-        exprs.extend(fail_expr.sum().alias(f"__nullify__{col_name}") for col_name, fail_expr in null_fail_exprs.items())
-        for col_name, aliases in check_masks_by_col.items():
+        exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
+        exprs.extend((~pl.col(alias)).sum().alias(f"__coercion_fail__{col}") for col, alias in index.coercion.items())
+        for col, aliases in index.reported.items():
             # Sum of per-check failure counts, not distinct failing rows, so this
             # matches the totals in `errors` for the same column: a row failing two
             # checks contributes two failures here, same as two rows in `errors`.
+            exprs.append(pl.sum_horizontal([(~pl.col(a)).sum() for a in aliases]).alias(f"__check_fail__{col}"))
+        exprs.extend(fail_expr.sum().alias(f"__nullify__{col}") for col, fail_expr in null_fail_exprs.items())
+        if index.all_aliases:
             exprs.append(
-                pl.sum_horizontal([(~pl.col(alias)).sum() for alias in aliases]).alias(f"__check_fail__{col_name}")
+                pl.any_horizontal([~pl.col(alias) for alias in index.all_aliases]).sum().alias("__rows_failed__")
             )
-        exprs.extend(
-            (~pl.col(alias)).sum().alias(f"__parsing_fail__{col_name}")
-            for col_name, alias in parsing_alias_by_col.items()
-        )
-        exprs.extend(
-            (~pl.col(alias)).sum().alias(f"__coercion_fail__{col_name}")
-            for col_name, alias in coercion_alias_by_col.items()
-        )
-        if context.check_masks:
-            all_aliases = list(context.check_masks.values())
-            exprs.append(pl.any_horizontal([~pl.col(alias) for alias in all_aliases]).sum().alias("__rows_failed__"))
 
-        report_cols = [c for c in schema.columns if c in col_names]
-        for col_name in report_cols:
+        for col_name in (c for c in schema.columns if c in col_names):
             # Reflects the null count *after* nullification, without needing the
             # mutation to have happened yet: replicate the same when/then the
             # mutation will apply, rather than adding pre-null and nullified counts
@@ -311,7 +307,57 @@ class SchemaValidator:
                 null_expr = pl.when(null_fail_exprs[col_name]).then(None).otherwise(null_expr)
             exprs.append(null_expr.is_null().sum().alias(f"__final_null__{col_name}"))
 
-        return exprs
+        # Parsing and coercion raises read the per-column failure counts already
+        # selected above, so a raise column does not pay for the same sum twice.
+        # Not-null and check raises need their own aggregate.
+        notnull_raise = _resolving_to(index.notnull, schema, "raise")
+        check_raise = _resolving_to(index.declared, schema, "raise")
+        exprs.extend((~pl.col(alias)).sum().alias(f"__notnull_raise__{col}") for col, alias in notnull_raise.items())
+        exprs.extend(
+            pl.any_horizontal([~pl.col(alias) for alias in aliases]).sum().alias(f"__raise_fail__{col}")
+            for col, aliases in check_raise.items()
+        )
+
+        # Pipeline order. Which message a caller sees when a column fails two kinds
+        # at once is decided here and nowhere else.
+        raise_plan: list[_RaiseRule] = [
+            _RaiseRule(
+                f"__parsing_fail__{col}",
+                "column_parsing",
+                lambda n, c=col: f"Parsing failed for column '{c}': {n} non-null value(s) became null.",
+            )
+            for col in _resolving_to(index.parsing, schema, "raise")
+        ]
+        raise_plan += [
+            _RaiseRule(
+                f"__coercion_fail__{col}",
+                "coercion",
+                lambda n, c=col, d=schema.columns[col].dtype: (
+                    f"Coercion failed for column '{c}': {n} value(s) could not be cast to {d}"
+                ),
+            )
+            for col in _resolving_to(index.coercion, schema, "raise")
+        ]
+        raise_plan += [
+            _RaiseRule(
+                f"__notnull_raise__{col}",
+                "column_checks",
+                lambda _n, c=col: f"Column '{c}' has nullable=False but contains null values.",
+            )
+            for col in notnull_raise
+        ]
+        raise_plan += [
+            _RaiseRule(
+                f"__raise_fail__{col}",
+                "column_checks",
+                lambda n, c=col: (
+                    f"Check failed for column '{c}': {n} value(s) failed validation and on_failure is 'raise'."
+                ),
+            )
+            for col in check_raise
+        ]
+
+        return exprs, raise_plan
 
     def _run_aggregates_and_raise(self, context: PipelineContext) -> tuple[pl.DataFrame, dict[str, pl.Expr]]:
         """Collect every non-row-level aggregate this validate() call needs in one pass.
@@ -321,10 +367,7 @@ class SchemaValidator:
         aggregates -- into a single ``select()`` on the aggregate engine, since none of
         them need row-level data and all run against the same lazy graph. ``_build_errors``
         stays a separate collect: its row/cell modes need the default engine, not the
-        aggregate engine (see ``_collect_aggregate``'s docstring).
-
-        Parser-, coercion-, and check-raise failures are checked in pipeline order
-        after the single collect.
+        aggregate engine (see ``_collect``'s docstring).
 
         Args:
             context: Pipeline context with check_masks populated.
@@ -339,36 +382,13 @@ class SchemaValidator:
                 coercion-introduced nulls, or a failing check.
         """
         schema = context.schema
-
-        parsing_raise_cols = {
-            col_name: alias
-            for (col_name, check_name), alias in context.check_masks.items()
-            if check_name == PARSING_CHECK and schema.resolve_on_failure(col_name) == "raise"
-        }
-        coercion_raise_cols = {
-            col_name: alias
-            for (col_name, check_name), alias in context.check_masks.items()
-            if check_name == COERCION_CHECK and schema.resolve_on_failure(col_name) == "raise"
-        }
-        notnull_raise_cols = {
-            col_name: alias
-            for (col_name, check_name), alias in context.check_masks.items()
-            if check_name == NOT_NULL_CHECK and schema.resolve_on_failure(col_name) == "raise"
-        }
-        check_raise_cols = self._check_masks_by_column(context, "raise")
-        null_cols = self._check_masks_by_column(context, "null")
+        index = _index_masks(context.check_masks)
         null_fail_exprs = {
-            col_name: pl.any_horizontal([~pl.col(alias) for alias in aliases])
-            for col_name, aliases in null_cols.items()
+            col: pl.any_horizontal([~pl.col(alias) for alias in aliases])
+            for col, aliases in _resolving_to(index.declared, schema, "null").items()
         }
 
-        exprs = self._build_aggregate_exprs(
-            context,
-            coercion_raise_cols,
-            notnull_raise_cols,
-            check_raise_cols,
-            null_fail_exprs,
-        )
+        exprs, raise_plan = self._build_aggregate_exprs(context, index, null_fail_exprs)
         aggregates = context.data.select(exprs)
         original_data = context.original_data if context.original_data is not None else context.data
         original_columns = set(original_data.collect_schema().names())
@@ -379,39 +399,12 @@ class SchemaValidator:
         ]
         if original_null_exprs:
             aggregates = aggregates.join(original_data.select(original_null_exprs), how="cross")
-        row = _collect_aggregate(aggregates, context.aggregate_engine)
+        row = _collect(aggregates, context.aggregate_engine)
 
-        for col_name in parsing_raise_cols:
-            parse_failures = int(row[f"__parsing_fail__{col_name}"].item())
-            if parse_failures > 0:
-                raise PipelineError(
-                    f"Parsing failed for column '{col_name}': {parse_failures} non-null value(s) became null.",
-                    phase="column_parsing",
-                )
-        for col_name in coercion_raise_cols:
-            new_nulls = int(row[f"__coerce_raise__{col_name}"].item())
-            if new_nulls > 0:
-                raise PipelineError(
-                    f"Coercion failed for column '{col_name}': "
-                    f"{new_nulls} value(s) could not be cast to "
-                    f"{schema.columns[col_name].dtype}",
-                    phase="coercion",
-                )
-        for col_name in notnull_raise_cols:
-            null_count = int(row[f"__notnull_raise__{col_name}"].item())
-            if null_count > 0:
-                raise PipelineError(
-                    f"Column '{col_name}' has nullable=False but contains null values.",
-                    phase="column_checks",
-                )
-        for col_name in check_raise_cols:
-            fail_count = int(row[f"__raise_fail__{col_name}"].item())
-            if fail_count > 0:
-                raise PipelineError(
-                    f"Check failed for column '{col_name}': {fail_count} value(s) failed "
-                    f"validation and on_failure is 'raise'.",
-                    phase="column_checks",
-                )
+        for rule in raise_plan:
+            count = int(row[rule.alias].item())
+            if count > 0:
+                raise PipelineError(rule.message(count), phase=rule.phase)
 
         return row, null_fail_exprs
 
@@ -528,7 +521,7 @@ class SchemaValidator:
             return empty
 
         count_exprs = [(~pl.col(alias)).sum().cast(pl.UInt32).alias(alias) for alias in check_masks.values()]
-        counts = _collect_aggregate(context.data.select(count_exprs), context.aggregate_engine)
+        counts = _collect(context.data.select(count_exprs), context.aggregate_engine)
 
         rows: list[dict[str, str | int]] = []
         for (col_name, check_name), alias in check_masks.items():

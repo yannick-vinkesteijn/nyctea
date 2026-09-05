@@ -368,15 +368,15 @@ class TestCoercionPhase:
 
 
 # ---------------------------------------------------------------------------
-# _collect / _collect_aggregate engine selection (#11 step 4)
+# _collect engine selection (#11 step 4)
 # ---------------------------------------------------------------------------
 
 
 class TestCollectEngineSelection:
-    def test_collect_aggregate_uses_given_engine(self, collect_calls):
-        from nyctea.engine.validator import _collect_aggregate
+    def test_collect_uses_given_engine(self, collect_calls):
+        from nyctea.engine.validator import _collect
 
-        _collect_aggregate(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
+        _collect(pl.LazyFrame({"a": [1, 2, 3]}).select(pl.col("a").sum()), "streaming")
         assert collect_calls[0].get("engine") == "streaming"
 
     def test_collect_uses_default_engine(self, collect_calls):
@@ -2036,6 +2036,29 @@ class TestOnFailure:
         )
         df = pl.DataFrame({"age": [1, -5, 3]})
         with pytest.raises(PipelineError, match="Check failed for column 'age'"):
+            schema.validate(df, registry)
+
+    def test_not_null_precedes_check_raise(self, registry):
+        """The not-null raise wins when a column fails both, matching pipeline order.
+
+        Both raises carry phase='column_checks' and sit next to each other in the
+        post-collect raise pass, so a reordering there would swap which message the
+        caller sees without failing anything else.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "raise",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [None, -5, 3]}, schema={"age": pl.Int64})
+        with pytest.raises(PipelineError, match="has nullable=False but contains null values"):
             schema.validate(df, registry)
 
     def test_check_ignore_does_not_raise(self, registry):

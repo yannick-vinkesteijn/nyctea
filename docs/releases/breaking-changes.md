@@ -1,5 +1,18 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: `SchemaValidator.customize_pipeline()` was removed
+
+The method was a one-line `return self.pipeline.copy()` with a name that promised a customisation API it did not provide.
+`SchemaValidator.pipeline` is a plain attribute, so a copy is available directly.
+
+**Migration:** replace `validator.customize_pipeline()` with `validator.pipeline.copy()`.
+
+```python
+pipeline = validator.pipeline.copy()
+pipeline.add_phase(MyCustomPhase(), after="column_parsing")
+validator.pipeline = pipeline
+```
+
 ## Within v0.2.0 pre-release: the legacy validation API was removed
 
 Nyctea now has one validation path and one registry. The untested legacy
