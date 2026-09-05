@@ -1,5 +1,28 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: the error report names the header your file used
+
+`result.errors` gains a `source_column` column in all three report modes.
+
+Column resolution renames a synonym to its canonical name in the first phase, and the mapping used to be built, applied and thrown away.
+So once `Age` became `age`, nothing downstream could tell you which column *in your file* failed.
+
+```
+┌────────┬───────────────┬───────────┬───────┐
+│ column ┆ source_column ┆ check     ┆ count │
+╞════════╪═══════════════╪═══════════╪═══════╡
+│ age    ┆ Age           ┆ min_value ┆ 1     │
+└────────┴───────────────┴───────────┴───────┘
+```
+
+`source_column` equals `column` unless the column was matched through a synonym, so the schema is the same shape either way.
+
+The mapping is per-run state and lives on `PipelineContext`, not on `ResolvedColumn`.
+A frozen schema is shared across runs and must not know what one particular file called its columns.
+
+**Migration:** code that reads `result.errors` by position, or asserts on its exact column set, needs updating.
+Reading by name is unaffected.
+
 ## Within v0.2.0 pre-release: run settings moved to `nyctea.Config`
 
 `lazy` and `streaming_row_threshold` describe the machine and the run, not what valid data looks like, so they no longer belong on a schema.

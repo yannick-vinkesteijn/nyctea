@@ -57,6 +57,9 @@ class ColumnResolutionPhase(PipelinePhase):
             )
 
         if resolution.rename:
+            # Kept, not dropped. Once `Age` becomes `age`, nothing downstream could
+            # otherwise tell a user which column in their own file failed.
+            context.source_names.update({canonical: physical for physical, canonical in resolution.rename.items()})
             context.data = lf.rename(dict(resolution.rename))
 
         context.original_data = context.data
