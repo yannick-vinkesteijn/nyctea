@@ -163,6 +163,24 @@ class TestColumnCheckDecorator:
 class TestDecoratorEdgeCases:
     """Tests for edge cases and error handling."""
 
+    def test_missing_input_parameter_is_rejected(self):
+        registry = Registry()
+
+        with pytest.raises(ValueError, match="first positional parameter"):
+
+            @checker(registry=registry, name="broken")
+            def broken() -> pl.Expr:
+                return pl.lit(True)
+
+    def test_keyword_only_input_is_rejected(self):
+        registry = Registry()
+
+        with pytest.raises(ValueError, match="first positional parameter"):
+
+            @checker(registry=registry, name="broken")
+            def broken(*, column: pl.Expr) -> pl.Expr:
+                return column.is_not_null()
+
     def test_duplicate_registration_raises_error(self):
         """Test that registering duplicate name raises error."""
         registry = Registry()

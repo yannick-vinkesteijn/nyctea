@@ -91,6 +91,17 @@ class PipelinePhase(ABC):
         """
         return False
 
+    def can_change_row_count(self, context: PipelineContext) -> bool:
+        """Whether execution may change the number of rows.
+
+        Args:
+            context: Current pipeline context.
+
+        Returns:
+            False unless the phase overrides this row-count contract.
+        """
+        return False
+
     def __repr__(self) -> str:
         """Return string representation."""
         return f"{self.__class__.__name__}(name='{self.name}')"
@@ -288,14 +299,18 @@ class ValidationPipeline:
             for observer in self.observers:
                 observer.on_pipeline_start(context)
 
-            # One pass for the whole run, not one per phase. No phase adds or removes
-            # rows, so the count cannot change between them, and reading it per phase
-            # meant re-executing the upstream plan once per phase for a metric. See #84.
+            # Reuse the count while row cardinality is stable. A phase that may change
+            # it triggers one refresh for all later phase metrics.
             row_count = self._count_rows(context) if self.observers else 0
 
             # Execute each phase
             for phase in self.phases:
+                if phase.can_skip(context):
+                    continue
+                refresh_row_count = self.observers and phase.can_change_row_count(context)
                 context = self._execute_phase(phase, context, row_count)
+                if refresh_row_count:
+                    row_count = self._count_rows(context)
 
         except Exception as e:
             # Notify observers of error
@@ -338,8 +353,8 @@ class ValidationPipeline:
         Args:
             phase: Phase to execute.
             context: Current pipeline context.
-            row_count: The run's row count, taken once before the first phase. Only
-                read when observers are attached.
+            row_count: Rows presented to this phase. Only read when observers are
+                attached.
 
         Returns:
             Updated pipeline context.
@@ -347,9 +362,6 @@ class ValidationPipeline:
         Raises:
             PipelineError: If the phase's execute() raises.
         """
-        if phase.can_skip(context):
-            return context
-
         for observer in self.observers:
             observer.on_phase_start(phase.name, context)
 

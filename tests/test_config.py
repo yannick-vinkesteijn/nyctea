@@ -40,6 +40,15 @@ def test_unknown_setting_is_rejected():
         pass
 
 
+def test_invalid_context_preserves_state():
+    Config.set_lazy(True)
+
+    with pytest.raises(ValueError, match="Unknown nyctea setting 'nope'"), Config(lazy=False, nope=1):
+        pass
+
+    assert Config.lazy() is True
+
+
 def test_negative_threshold_is_rejected():
     """A negative row count would silently invert the engine choice."""
     with pytest.raises(ValueError, match="greater than or equal to 0"):

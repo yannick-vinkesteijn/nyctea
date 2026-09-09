@@ -86,3 +86,7 @@ class FrameParsingPhase(PipelinePhase):
             True if no frame parsers are defined.
         """
         return not context.schema.frame_parsers
+
+    def can_change_row_count(self, context: PipelineContext) -> bool:
+        """Return whether frame parsing may change row cardinality."""
+        return True

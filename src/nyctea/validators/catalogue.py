@@ -28,8 +28,16 @@ def argument_signature(func: Callable[..., Any]) -> inspect.Signature:
 
     Returns:
         A signature over the remaining parameters.
+
+    Raises:
+        ValueError: If the function cannot accept a column or frame positionally.
     """
     params = list(inspect.signature(func).parameters.values())
+    if not params or params[0].kind not in (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    ):
+        raise ValueError("A validator must accept a column or frame as its first positional parameter")
     return inspect.Signature(params[1:])
 
 

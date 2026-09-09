@@ -52,6 +52,8 @@ class Config:
 
     def __enter__(self) -> Self:
         """Apply the scoped settings, remembering what to put back."""
+        for key, value in self._options.items():
+            Config._validate(key, value)
         self._saved = self.save()
         for key, value in self._options.items():
             Config._set(key, value)
@@ -79,13 +81,18 @@ class Config:
         return wrapper
 
     @classmethod
-    def _set(cls, key: str, value: Any) -> None:
-        """Set one setting, rejecting an unknown name or an invalid value."""
+    def _validate(cls, key: str, value: Any) -> None:
+        """Reject an unknown setting name or invalid value."""
         if key not in _DEFAULTS:
             known = ", ".join(sorted(_DEFAULTS))
             raise ValueError(f"Unknown nyctea setting '{key}'. Known settings: {known}")
         if key == "streaming_row_threshold" and value < 0:
             raise ValueError(f"streaming_row_threshold must be greater than or equal to 0, got {value}")
+
+    @classmethod
+    def _set(cls, key: str, value: Any) -> None:
+        """Set one setting after validating it."""
+        cls._validate(key, value)
         cls._state[key] = value
 
     @classmethod

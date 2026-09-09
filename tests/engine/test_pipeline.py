@@ -4,10 +4,13 @@ import polars as pl
 import pytest
 
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.observability import MetricsCollector
+from nyctea.engine.phases import ColumnResolutionPhase, FrameParsingPhase
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import SchemaModel
+from nyctea.validators.decorators import frame_parser
 from nyctea.validators.registry import Registry
 
 
@@ -176,3 +179,42 @@ def test_execute_phase_collects_metrics_with_observers():
     assert len(collector.phase_metrics) == 1
     assert collector.phase_metrics[0].phase_name == "p1"
     assert collector.phase_metrics[0].rows_processed == 3
+
+
+def test_metrics_follow_frame_row_changes():
+    registry = Registry()
+
+    @frame_parser(registry=registry, name="keep_first")
+    def keep_first(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.head(1)
+
+    schema = SchemaModel.from_dict(
+        {
+            "frame_parsers": [{"name": "keep_first"}],
+            "columns": {"a": {"dtype": "Int64", "nullable": True}},
+        }
+    )
+    context = PipelineContext(
+        data=pl.LazyFrame({"a": [1, 2, 3]}).with_row_index("__row_index__"),
+        schema=schema,
+        registry=registry,
+    )
+    collector = MetricsCollector()
+
+    create_pipeline_from_schema(schema, observers=[collector]).execute(context)
+
+    rows_by_phase = {metric.phase_name: metric.rows_processed for metric in collector.phase_metrics}
+    assert rows_by_phase["frame_parsing"] == 3
+    assert rows_by_phase["coercion"] == 1
+
+
+def test_skipped_row_phase_does_not_recount(collect_calls):
+    collector = MetricsCollector()
+    pipeline = ValidationPipeline(
+        phases=[ColumnResolutionPhase(), FrameParsingPhase(), SimplePhase()],
+        observers=[collector],
+    )
+
+    pipeline.execute(_context_with_row_index())
+
+    assert len(collect_calls) == 1
