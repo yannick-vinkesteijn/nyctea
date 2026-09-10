@@ -18,7 +18,7 @@ from nyctea.engine.phases import (
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.exceptions import ConfigurationError, PipelineError, ValidationError
 from nyctea.utils import resolve_dtype
-from nyctea.validators.decorators import checker, frame_checker, frame_parser
+from nyctea.validators.decorators import checker, frame_checker, frame_parser, parser
 
 
 @pytest.fixture
@@ -2150,3 +2150,107 @@ def test_parsers_apply_in_declared_order(registry):
 
     assert parsed("lower", "upper") == ["MIXED"], "the last parser listed wins"
     assert parsed("upper", "lower") == ["mixed"]
+
+
+# ---------------------------------------------------------------------------
+# Check/parser execution failures wrapped as PipelineError
+# ---------------------------------------------------------------------------
+
+
+def test_check_application_failure_wrapped(registry):
+    """A check that raises at apply time surfaces as PipelineError, not the raw error."""
+
+    @checker(name="always_explodes", tags=[], registry=registry)
+    def always_explodes(column: pl.Expr) -> pl.Expr:  # noqa: ARG001
+        raise ValueError("boom")
+
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64", "checks": [{"name": "always_explodes"}]}}})
+    with pytest.raises(PipelineError, match="Failed to apply check 'always_explodes'"):
+        schema.validate(pl.DataFrame({"a": [1]}), registry)
+
+
+def test_parser_application_failure_wrapped(registry):
+    """Same guard as the frame-parser one, for a column parser."""
+
+    @parser(name="always_explodes", tags=[], registry=registry)
+    def always_explodes(column: pl.Expr) -> pl.Expr:  # noqa: ARG001
+        raise ValueError("boom")
+
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Utf8", "parsers": [{"name": "always_explodes"}]}}})
+    with pytest.raises(PipelineError, match="Failed to apply parser 'always_explodes'"):
+        schema.validate(pl.DataFrame({"a": ["x"]}), registry)
+
+
+# ---------------------------------------------------------------------------
+# Registry lookup guards behind create_pipeline_from_schema
+#
+# schema.validate() always calls schema.verify() first, which rejects an unresolved
+# check/parser name before a pipeline is even built. These same guards live a second
+# time inside each phase, because create_pipeline_from_schema + ValidationPipeline is
+# its own public entry point (see test_check_mask_index_counts_per_check) and does not
+# call verify(). These tests go through that entry point deliberately, not around it.
+# ---------------------------------------------------------------------------
+
+
+def _unverified_context(schema, data, registry):
+    return PipelineContext(data=data.lazy().with_row_index("__row_index__"), schema=schema, registry=registry)
+
+
+def test_duplicate_check_name_bypasses_verify(registry):
+    schema = SchemaModel.from_dict(
+        {
+            "columns": {
+                "a": {
+                    "dtype": "Int64",
+                    "checks": [
+                        {"name": "min_value", "args": {"min": 0}},
+                        {"name": "min_value", "args": {"min": 5}},
+                    ],
+                }
+            }
+        }
+    )
+    ctx = _unverified_context(schema, pl.DataFrame({"a": [1]}), registry)
+    with pytest.raises(PipelineError, match="more than one check named"):
+        create_pipeline_from_schema(schema).execute(ctx)
+
+
+def test_check_not_registered_bypasses_verify(registry):
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64", "checks": [{"name": "nope"}]}}})
+    ctx = _unverified_context(schema, pl.DataFrame({"a": [1]}), registry)
+    with pytest.raises(PipelineError, match="Check 'nope' not found in registry"):
+        create_pipeline_from_schema(schema).execute(ctx)
+
+
+def test_parser_not_registered_bypasses_verify(registry):
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Utf8", "parsers": [{"name": "nope"}]}}})
+    ctx = _unverified_context(schema, pl.DataFrame({"a": ["x"]}), registry)
+    with pytest.raises(PipelineError, match="Parser 'nope' not found in registry"):
+        create_pipeline_from_schema(schema).execute(ctx)
+
+
+def test_frame_check_not_registered_bypasses_verify(registry):
+    schema = SchemaModel.from_dict({"frame_checks": [{"name": "nope"}], "columns": {"a": {"dtype": "Int64"}}})
+    ctx = _unverified_context(schema, pl.DataFrame({"a": [1]}), registry)
+    with pytest.raises(PipelineError, match="Frame check 'nope' not found in registry"):
+        create_pipeline_from_schema(schema).execute(ctx)
+
+
+def test_frame_parser_not_registered_bypasses_verify(registry):
+    schema = SchemaModel.from_dict({"frame_parsers": [{"name": "nope"}], "columns": {"a": {"dtype": "Int64"}}})
+    ctx = _unverified_context(schema, pl.DataFrame({"a": [1]}), registry)
+    with pytest.raises(PipelineError, match="Frame parser 'nope' not found in registry"):
+        create_pipeline_from_schema(schema).execute(ctx)
+
+
+# ---------------------------------------------------------------------------
+# Error report, no masks registered at all
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["rows", "cells"])
+def test_error_report_empty_without_registered_masks(registry, mode):
+    """A schema with nothing to fail registers zero masks; rows/cells must not choke on that."""
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64", "nullable": True}}})
+    result = schema.validate(pl.DataFrame({"a": [1, 2]}), registry, error_report_config=ErrorReportConfig(mode=mode))
+    assert result.errors.is_empty()

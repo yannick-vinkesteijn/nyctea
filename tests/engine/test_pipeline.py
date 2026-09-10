@@ -181,6 +181,17 @@ def test_execute_phase_collects_metrics_with_observers():
     assert collector.phase_metrics[0].rows_processed == 3
 
 
+def test_metrics_zero_rows_without_row_index():
+    """A context built without row tracking still runs; the initial count is 0."""
+    collector = MetricsCollector()
+    context = PipelineContext(data=pl.LazyFrame({"a": [1, 2, 3]}), schema=SchemaModel(columns={}), registry=Registry())
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")], observers=[collector])
+
+    pipeline.execute(context)
+
+    assert collector.phase_metrics[0].rows_processed == 0
+
+
 def test_metrics_follow_frame_row_changes():
     registry = Registry()
 

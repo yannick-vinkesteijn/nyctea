@@ -49,6 +49,16 @@ def test_invalid_context_preserves_state():
     assert Config.lazy() is True
 
 
+def test_restore_defaults_resets_shipped_values():
+    Config.set_streaming_row_threshold(0)
+    Config.set_lazy(False)
+
+    Config.restore_defaults()
+
+    assert Config.streaming_row_threshold() != 0
+    assert Config.lazy() is True
+
+
 def test_negative_threshold_is_rejected():
     """A negative row count would silently invert the engine choice."""
     with pytest.raises(ValueError, match="greater than or equal to 0"):
