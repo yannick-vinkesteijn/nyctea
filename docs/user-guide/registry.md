@@ -17,10 +17,9 @@ The `Registry` class manages four types of validators:
 ## Creating a Registry
 
 ```python
-from nyctea import Registry, ValidatorDecorator
+from nyctea import Registry, checker, frame_checker, frame_parser, parser
 
 registry = Registry()
-decorators = ValidatorDecorator(registry)
 ```
 
 ## Column Parsers
@@ -37,7 +36,7 @@ Column parsers transform individual column values. Common use cases include:
 ```python
 import polars as pl
 
-@decorators.column_parser(name="trim")
+@parser(registry=registry, name="trim")
 def trim_whitespace(col: pl.Expr) -> pl.Expr:
     """Remove leading/trailing whitespace."""
     return col.str.strip_chars()
@@ -46,7 +45,7 @@ def trim_whitespace(col: pl.Expr) -> pl.Expr:
 ### Column Parser with Parameters
 
 ```python
-@decorators.column_parser(name="replace_text")
+@parser(registry=registry, name="replace_text")
 def replace_text(col: pl.Expr, old: str, new: str) -> pl.Expr:
     """Replace text in column values.
 
@@ -81,7 +80,7 @@ Column checks validate individual column values. They must return a boolean expr
 ### Basic Column Check
 
 ```python
-@decorators.column_check(name="positive")
+@checker(registry=registry, name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are positive."""
     return col.gt(0)
@@ -90,7 +89,7 @@ def positive(col: pl.Expr) -> pl.Expr:
 ### Column Check with Parameters
 
 ```python
-@decorators.column_check(name="in_range")
+@checker(registry=registry, name="in_range")
 def in_range(col: pl.Expr, min_val: float, max_val: float) -> pl.Expr:
     """Check that values fall within a range.
 
@@ -125,7 +124,7 @@ Frame parsers transform entire DataFrames. They must preserve the row count and 
 ### Basic Frame Parser
 
 ```python
-@decorators.frame_parser(name="sort_by_date")
+@frame_parser(registry=registry, name="sort_by_date")
 def sort_by_date(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Sort DataFrame by date column."""
     return lf.sort("date")
@@ -134,7 +133,7 @@ def sort_by_date(lf: pl.LazyFrame) -> pl.LazyFrame:
 ### Frame Parser with Parameters
 
 ```python
-@decorators.frame_parser(name="fill_nulls")
+@frame_parser(registry=registry, name="fill_nulls")
 def fill_nulls(lf: pl.LazyFrame, column: str, value: str) -> pl.LazyFrame:
     """Fill nulls in a specific column.
 
@@ -168,7 +167,7 @@ on validation failure.
 ### Basic Frame Check
 
 ```python
-@decorators.frame_check(name="min_rows")
+@frame_checker(registry=registry, name="min_rows")
 def min_rows(lf: pl.LazyFrame, count: int) -> pl.LazyFrame:
     """Ensure DataFrame has minimum row count.
 

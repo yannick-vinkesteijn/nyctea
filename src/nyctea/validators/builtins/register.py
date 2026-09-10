@@ -1,44 +1,33 @@
-"""Helper functions to register built-in validators."""
+"""Turn the declared catalogue into registrations."""
 
-from nyctea.validators.builtins.checks import (
-    BetweenCheck,
-    InSetCheck,
-    MinValueCheck,
-    UniqueCheck,
-)
-from nyctea.validators.builtins.parsers import (
-    LowerParser,
-    StripParser,
-    ToFloatParser,
-    ToIntParser,
-    UpperParser,
-)
+from nyctea.validators.catalogue import CATALOGUE
+from nyctea.validators.decorators import build_validator
 from nyctea.validators.registry import Registry
 
 __all__ = ["register_builtins"]
 
+_REGISTER = {
+    "column_check": "register_column_check",
+    "column_parser": "register_column_parser",
+    "frame_check": "register_frame_check",
+    "frame_parser": "register_frame_parser",
+}
+
 
 def register_builtins(registry: Registry) -> None:
-    """Register all built-in validators.
+    """Register every validator declared by decorator without a registry.
+
+    The catalogue is the list, so a built-in cannot be written and exported but left
+    unregistered. A validator only reaches the catalogue if its module was imported,
+    which `nyctea.validators.builtins` is responsible for.
 
     Args:
-        registry: Master registry to register validators in.
+        registry: Registry to register the declared validators in.
 
     Example:
-        >>> from nyctea.validators.registry import Registry
-        >>> from nyctea.validators.builtins.register import register_builtins
+        >>> from nyctea import Registry, register_builtins
         >>> registry = Registry()
         >>> register_builtins(registry)
     """
-    # Register parsers
-    registry.register_column_parser(StripParser())
-    registry.register_column_parser(ToIntParser())
-    registry.register_column_parser(ToFloatParser())
-    registry.register_column_parser(LowerParser())
-    registry.register_column_parser(UpperParser())
-
-    # Register checks
-    registry.register_column_check(BetweenCheck())
-    registry.register_column_check(InSetCheck())
-    registry.register_column_check(MinValueCheck())
-    registry.register_column_check(UniqueCheck())
+    for declared in CATALOGUE:
+        getattr(registry, _REGISTER[declared.kind])(build_validator(declared))

@@ -1,171 +1,42 @@
-"""Built-in column parser validators."""
+"""Built-in column parsers.
 
-from typing import Any
+Each is the expression it applies. None takes arguments, which the empty signature
+after `column` states, so a schema passing one is rejected by binding rather than by a
+hand-written check.
+"""
 
 import polars as pl
 
-from nyctea.validators.base import ValidatorMetadata
-from nyctea.validators.column import ColumnParser
+from nyctea.validators.decorators import parser
 
-__all__ = [
-    "LowerParser",
-    "StripParser",
-    "ToFloatParser",
-    "ToIntParser",
-    "UpperParser",
-]
+__all__ = ["lower", "strip", "to_float", "to_int", "upper"]
 
 
-class StripParser(ColumnParser):
-    """Strip whitespace from string columns."""
-
-    def __init__(self) -> None:
-        """Initialize strip parser."""
-        super().__init__(
-            ValidatorMetadata(
-                name="strip",
-                description="Remove leading and trailing whitespace",
-                tags=["string", "cleaning"],
-            )
-        )
-
-    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
-        """Strip whitespace from column values.
-
-        Args:
-            column: Input column expression.
-            **kwargs: No arguments accepted.
-
-        Returns:
-            Expression with whitespace stripped.
-        """
-        return column.str.strip_chars()
-
-    def validate_args(self, **kwargs: Any) -> None:
-        """Validate arguments (none accepted)."""
-        if kwargs:
-            raise ValueError(f"strip parser does not accept arguments, got: {kwargs}")
+@parser(name="strip", description="Remove leading and trailing whitespace", tags=["string", "cleaning"])
+def strip(column: pl.Expr) -> pl.Expr:
+    """Leading and trailing whitespace removed."""
+    return column.str.strip_chars()
 
 
-class ToIntParser(ColumnParser):
-    """Convert string column to integer."""
-
-    def __init__(self) -> None:
-        """Initialize to_int parser."""
-        super().__init__(
-            ValidatorMetadata(
-                name="to_int",
-                description="Convert string to integer (i64)",
-                tags=["conversion", "numeric"],
-            )
-        )
-
-    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
-        """Convert column to integer.
-
-        Args:
-            column: Input column expression.
-            **kwargs: No arguments accepted.
-
-        Returns:
-            Expression cast to i64.
-        """
-        return column.cast(pl.Int64, strict=False)
-
-    def validate_args(self, **kwargs: Any) -> None:
-        """Validate arguments (none accepted)."""
-        if kwargs:
-            raise ValueError(f"to_int parser does not accept arguments, got: {kwargs}")
+@parser(name="to_int", description="Convert string to integer (i64)", tags=["conversion", "numeric"])
+def to_int(column: pl.Expr) -> pl.Expr:
+    """Cast to Int64, leaving unparsable values null."""
+    return column.cast(pl.Int64, strict=False)
 
 
-class ToFloatParser(ColumnParser):
-    """Convert string column to float."""
-
-    def __init__(self) -> None:
-        """Initialize to_float parser."""
-        super().__init__(
-            ValidatorMetadata(
-                name="to_float",
-                description="Convert string to float (f64)",
-                tags=["conversion", "numeric"],
-            )
-        )
-
-    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
-        """Convert column to float.
-
-        Args:
-            column: Input column expression.
-            **kwargs: No arguments accepted.
-
-        Returns:
-            Expression cast to f64.
-        """
-        return column.cast(pl.Float64, strict=False)
-
-    def validate_args(self, **kwargs: Any) -> None:
-        """Validate arguments (none accepted)."""
-        if kwargs:
-            raise ValueError(f"to_float parser does not accept arguments, got: {kwargs}")
+@parser(name="to_float", description="Convert string to float (f64)", tags=["conversion", "numeric"])
+def to_float(column: pl.Expr) -> pl.Expr:
+    """Cast to Float64, leaving unparsable values null."""
+    return column.cast(pl.Float64, strict=False)
 
 
-class LowerParser(ColumnParser):
-    """Convert string column to lowercase."""
-
-    def __init__(self) -> None:
-        """Initialize lower parser."""
-        super().__init__(
-            ValidatorMetadata(
-                name="lower",
-                description="Convert string to lowercase",
-                tags=["string", "normalization"],
-            )
-        )
-
-    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
-        """Convert column to lowercase.
-
-        Args:
-            column: Input column expression.
-            **kwargs: No arguments accepted.
-
-        Returns:
-            Expression with lowercase values.
-        """
-        return column.str.to_lowercase()
-
-    def validate_args(self, **kwargs: Any) -> None:
-        """Validate arguments (none accepted)."""
-        if kwargs:
-            raise ValueError(f"lower parser does not accept arguments, got: {kwargs}")
+@parser(name="lower", description="Convert string to lowercase", tags=["string", "normalization"])
+def lower(column: pl.Expr) -> pl.Expr:
+    """Lowercased."""
+    return column.str.to_lowercase()
 
 
-class UpperParser(ColumnParser):
-    """Convert string column to uppercase."""
-
-    def __init__(self) -> None:
-        """Initialize upper parser."""
-        super().__init__(
-            ValidatorMetadata(
-                name="upper",
-                description="Convert string to uppercase",
-                tags=["string", "normalization"],
-            )
-        )
-
-    def execute(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:
-        """Convert column to uppercase.
-
-        Args:
-            column: Input column expression.
-            **kwargs: No arguments accepted.
-
-        Returns:
-            Expression with uppercase values.
-        """
-        return column.str.to_uppercase()
-
-    def validate_args(self, **kwargs: Any) -> None:
-        """Validate arguments (none accepted)."""
-        if kwargs:
-            raise ValueError(f"upper parser does not accept arguments, got: {kwargs}")
+@parser(name="upper", description="Convert string to uppercase", tags=["string", "normalization"])
+def upper(column: pl.Expr) -> pl.Expr:
+    """Uppercased."""
+    return column.str.to_uppercase()

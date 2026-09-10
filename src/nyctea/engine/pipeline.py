@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
 
+import polars as pl
+
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.observability import PhaseMetrics, PipelineObserver
 from nyctea.exceptions import PipelineError
@@ -86,6 +88,17 @@ class PipelinePhase(ABC):
 
         Returns:
             True if phase can be skipped, False otherwise.
+        """
+        return False
+
+    def can_change_row_count(self, context: PipelineContext) -> bool:
+        """Whether execution may change the number of rows.
+
+        Args:
+            context: Current pipeline context.
+
+        Returns:
+            False unless the phase overrides this row-count contract.
         """
         return False
 
@@ -286,9 +299,18 @@ class ValidationPipeline:
             for observer in self.observers:
                 observer.on_pipeline_start(context)
 
+            # Reuse the count while row cardinality is stable. A phase that may change
+            # it triggers one refresh for all later phase metrics.
+            row_count = self._count_rows(context) if self.observers else 0
+
             # Execute each phase
             for phase in self.phases:
-                context = self._execute_phase(phase, context)
+                if phase.can_skip(context):
+                    continue
+                refresh_row_count = self.observers and phase.can_change_row_count(context)
+                context = self._execute_phase(phase, context, row_count)
+                if refresh_row_count:
+                    row_count = self._count_rows(context)
 
         except Exception as e:
             # Notify observers of error
@@ -308,12 +330,31 @@ class ValidationPipeline:
             # Unlock pipeline after execution
             self._locked = False
 
-    def _execute_phase(self, phase: PipelinePhase, context: PipelineContext) -> PipelineContext:
+    @staticmethod
+    def _count_rows(context: PipelineContext) -> int:
+        """Count the rows once, projecting no columns.
+
+        `select(pl.len())` reads a single number. Materialising a column to take its
+        height allocates the whole column for the same answer.
+
+        Args:
+            context: Pipeline context.
+
+        Returns:
+            Row count, or 0 when row tracking is not in place.
+        """
+        if "__row_index__" not in context.get_column_names():
+            return 0
+        return int(context.data.select(pl.len()).collect().item())
+
+    def _execute_phase(self, phase: PipelinePhase, context: PipelineContext, row_count: int = 0) -> PipelineContext:
         """Run a single phase, notifying observers and collecting metrics.
 
         Args:
             phase: Phase to execute.
             context: Current pipeline context.
+            row_count: Rows presented to this phase. Only read when observers are
+                attached.
 
         Returns:
             Updated pipeline context.
@@ -321,9 +362,6 @@ class ValidationPipeline:
         Raises:
             PipelineError: If the phase's execute() raises.
         """
-        if phase.can_skip(context):
-            return context
-
         for observer in self.observers:
             observer.on_phase_start(phase.name, context)
 
@@ -341,9 +379,7 @@ class ValidationPipeline:
             metrics = PhaseMetrics(
                 phase_name=phase.name,
                 duration_seconds=phase_duration,
-                rows_processed=context.data.select("__row_index__").collect().height
-                if "__row_index__" in context.data.collect_schema().names()
-                else 0,
+                rows_processed=row_count,
             )
             for observer in self.observers:
                 observer.on_phase_end(phase.name, context, metrics)

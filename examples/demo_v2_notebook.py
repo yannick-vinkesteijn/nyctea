@@ -16,7 +16,6 @@ def _(mo):
 
     We will define a schema once and let Nyctea clean it up.
     """)
-    return
 
 
 @app.cell
@@ -29,7 +28,6 @@ def _(mo):
     Some values are clearly wrong: an age of 150, a temperature of 45,
     and a status that does not exist in the codebook.
     """)
-    return
 
 
 @app.cell
@@ -63,7 +61,6 @@ def _(mo):
 
     Coercion is enabled globally: columns will be cast to their target dtype.
     """)
-    return
 
 
 @app.cell
@@ -137,7 +134,6 @@ def _(mo):
     Error reporting uses targeted collects of only the columns it
     needs (mask columns + row indices), never the full dataset.
     """)
-    return
 
 
 @app.cell
@@ -151,7 +147,6 @@ def _(mo):
 
     `patient_id` overrides to `on_failure: "raise"` because it must be clean.
     """)
-    return
 
 
 @app.cell
@@ -174,13 +169,11 @@ def _(mo):
     mo.md("""
     ### Cleaned output
     """)
-    return
 
 
 @app.cell
 def _(result_lenient):
     result_lenient.data
-    return
 
 
 @app.cell
@@ -199,7 +192,6 @@ def _(mo):
     | 5 | age = -5 | **Check failed** (< 0) |
     | all | `"DISCHARGED"`, `" Active "` | Lowercased and stripped |
     """)
-    return
 
 
 @app.cell
@@ -207,13 +199,11 @@ def _(mo):
     mo.md("""
     ### Error summary
     """)
-    return
 
 
 @app.cell
 def _(result_lenient):
     result_lenient.errors
-    return
 
 
 @app.cell
@@ -221,7 +211,6 @@ def _(mo):
     mo.md("""
     ### Validation report
     """)
-    return
 
 
 @app.cell
@@ -229,7 +218,6 @@ def _(mo, result_lenient):
     mo.md(f"""
     ```\n{result_lenient.report.summary()}\n```
     """)
-    return
 
 
 @app.cell
@@ -240,7 +228,6 @@ def _(mo):
     In production you often want to fail fast. With `on_failure: "raise"`,
     the first column with a coercion failure raises a `PipelineError`.
     """)
-    return
 
 
 @app.cell
@@ -270,7 +257,6 @@ def _(dirty, mo, registry):
             kind="danger",
         )
     _strict_output
-    return
 
 
 @app.cell
@@ -302,7 +288,6 @@ def _(mo):
         nullable: true
     ```
     """)
-    return
 
 
 @app.cell
@@ -314,7 +299,6 @@ def _(mo):
     further Polars operations before materialising, or write directly
     to Parquet without loading the full dataset into memory.
     """)
-    return
 
 
 @app.cell
@@ -326,7 +310,6 @@ def _(dirty, registry, schema):
     )
     # Still a LazyFrame — no data materialised yet
     result_lazy.data.explain()
-    return
 
 
 @app.cell
@@ -342,7 +325,6 @@ def _(mo):
 
     Use `limit` to cap the number of entries per column+check.
     """)
-    return
 
 
 @app.cell
@@ -356,7 +338,6 @@ def _(dirty, registry, schema):
         error_report_config=ErrorReportConfig(mode="cells", limit=5),
     )
     result_cells.errors
-    return
 
 
 @app.cell
@@ -370,7 +351,6 @@ def _(dirty, registry, schema):
         error_report_config=_ERC(mode="rows"),
     )
     result_rows.errors
-    return
 
 
 @app.cell
@@ -384,7 +364,6 @@ def _(mo):
     - **NullificationPhase** — set failing values to `null` for lenient columns
     - **Frame-level plugins** — whole-frame parsers and checks (e.g. deduplication)
     """)
-    return
 
 
 @app.cell

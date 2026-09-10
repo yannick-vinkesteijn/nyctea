@@ -15,4 +15,10 @@ one per validator kind.
 
 ## Decorators
 
-::: nyctea.validators.decorators.ValidatorDecorator
+::: nyctea.validators.decorators.checker
+
+::: nyctea.validators.decorators.parser
+
+::: nyctea.validators.decorators.frame_checker
+
+::: nyctea.validators.decorators.frame_parser

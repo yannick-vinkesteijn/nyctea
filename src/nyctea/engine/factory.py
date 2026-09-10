@@ -15,6 +15,7 @@ from nyctea.engine.phases import (
     FrameCheckPhase,
     FrameParsingPhase,
 )
+from nyctea.engine.phases.notnull_phase import NotNullPhase
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.schema.model import SchemaModel
 
@@ -52,9 +53,7 @@ def create_pipeline_from_schema(
     if schema.frame_parsers:
         phases.append(FrameParsingPhase())
 
-    # Add parsing phase if any column has parsers
-    has_parsers = any(col_schema.parsers for col_schema in schema.columns.values())
-    if has_parsers:
+    if schema.columns_with_parsers:
         phases.append(ColumnParsingPhase())
 
     # Coercion always present (can_skip handles coerce=False)
@@ -63,9 +62,12 @@ def create_pipeline_from_schema(
     if schema.frame_checks:
         phases.append(FrameCheckPhase())
 
-    # Add check phase if any column has checks or nullable=False
-    has_checks = any(col_schema.checks or not col_schema.nullable for col_schema in schema.columns.values())
-    if has_checks:
+    if schema.columns_with_checks:
         phases.append(ColumnCheckPhase())
+
+    # Last, always. Anything before it can introduce a null, so checked anywhere else
+    # it would answer a different question. See #87 and the phase-ordering design doc.
+    if schema.non_nullable_columns:
+        phases.append(NotNullPhase())
 
     return ValidationPipeline(phases=phases, observers=observers)

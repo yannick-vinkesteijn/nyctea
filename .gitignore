@@ -231,3 +231,9 @@ __marimo__/
 # Agent working documents (plans, reviews, design notes, handovers).
 # Local only, never committed. See .claude/CLAUDE.md.
 .agents/
+
+# Agent scratch, local only. Workflows, the PR template, release.yaml and the
+# Copilot instructions stay tracked.
+.github/agents/
+.github/prompts/
+.github/skills/

@@ -1,15 +1,14 @@
 """Schema models."""
 
 from nyctea.schema.model import (
-    AggregateEngine,
     Check,
     ColumnSchema,
     FrameCheck,
     FrameParser,
-    OnFailureBehavior,
     Parser,
     SchemaModel,
 )
+from nyctea.types import AggregateEngine, OnFailureBehavior
 
 __all__ = [
     "AggregateEngine",

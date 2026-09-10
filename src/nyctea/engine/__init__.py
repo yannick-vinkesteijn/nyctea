@@ -6,13 +6,10 @@ from nyctea.engine.results import (
     ValidationReport,
     ValidationResult,
 )
-from nyctea.engine.utils import SchemaResolutionError, resolve_column_names
 
 __all__ = [
     "ColumnValidationStats",
     "ErrorReportConfig",
-    "SchemaResolutionError",
     "ValidationReport",
     "ValidationResult",
-    "resolve_column_names",
 ]

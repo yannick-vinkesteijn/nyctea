@@ -104,12 +104,11 @@ registry.register_column_parser(TrimParser())
 
 ```python
 import polars as pl
-from nyctea import ValidatorDecorator
-
-decorators = ValidatorDecorator(registry)
+from nyctea import checker, frame_checker, frame_parser, parser
 
 
-@decorators.column_check(name="positive", tags=["numeric"])
+
+@checker(registry=registry, name="positive", tags=["numeric"])
 def is_positive(column: pl.Expr) -> pl.Expr:
     return column > 0
 ```

@@ -2,38 +2,37 @@
 
 import polars as pl
 
-from nyctea import Registry, SchemaModel, ValidatorDecorator
+from nyctea import Registry, SchemaModel, checker, frame_checker, frame_parser, parser
 from nyctea.schema import Check, ColumnSchema, FrameCheck, FrameParser, Parser
 
 registry = Registry()
-decorators = ValidatorDecorator(registry)
 
 
-@decorators.column_parser(name="strip")
+@parser(registry=registry, name="strip")
 def strip(col: pl.Expr) -> pl.Expr:
     """Trim whitespace from a string column."""
     return col.str.strip_chars()
 
 
-@decorators.column_parser(name="to_int")
+@parser(registry=registry, name="to_int")
 def to_int(col: pl.Expr) -> pl.Expr:
     """Cast a string column to Int64."""
     return col.cast(pl.Int64)
 
 
-@decorators.column_check(name="non_null")
+@checker(registry=registry, name="non_null")
 def non_null(col: pl.Expr) -> pl.Expr:
     """Check that no null values are present."""
     return col.is_not_null()
 
 
-@decorators.column_check(name="positive")
+@checker(registry=registry, name="positive")
 def positive(col: pl.Expr) -> pl.Expr:
     """Check that values are strictly greater than zero."""
     return col.gt(0)
 
 
-@decorators.frame_parser(name="strip_strings")
+@frame_parser(registry=registry, name="strip_strings")
 def strip_strings(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Strip whitespace from all Utf8 columns."""
     schema = lf.collect_schema()
@@ -41,7 +40,7 @@ def strip_strings(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.with_columns(string_cols)
 
 
-@decorators.frame_check(name="no_duplicate_ids")
+@frame_checker(registry=registry, name="no_duplicate_ids")
 def no_duplicate_ids(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Raise if duplicate patient_id values exist."""
     duplicates = lf.group_by("patient_id").len().filter(pl.col("len") > 1).select("patient_id").collect()

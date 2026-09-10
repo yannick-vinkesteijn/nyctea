@@ -41,7 +41,7 @@ def test_frame_validator_registers_under_future_annotations():
     assert check.name == "future_frame_check"
 
 
-def test_column_validator_unresolvable_annotation_raises_registration_error():
+def test_column_validator_bad_annotation_raises():
     class BadAnnotationCheck(ColumnCheck):
         def execute(self, column: DoesNotExist, **kwargs) -> pl.Expr:  # noqa: F821  # ty: ignore[unresolved-reference]
             return column.is_not_null()
@@ -53,7 +53,7 @@ def test_column_validator_unresolvable_annotation_raises_registration_error():
         BadAnnotationCheck(ValidatorMetadata(name="bad_column_check"))
 
 
-def test_frame_validator_unresolvable_annotation_raises_registration_error():
+def test_frame_validator_bad_annotation_raises():
     class BadAnnotationFrameCheck(FrameCheck):
         def execute(self, frame: DoesNotExist, **kwargs) -> pl.LazyFrame:  # noqa: F821  # ty: ignore[unresolved-reference]
             return frame
