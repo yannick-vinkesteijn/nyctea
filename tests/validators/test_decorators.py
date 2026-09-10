@@ -5,7 +5,8 @@ import pytest
 
 from nyctea import Registry, SchemaModel, register_builtins
 from nyctea.exceptions import RegistrationError
-from nyctea.validators.decorators import checker, parser
+from nyctea.validators.catalogue import CATALOGUE
+from nyctea.validators.decorators import checker, frame_checker, frame_parser, parser
 
 
 class TestColumnParserDecorator:
@@ -206,3 +207,125 @@ class TestDecoratorEdgeCases:
 
         validator = registry.column_parsers.get("documented")
         assert validator.metadata.description == "This is the docstring."
+
+
+@pytest.fixture
+def clean_catalogue():
+    """Restore CATALOGUE after a test declares into it with no registry."""
+    before = list(CATALOGUE)
+    yield
+    CATALOGUE[:] = before
+
+
+class TestBareForm:
+    """Name inference and bare-form (no `()`) support for the four decorators."""
+
+    def test_checker_infers_name_from_function(self):
+        registry = Registry()
+
+        @checker(registry=registry)
+        def positive(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        assert "positive" in registry.column_checks.list_names()
+
+    def test_parser_infers_name_from_function(self):
+        registry = Registry()
+
+        @parser(registry=registry)
+        def trim(column: pl.Expr) -> pl.Expr:
+            return column.str.strip_chars()
+
+        assert "trim" in registry.column_parsers.list_names()
+
+    def test_frame_checker_infers_name_from_function(self):
+        registry = Registry()
+
+        @frame_checker(registry=registry)
+        def min_rows(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert "min_rows" in registry.frame_checks.list_names()
+
+    def test_frame_parser_infers_name_from_function(self):
+        registry = Registry()
+
+        @frame_parser(registry=registry)
+        def add_total(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert "add_total" in registry.frame_parsers.list_names()
+
+    def test_explicit_name_overrides_inference(self):
+        registry = Registry()
+
+        @checker(name="custom_name", registry=registry)
+        def positive(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        assert "custom_name" in registry.column_checks.list_names()
+        assert "positive" not in registry.column_checks.list_names()
+
+    def test_bare_form_still_callable_directly(self):
+        registry = Registry()
+
+        @checker(registry=registry)
+        def above_zero(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        df = pl.DataFrame({"x": [1, -1, 2]})
+        result = df.select(above_zero(pl.col("x")))
+        assert result["x"].to_list() == [True, False, True]
+
+    def test_bare_no_registry_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=` at all: declared into `CATALOGUE`, same as the built-ins."""
+        before = len(CATALOGUE)
+
+        @checker
+        def catalogued_check(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_check"
+
+    def test_bare_parser_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@parser` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @parser
+        def catalogued_parser(column: pl.Expr) -> pl.Expr:
+            return column.str.strip_chars()
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_parser"
+
+    def test_bare_frame_checker_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@frame_checker` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @frame_checker
+        def catalogued_frame_check(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_frame_check"
+
+    def test_bare_frame_parser_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@frame_parser` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @frame_parser
+        def catalogued_frame_parser(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_frame_parser"
+
+    def test_catalogued_check_reaches_register_builtins(self, clean_catalogue):
+        @checker
+        def another_catalogued_check(column: pl.Expr) -> pl.Expr:
+            return column > 0
+
+        registry = Registry()
+        register_builtins(registry)
+        assert "another_catalogued_check" in registry.column_checks.list_names()

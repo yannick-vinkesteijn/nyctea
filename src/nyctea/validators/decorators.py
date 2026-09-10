@@ -7,10 +7,15 @@ own column, but nothing about it reaches the author of a validator.
 Without a registry the decorated function is declared into `CATALOGUE`, which is what
 built-ins do, since they have no registry at import time. With `registry=` it is
 registered immediately, which is what user code with a registry in hand should do.
+
+Each decorator works bare (`@checker`) or parameterized (`@checker(name=...)`). Bare
+form infers the validator's name from the function. Two `@overload`s per decorator
+give each call shape its own return type, rather than the union-typed single
+signature #42 found unusable under a real type checker.
 """
 
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypeVar, overload
 
 import polars as pl
 
@@ -21,6 +26,12 @@ from nyctea.validators.frame import FrameCheck, FrameParser
 from nyctea.validators.registry import Registry
 
 __all__ = ["build_validator", "checker", "frame_checker", "frame_parser", "parser"]
+
+# TypeVars, not plain aliases: binding to the concrete decorated function at each
+# call site is what actually preserves its signature through the bare form, rather
+# than erasing every parameter to `...`.
+_ColumnFn = TypeVar("_ColumnFn", bound=Callable[..., pl.Expr])
+_FrameFn = TypeVar("_FrameFn", bound=Callable[..., pl.LazyFrame])
 
 _BASES: dict[Kind, type[Any]] = {
     "column_check": ColumnCheck,
@@ -92,71 +103,297 @@ def _execute_method(func: Callable[..., Any], first: str) -> Callable[..., Any]:
     return execute
 
 
-def _declare(kind: Kind) -> Callable[..., Any]:
-    """Build the decorator for one validator kind."""
+def _dispatch(
+    kind: Kind,
+    func: Callable[..., Any] | None,
+    *,
+    name: str | None,
+    description: str,
+    version: str,
+    tags: Sequence[str] | None,
+    author: str,
+    registry: Registry | None,
+    preserve_columns: bool = True,
+    preserve_rows: bool = False,
+) -> Any:
+    """Shared runtime behind every declaration decorator.
 
-    def decorator(
-        name: str,
-        description: str = "",
-        version: str = "1.0.0",
-        tags: Sequence[str] | None = None,
-        author: str = "",
-        registry: Registry | None = None,
-        preserve_columns: bool = True,
-        preserve_rows: bool = False,
-    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        def wrap(func: Callable[..., Any]) -> Callable[..., Any]:
-            declared = Declared(
-                kind=kind,
-                name=name,
-                func=func,
-                description=description,
-                version=version,
-                tags=tuple(tags or ()),
-                author=author,
-                preserve_columns=preserve_columns,
-                preserve_rows=preserve_rows,
-            )
-            if registry is None:
-                CATALOGUE.append(declared)
-            else:
-                getattr(registry, _REGISTER[kind])(build_validator(declared))
-            return func
+    `func` is the decorated function for the bare form (`@checker`) and `None` for
+    the parameterized form (`@checker(...)`), which is what selects between
+    returning the function immediately or returning a decorator for it.
 
-        return wrap
+    Args:
+        kind: Validator kind, selects the base class and the registry method.
+        func: The decorated function, bare form only.
+        name: Validator name. Bare form infers it from `func.__name__`.
+        description: Human-readable description. Defaults to the function's docstring.
+        version: Validator version.
+        tags: Optional tags for discovery.
+        author: Validator author.
+        registry: Register immediately into this registry. Without it the validator
+            is declared into `CATALOGUE` and registered by `register_builtins`.
+        preserve_columns: Frame parsers only. Output must keep the input's columns.
+        preserve_rows: Frame parsers only. Output must keep the input's row count.
 
-    decorator.__name__ = kind
-    return decorator
+    Returns:
+        The function unchanged (bare form), or a decorator that returns it unchanged
+        (parameterized form).
+    """
+
+    def wrap(target: Callable[..., Any]) -> Callable[..., Any]:
+        declared = Declared(
+            kind=kind,
+            # Every caller decorates a plain `def`, never an arbitrary callable, so
+            # __name__ is always there; Callable[..., Any] just cannot say so.
+            name=name or target.__name__,  # ty: ignore[unresolved-attribute]
+            func=target,
+            description=description,
+            version=version,
+            tags=tuple(tags or ()),
+            author=author,
+            preserve_columns=preserve_columns,
+            preserve_rows=preserve_rows,
+        )
+        if registry is None:
+            CATALOGUE.append(declared)
+        else:
+            getattr(registry, _REGISTER[kind])(build_validator(declared))
+        return target
+
+    return wrap(func) if func is not None else wrap
 
 
-checker = _declare("column_check")
-parser = _declare("column_parser")
-frame_checker = _declare("frame_check")
-frame_parser = _declare("frame_parser")
+@overload
+def checker(func: _ColumnFn) -> _ColumnFn: ...
+@overload
+def checker(
+    func: None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Callable[[_ColumnFn], _ColumnFn]: ...
+def checker(
+    func: _ColumnFn | None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Any:
+    """Declare a function as a column check.
 
-_DOC = """Declare a function as a {what}.
+    Works bare (`@checker`), which infers the check's name from the function, or
+    parameterized (`@checker(...)`) for an explicit name or the rest of the
+    contract. Arguments after `name` are keyword-only and are checked against a
+    schema's arguments before any data is read.
 
-Arguments after the first are the validator's contract. Make them keyword-only and
-they are checked against a schema's arguments before any data is read.
+    Args:
+        func: The decorated function. Only present for the bare form; leave it out
+            and call with keyword arguments for the parameterized form.
+        name: Check name. Bare form infers it from the function's `__name__`.
+        description: Human-readable description. Defaults to the function's docstring.
+        version: Validator version.
+        tags: Optional tags for discovery.
+        author: Validator author.
+        registry: Register immediately into this registry. Without it the check is
+            declared into `CATALOGUE` and registered by `register_builtins`.
 
-Args:
-    name: Unique validator name.
-    description: Human-readable description. Defaults to the function's docstring.
-    version: Validator version.
-    tags: Optional tags for discovery.
-    author: Validator author.
-    registry: Register immediately into this registry. Without it the validator is
-        declared into `CATALOGUE` and registered by `register_builtins`.
-    preserve_columns: Frame validators only. Output must keep the input's columns.
-    preserve_rows: Frame validators only. Output must keep the input's row count.
+    Returns:
+        The function unchanged (bare form), or a decorator that returns it unchanged
+        (parameterized form).
+    """
+    return _dispatch(
+        "column_check",
+        func,
+        name=name,
+        description=description,
+        version=version,
+        tags=tags,
+        author=author,
+        registry=registry,
+    )
 
-Returns:
-    The decorator, which returns the function unchanged.
-"""
-for _fn, _what in (
-    (checker, "column check"),
-    (parser, "column parser"),
-    (frame_checker, "frame check"),
-    (frame_parser, "frame parser"),
-):
-    _fn.__doc__ = _DOC.format(what=_what)
+
+@overload
+def parser(func: _ColumnFn) -> _ColumnFn: ...
+@overload
+def parser(
+    func: None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Callable[[_ColumnFn], _ColumnFn]: ...
+def parser(
+    func: _ColumnFn | None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Any:
+    """Declare a function as a column parser.
+
+    Works bare (`@parser`), which infers the parser's name from the function, or
+    parameterized (`@parser(...)`) for an explicit name or the rest of the contract.
+    Arguments after `name` are keyword-only and are checked against a schema's
+    arguments before any data is read.
+
+    Args:
+        func: The decorated function. Only present for the bare form; leave it out
+            and call with keyword arguments for the parameterized form.
+        name: Parser name. Bare form infers it from the function's `__name__`.
+        description: Human-readable description. Defaults to the function's docstring.
+        version: Validator version.
+        tags: Optional tags for discovery.
+        author: Validator author.
+        registry: Register immediately into this registry. Without it the parser is
+            declared into `CATALOGUE` and registered by `register_builtins`.
+
+    Returns:
+        The function unchanged (bare form), or a decorator that returns it unchanged
+        (parameterized form).
+    """
+    return _dispatch(
+        "column_parser",
+        func,
+        name=name,
+        description=description,
+        version=version,
+        tags=tags,
+        author=author,
+        registry=registry,
+    )
+
+
+@overload
+def frame_checker(func: _FrameFn) -> _FrameFn: ...
+@overload
+def frame_checker(
+    func: None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Callable[[_FrameFn], _FrameFn]: ...
+def frame_checker(
+    func: _FrameFn | None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+) -> Any:
+    """Declare a function as a frame check.
+
+    Works bare (`@frame_checker`), which infers the check's name from the function,
+    or parameterized (`@frame_checker(...)`) for an explicit name or the rest of the
+    contract. Arguments after `name` are keyword-only and are checked against a
+    schema's arguments before any data is read.
+
+    Args:
+        func: The decorated function. Only present for the bare form; leave it out
+            and call with keyword arguments for the parameterized form.
+        name: Check name. Bare form infers it from the function's `__name__`.
+        description: Human-readable description. Defaults to the function's docstring.
+        version: Validator version.
+        tags: Optional tags for discovery.
+        author: Validator author.
+        registry: Register immediately into this registry. Without it the check is
+            declared into `CATALOGUE` and registered by `register_builtins`.
+
+    Returns:
+        The function unchanged (bare form), or a decorator that returns it unchanged
+        (parameterized form).
+    """
+    return _dispatch(
+        "frame_check",
+        func,
+        name=name,
+        description=description,
+        version=version,
+        tags=tags,
+        author=author,
+        registry=registry,
+    )
+
+
+@overload
+def frame_parser(func: _FrameFn) -> _FrameFn: ...
+@overload
+def frame_parser(
+    func: None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+    preserve_columns: bool = True,
+    preserve_rows: bool = False,
+) -> Callable[[_FrameFn], _FrameFn]: ...
+def frame_parser(
+    func: _FrameFn | None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    version: str = "1.0.0",
+    tags: Sequence[str] | None = None,
+    author: str = "",
+    registry: Registry | None = None,
+    preserve_columns: bool = True,
+    preserve_rows: bool = False,
+) -> Any:
+    """Declare a function as a frame parser.
+
+    Works bare (`@frame_parser`), which infers the parser's name from the function,
+    or parameterized (`@frame_parser(...)`) for an explicit name or the rest of the
+    contract. Arguments after `name` are keyword-only and are checked against a
+    schema's arguments before any data is read.
+
+    Args:
+        func: The decorated function. Only present for the bare form; leave it out
+            and call with keyword arguments for the parameterized form.
+        name: Parser name. Bare form infers it from the function's `__name__`.
+        description: Human-readable description. Defaults to the function's docstring.
+        version: Validator version.
+        tags: Optional tags for discovery.
+        author: Validator author.
+        registry: Register immediately into this registry. Without it the parser is
+            declared into `CATALOGUE` and registered by `register_builtins`.
+        preserve_columns: Output must keep the input's columns.
+        preserve_rows: Output must keep the input's row count.
+
+    Returns:
+        The function unchanged (bare form), or a decorator that returns it unchanged
+        (parameterized form).
+    """
+    return _dispatch(
+        "frame_parser",
+        func,
+        name=name,
+        description=description,
+        version=version,
+        tags=tags,
+        author=author,
+        registry=registry,
+        preserve_columns=preserve_columns,
+        preserve_rows=preserve_rows,
+    )
