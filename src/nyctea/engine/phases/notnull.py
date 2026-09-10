@@ -20,8 +20,13 @@ def build_notnull_mask_exprs(
     current_columns: Collection[str],
     occupied_columns: Collection[str],
     mask_exprs: list[pl.Expr],
+    declared_check_aliases: dict[str, list[str]],
 ) -> dict[str, str]:
     """Add a not-null mask expression for every nullable=False column present in the data.
+
+    An on_failure='null' column's failing checks are nulled later by
+    ``apply_check_null``, after this phase runs, so the mask folds in the same
+    failure expression to predict that outcome instead of missing it.
 
     Args:
         schema: Schema being validated.
@@ -32,6 +37,8 @@ def build_notnull_mask_exprs(
         occupied_columns: Input and schema column names unavailable to
             internal helpers.
         mask_exprs: Mutable list of mask expressions to append to.
+        declared_check_aliases: Column name to its declared-check mask aliases
+            (``MaskIndex.declared``).
 
     Returns:
         Mapping of column name to its not-null mask alias.
@@ -47,6 +54,11 @@ def build_notnull_mask_exprs(
             phase,
             f"the not-null mask for column '{col_name}'",
         )
-        mask_exprs.append(pl.col(col_name).is_not_null().alias(alias))
+        not_null_expr = pl.col(col_name).is_not_null()
+        check_aliases = declared_check_aliases.get(col_name)
+        if check_aliases and schema.resolve_on_failure(col_name) == "null":
+            about_to_be_nulled = pl.any_horizontal([~pl.col(a) for a in check_aliases])
+            not_null_expr = not_null_expr & ~about_to_be_nulled
+        mask_exprs.append(not_null_expr.alias(alias))
         notnull_aliases[col_name] = alias
     return notnull_aliases

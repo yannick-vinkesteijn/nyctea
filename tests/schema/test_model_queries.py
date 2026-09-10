@@ -180,11 +180,11 @@ def test_resolved_column_honours_its_own_overrides():
     assert column.on_failure == "raise"
 
 
-def test_resolved_column_applies_non_nullable_guard():
-    """A non-nullable column inheriting on_failure='null' resolves to 'raise'. See #25."""
+def test_resolved_column_keeps_null_non_nullable():
+    """A non-nullable column inheriting on_failure='null' resolves to 'null', unchanged."""
     schema = SchemaModel.from_dict({"on_failure": "null", "columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
-    assert schema.column("age").on_failure == "raise"
+    assert schema.column("age").on_failure == "null"
 
 
 def test_accepted_names_put_canonical_first():

@@ -1824,26 +1824,72 @@ class TestOnFailure:
         )
         assert schema.resolve_on_failure("age") == "ignore"
 
-    def test_resolve_null_guard_non_nullable(self):
-        """on_failure=null falls back to raise for non-nullable columns."""
+    def test_resolve_null_on_non_nullable_column(self):
+        """on_failure=null resolves unchanged for non-nullable columns."""
         schema = SchemaModel.from_dict(
             {
                 "on_failure": "null",
                 "columns": {"age": {"dtype": "Int64", "nullable": False}},
             }
         )
-        assert schema.resolve_on_failure("age") == "raise"
+        assert schema.resolve_on_failure("age") == "null"
 
-    def test_column_on_failure_null_requires_nullable(self):
-        """Setting on_failure=null on a non-nullable column is a schema error."""
-        with pytest.raises(ValueError, match="nullable=True"):
-            SchemaModel.from_dict(
-                {
-                    "columns": {
-                        "age": {"dtype": "Int64", "nullable": False, "on_failure": "null"},
+    def test_column_on_failure_null_allowed(self):
+        """Setting on_failure=null explicitly on a non-nullable column is legal."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False, "on_failure": "null"},
+                },
+            }
+        )
+        assert schema.resolve_on_failure("age") == "null"
+
+    def test_null_check_failure_non_nullable_reports(self, registry):
+        """A non-nullable column's on_failure='null' checks get nulled and reported, not raised."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
                     },
-                }
-            )
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [5, -1, 10]})
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [5, None, 10]
+        checks = set(result.errors["check"].to_list())
+        assert checks == {"min_value", "not_null"}
+        assert result.report.columns["age"].nullified == 1
+        assert result.report.columns["age"].final_null_count == 1
+        assert result.report.rows_valid == 2
+
+    def test_null_source_value_non_nullable_reports(self, registry):
+        """A genuinely null source value, with no check to null, reports rather than raises."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {"age": {"dtype": "Int64", "nullable": False}},
+            }
+        )
+        df = pl.DataFrame({"age": [5, None, 10]})
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [5, None, 10]
+        assert result.errors["check"].to_list() == ["not_null"]
+        assert result.report.columns["age"].nullified == 0
+
+    def test_raise_default_still_raises(self, registry):
+        """The default on_failure='raise' is unaffected: a source null still raises."""
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
+        df = pl.DataFrame({"age": [5, None, 10]})
+        with pytest.raises(PipelineError, match="nullable=False but contains null values"):
+            schema.validate(df, registry)
 
     def test_coercion_raise_on_failure(self, registry):
         """on_failure=raise + coercion failure raises PipelineError."""

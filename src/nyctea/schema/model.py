@@ -148,7 +148,8 @@ class ColumnSchema(BaseModel):
         description=(
             "How to handle parsing/coercion/check failures for this column:\n"
             "- 'raise': error, stop\n"
-            "- 'null': failure value becomes or remains null (requires nullable=True)\n"
+            "- 'null': failure value becomes or remains null. On a non-nullable "
+            "column the resulting violation is reported rather than raised\n"
             "- 'ignore': parser/coercion nulls remain, check failures are kept and reported\n"
             "- None: inherit from schema on_failure"
         ),
@@ -164,15 +165,6 @@ class ColumnSchema(BaseModel):
         if not isinstance(dtype_obj, type) or not issubclass(dtype_obj, pl.DataType):
             raise TypeError(f"'{v}' is not a valid Polars DataType")
         return v
-
-    @model_validator(mode="after")
-    def verify_on_failure_nullable_consistency(self) -> "ColumnSchema":
-        """Ensure on_failure='null' requires nullable=True."""
-        if self.on_failure == "null" and not self.nullable:
-            raise ValueError(
-                "on_failure='null' requires nullable=True. Cannot nullify failures in a non-nullable column."
-            )
-        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -548,14 +540,7 @@ class SchemaModel(BaseModel):
     def _resolve_on_failure(self, col_name: str) -> OnFailureBehavior:
         """Resolve on_failure for one column, before ``resolved_columns`` exists."""
         col_schema = self.columns[col_name]
-        behavior = col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
-
-        # Guard: can't nullify non-nullable columns. See #25, which tracks making
-        # this consistent with the construction-time rejection of the explicit case.
-        if behavior == "null" and not col_schema.nullable:
-            return "raise"
-
-        return behavior
+        return col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
 
     @cached_property
     def required_columns(self) -> tuple[str, ...]:
@@ -640,8 +625,6 @@ class SchemaModel(BaseModel):
         Resolution order:
         1. Column on_failure if set explicitly.
         2. Schema on_failure as default.
-        3. Guard: on_failure=null requires nullable=True. Non-nullable columns
-           fall back to raise.
 
         Args:
             col_name: Name of the column.
