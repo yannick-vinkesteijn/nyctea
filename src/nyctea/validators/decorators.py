@@ -15,7 +15,7 @@ signature #42 found unusable under a real type checker.
 """
 
 from collections.abc import Callable, Sequence
-from typing import Any, overload
+from typing import Any, TypeVar, overload
 
 import polars as pl
 
@@ -27,8 +27,11 @@ from nyctea.validators.registry import Registry
 
 __all__ = ["build_validator", "checker", "frame_checker", "frame_parser", "parser"]
 
-_ColumnFn = Callable[..., pl.Expr]
-_FrameFn = Callable[..., pl.LazyFrame]
+# TypeVars, not plain aliases: binding to the concrete decorated function at each
+# call site is what actually preserves its signature through the bare form, rather
+# than erasing every parameter to `...`.
+_ColumnFn = TypeVar("_ColumnFn", bound=Callable[..., pl.Expr])
+_FrameFn = TypeVar("_FrameFn", bound=Callable[..., pl.LazyFrame])
 
 _BASES: dict[Kind, type[Any]] = {
     "column_check": ColumnCheck,

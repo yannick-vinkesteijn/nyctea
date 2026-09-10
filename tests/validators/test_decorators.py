@@ -218,7 +218,7 @@ def clean_catalogue():
 
 
 class TestBareForm:
-    """`@checker`/`@parser`/`@frame_checker`/`@frame_parser` without `()`."""
+    """Name inference and bare-form (no `()`) support for the four decorators."""
 
     def test_checker_infers_name_from_function(self):
         registry = Registry()
@@ -287,6 +287,39 @@ class TestBareForm:
 
         assert len(CATALOGUE) == before + 1
         assert CATALOGUE[-1].name == "catalogued_check"
+
+    def test_bare_parser_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@parser` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @parser
+        def catalogued_parser(column: pl.Expr) -> pl.Expr:
+            return column.str.strip_chars()
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_parser"
+
+    def test_bare_frame_checker_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@frame_checker` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @frame_checker
+        def catalogued_frame_check(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_frame_check"
+
+    def test_bare_frame_parser_declares_into_catalogue(self, clean_catalogue):
+        """No `registry=`: a bare `@frame_parser` declares into `CATALOGUE` too."""
+        before = len(CATALOGUE)
+
+        @frame_parser
+        def catalogued_frame_parser(frame: pl.LazyFrame) -> pl.LazyFrame:
+            return frame
+
+        assert len(CATALOGUE) == before + 1
+        assert CATALOGUE[-1].name == "catalogued_frame_parser"
 
     def test_catalogued_check_reaches_register_builtins(self, clean_catalogue):
         @checker
