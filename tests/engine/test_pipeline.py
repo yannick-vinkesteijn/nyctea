@@ -17,9 +17,9 @@ from nyctea.validators.registry import Registry
 class SimplePhase(PipelinePhase):
     """Simple phase for testing."""
 
-    def __init__(self, name="simple", dependencies=None):
+    def __init__(self, name="simple", dependencies=None, pinned=None):
         """Initialize the test phase."""
-        super().__init__(name=name, phase_type=PhaseType.CHECKING, dependencies=dependencies or [])
+        super().__init__(name=name, phase_type=PhaseType.CHECKING, dependencies=dependencies or [], pinned=pinned)
         self.executed = False
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -135,6 +135,57 @@ def test_pipeline_dependency_ordering():
     # This should fail because dependent comes before dependency
     with pytest.raises(PipelineError, match="Dependencies must run before"):
         ValidationPipeline(phases=[phase1, phase2])
+
+
+# ---------------------------------------------------------------------------
+# Pinned phases (#87): a structural position, independent of `dependencies`.
+# ---------------------------------------------------------------------------
+
+
+def test_pinned_first_phase_at_start():
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="a", pinned="first"), SimplePhase(name="b")])
+    assert pipeline.list_phases() == ["a", "b"]
+
+
+def test_pinned_first_phase_wrong_position():
+    with pytest.raises(PipelineError, match="'a' is pinned first, but is at position 1"):
+        ValidationPipeline(phases=[SimplePhase(name="b"), SimplePhase(name="a", pinned="first")])
+
+
+def test_pinned_last_phase_at_end():
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="a"), SimplePhase(name="b", pinned="last")])
+    assert pipeline.list_phases() == ["a", "b"]
+
+
+def test_pinned_last_phase_wrong_position():
+    with pytest.raises(PipelineError, match="'b' is pinned last, but is at position 0"):
+        ValidationPipeline(phases=[SimplePhase(name="b", pinned="last"), SimplePhase(name="a")])
+
+
+def test_add_phase_after_pinned_last_rejected():
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="a"), SimplePhase(name="last", pinned="last")])
+
+    with pytest.raises(PipelineError, match="'last' is pinned last"):
+        pipeline.add_phase(SimplePhase(name="c"), after="last")
+
+    assert pipeline.list_phases() == ["a", "last"], "the rejected insertion must roll back"
+
+
+def test_add_phase_before_pinned_first_rejected():
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="first", pinned="first"), SimplePhase(name="a")])
+
+    with pytest.raises(PipelineError, match="'first' is pinned first"):
+        pipeline.add_phase(SimplePhase(name="c"), before="first")
+
+    assert pipeline.list_phases() == ["first", "a"], "the rejected insertion must roll back"
+
+
+def test_unpinned_phases_reorder_freely():
+    """Two phases with no dependency on each other are valid in either order."""
+    forward = ValidationPipeline(phases=[SimplePhase(name="a"), SimplePhase(name="b")])
+    reverse = ValidationPipeline(phases=[SimplePhase(name="b"), SimplePhase(name="a")])
+    assert forward.list_phases() == ["a", "b"]
+    assert reverse.list_phases() == ["b", "a"]
 
 
 def test_pipeline_list_phases():

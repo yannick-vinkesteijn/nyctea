@@ -55,8 +55,13 @@ Validation runs through ordered phases. Each phase receives a `PipelineContext` 
 | `ColumnParsingPhase`    | Apply column-level transformations (strip, lower, to_int) |
 | `CoercionPhase`         | Cast columns to target dtypes                             |
 | `ColumnCheckPhase`      | Evaluate validation rules as boolean mask columns         |
+| `NotNullPhase`          | Enforce `nullable: false` against the final column        |
 
-Phases can be added, removed, or reordered.
+Phases can be added, removed, or reordered, including `CoercionPhase` relative to parsing and checks: a check written against raw strings can run before coercion, one written against typed values can run after.
+Two positions are fixed.
+`ColumnResolutionPhase` always runs first, since every other phase reads resolved names.
+`NotNullPhase` always runs last, since it answers "does the output contain nulls", which only means something once everything that could introduce one has already run.
+`ValidationPipeline` rejects any ordering that violates either.
 
 ## Validator registry
 

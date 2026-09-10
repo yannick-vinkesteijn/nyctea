@@ -13,7 +13,9 @@ class ColumnResolutionPhase(PipelinePhase):
     This phase maps physical column names to canonical schema names using
     the synonym definitions in the schema.
 
-    Dependencies: None (always runs first)
+    Pinned first: every other phase reads resolved names, so nothing can act on a
+    column before the schema knows which physical column it is. See #87 and
+    `.agents/design/202609052323_phase-ordering-invariants.md`.
     """
 
     def __init__(self) -> None:
@@ -22,6 +24,7 @@ class ColumnResolutionPhase(PipelinePhase):
             name="column_resolution",
             phase_type=PhaseType.RESOLUTION,
             dependencies=[],
+            pinned="first",
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
