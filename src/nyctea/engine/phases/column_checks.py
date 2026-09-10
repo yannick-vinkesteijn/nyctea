@@ -1,4 +1,4 @@
-"""Per-column checks, and the not-null constraint they carry."""
+"""Per-column checks declared by the schema author."""
 
 import polars as pl
 

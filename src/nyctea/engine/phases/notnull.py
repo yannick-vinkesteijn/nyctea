@@ -1,8 +1,7 @@
 """Not-null masks for `nullable=False` columns.
 
-Registered by the column check phase today. It lives here rather than inside that
-phase because nullability is not itself a phase, and #87 has to be free to place it
-somewhere else in the order.
+Built separately from declared checks because nullability is a generated postcondition.
+`NotNullPhase` registers these masks last, after every phase that can introduce nulls.
 """
 
 from collections.abc import Collection

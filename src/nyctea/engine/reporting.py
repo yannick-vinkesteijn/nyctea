@@ -23,7 +23,7 @@ def build_report(context: PipelineContext, row: pl.DataFrame) -> ValidationRepor
 
     Args:
         context: Pipeline context with check_masks and nullified_counts populated.
-        row: The aggregate row from ``_run_aggregates_and_raise``.
+        row: The aggregate row from ``run_aggregates_and_raise``.
 
     Returns:
         ValidationReport with row counts and per-column statistics.

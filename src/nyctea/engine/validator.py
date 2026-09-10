@@ -143,9 +143,9 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     Combines what were previously four separate collects -- coercion-raise counts,
     check-raise counts, on_failure=null fail counts, and the report's own
     aggregates -- into a single ``select()`` on the aggregate engine, since none of
-    them need row-level data and all run against the same lazy graph. ``_build_errors``
+    them need row-level data and all run against the same lazy graph. ``build_errors``
     stays a separate collect: its row/cell modes need the default engine, not the
-    aggregate engine (see ``_collect``'s docstring).
+    aggregate engine (see ``collect``'s docstring).
 
     Args:
         context: Pipeline context with check_masks populated.
@@ -190,17 +190,17 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
 def apply_check_null(context: PipelineContext, row: pl.DataFrame, null_fail_exprs: dict[str, pl.Expr]) -> None:
     """Null out values that failed a check on an on_failure=null column.
 
-    Uses the nullify counts already collected by ``_run_aggregates_and_raise``;
+    Uses the nullify counts already collected by ``run_aggregates_and_raise``;
     applying the ``.with_columns()`` mutation itself stays fully lazy, no collect.
-    Runs after ``_build_errors`` so the error report still reflects the original
+    Runs after ``build_errors`` so the error report still reflects the original
     failing values.
 
     Args:
         context: Pipeline context. Mutates ``context.data`` and
             ``context.nullified_counts`` in place.
-        row: The aggregate row from ``_run_aggregates_and_raise``.
+        row: The aggregate row from ``run_aggregates_and_raise``.
         null_fail_exprs: Per-column on_failure=null fail expressions, from
-            ``_run_aggregates_and_raise``.
+            ``run_aggregates_and_raise``.
     """
     if not null_fail_exprs:
         return
