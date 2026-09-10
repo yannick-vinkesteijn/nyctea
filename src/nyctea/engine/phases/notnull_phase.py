@@ -17,7 +17,6 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.phases.common import reserved_columns
 from nyctea.engine.phases.notnull import build_notnull_mask_exprs
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
-from nyctea.exceptions import PipelineError
 
 __all__ = ["NotNullPhase"]
 
@@ -46,8 +45,7 @@ class NotNullPhase(PipelinePhase):
             Updated context with a not-null mask per non-nullable column.
 
         Raises:
-            PipelineError: If a column declares a check named `not_null`, which is
-                reserved for this constraint.
+            PipelineError: If a generated alias collides with an existing column.
         """
         lf = context.data
         mask_exprs: list[pl.Expr] = []
@@ -64,18 +62,12 @@ class NotNullPhase(PipelinePhase):
             context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
 
         # Registered as checks so they reach the error report. Without this,
-        # on_failure='ignore' would swallow the null entirely.
+        # on_failure='ignore' would swallow the null entirely. A check literally
+        # named 'not_null' can never reach here: ColumnCheckPhase already reserves
+        # that name and raises before this phase runs.
         check_masks = dict(context.check_masks)
         for col_name, alias in aliases.items():
-            key = (col_name, NOT_NULL_CHECK)
-            if key in check_masks:
-                raise PipelineError(
-                    f"Column '{col_name}' is nullable=False and also has a check named "
-                    f"'{NOT_NULL_CHECK}'. The name is reserved for the built-in not-null "
-                    f"constraint. Rename the check.",
-                    phase=self.name,
-                )
-            check_masks[key] = alias
+            check_masks[(col_name, NOT_NULL_CHECK)] = alias
         context.check_masks = check_masks
 
         return context

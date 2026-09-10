@@ -6,7 +6,6 @@ from nyctea.engine.checks import COERCION_CHECK
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
-from nyctea.exceptions import PipelineError
 from nyctea.utils import resolve_dtype
 
 __all__ = ["CoercionPhase"]
@@ -44,7 +43,7 @@ class CoercionPhase(PipelinePhase):
             Updated context with coerced columns.
 
         Raises:
-            PipelineError: If dtype is invalid.
+            PipelineError: If a generated alias collides with an existing column.
         """
         schema = context.schema
         lf = context.data
@@ -57,14 +56,10 @@ class CoercionPhase(PipelinePhase):
             if col_name not in current_dtypes:
                 continue
 
-            dtype = schema.column(col_name).dtype
-            try:
-                target = resolve_dtype(dtype)
-            except ValueError as e:
-                raise PipelineError(
-                    f"Invalid dtype '{dtype}' for column '{col_name}': {e}",
-                    phase=self.name,
-                ) from e
+            # dtype is a validated Polars dtype string by the time it reaches a
+            # column schema (see ColumnSchema.verify_dtype), so resolve_dtype cannot
+            # fail here.
+            target = resolve_dtype(schema.column(col_name).dtype)
 
             if current_dtypes[col_name] == target:
                 continue
