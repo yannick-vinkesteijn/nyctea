@@ -15,7 +15,7 @@ from nyctea.validators.decorators import checker
 __all__ = ["between", "in_set", "min_value", "unique"]
 
 
-@checker(name="between", description="Check values are within min/max range (inclusive)", tags=["numeric", "range"])
+@checker(description="Check values are within min/max range (inclusive)", tags=["numeric", "range"])
 def between(column: pl.Expr, *, min: float, max: float) -> pl.Expr:  # noqa: A002
     """Values fall within an inclusive range."""
     if min > max:
@@ -23,7 +23,7 @@ def between(column: pl.Expr, *, min: float, max: float) -> pl.Expr:  # noqa: A00
     return column.is_between(min, max, closed="both")
 
 
-@checker(name="in_set", description="Check values are in allowed set", tags=["categorical", "validation"])
+@checker(description="Check values are in allowed set", tags=["categorical", "validation"])
 def in_set(column: pl.Expr, *, values: list[object] | tuple[object, ...] | set[object]) -> pl.Expr:
     """Values are drawn from an allowed set."""
     if not values:
@@ -31,13 +31,13 @@ def in_set(column: pl.Expr, *, values: list[object] | tuple[object, ...] | set[o
     return column.is_in(values)
 
 
-@checker(name="min_value", description="Check values are >= minimum", tags=["numeric", "range"])
+@checker(description="Check values are >= minimum", tags=["numeric", "range"])
 def min_value(column: pl.Expr, *, min: float) -> pl.Expr:  # noqa: A002
     """Values are at or above a minimum."""
     return column >= min
 
 
-@checker(name="unique", description="Check all values are unique (no duplicates)", tags=["uniqueness", "validation"])
+@checker(description="Check all values are unique (no duplicates)", tags=["uniqueness", "validation"])
 def unique(column: pl.Expr) -> pl.Expr:
     """Values are not duplicated."""
     return ~column.is_duplicated()
