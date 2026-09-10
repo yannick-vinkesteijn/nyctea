@@ -69,7 +69,15 @@ class PipelinePhase(ABC):
             dependencies: Names of phases this depends on (must run first).
             pinned: `"first"` or `"last"` to fix this phase's position in any
                 pipeline it appears in, regardless of `dependencies`.
+
+        Raises:
+            PipelineError: If `pinned` is not `"first"`, `"last"`, or `None`.
         """
+        if pinned is not None and pinned not in ("first", "last"):
+            raise PipelineError(
+                f"Phase '{name}' has pinned={pinned!r}, but pinned must be 'first', 'last', or None.",
+                phase=name,
+            )
         self.name = name
         self.phase_type = phase_type
         self.dependencies = list(dependencies) if dependencies else []

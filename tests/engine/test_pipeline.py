@@ -142,6 +142,12 @@ def test_pipeline_dependency_ordering():
 # ---------------------------------------------------------------------------
 
 
+def test_pinned_rejects_invalid_value():
+    """An invalid value must raise, not silently behave as unpinned."""
+    with pytest.raises(PipelineError, match="pinned='middle'"):
+        SimplePhase(name="a", pinned="middle")
+
+
 def test_pinned_first_phase_at_start():
     pipeline = ValidationPipeline(phases=[SimplePhase(name="a", pinned="first"), SimplePhase(name="b")])
     assert pipeline.list_phases() == ["a", "b"]
