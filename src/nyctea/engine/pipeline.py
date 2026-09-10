@@ -8,6 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from enum import StrEnum
+from typing import Literal
 
 import polars as pl
 
@@ -45,6 +46,12 @@ class PipelinePhase(ABC):
         name: Unique identifier for the phase.
         phase_type: Category of phase.
         dependencies: Names of phases that must run before this one.
+        pinned: `"first"`, `"last"`, or `None`. A structural position, independent
+            of `dependencies`: most phases mean the same thing wherever they run
+            relative to each other, but a phase whose answer depends on position
+            itself (nullability answers "did the input have nulls" versus "does
+            the output have nulls" depending on where it runs) needs to be fixed
+            in the pipeline rather than merely ordered against named phases.
     """
 
     def __init__(
@@ -52,6 +59,7 @@ class PipelinePhase(ABC):
         name: str,
         phase_type: PhaseType,
         dependencies: Sequence[str] | None = None,
+        pinned: Literal["first", "last"] | None = None,
     ) -> None:
         """Initialize pipeline phase.
 
@@ -59,10 +67,21 @@ class PipelinePhase(ABC):
             name: Unique phase identifier.
             phase_type: Type of phase.
             dependencies: Names of phases this depends on (must run first).
+            pinned: `"first"` or `"last"` to fix this phase's position in any
+                pipeline it appears in, regardless of `dependencies`.
+
+        Raises:
+            PipelineError: If `pinned` is not `"first"`, `"last"`, or `None`.
         """
+        if pinned is not None and pinned not in ("first", "last"):
+            raise PipelineError(
+                f"Phase '{name}' has pinned={pinned!r}, but pinned must be 'first', 'last', or None.",
+                phase=name,
+            )
         self.name = name
         self.phase_type = phase_type
         self.dependencies = list(dependencies) if dependencies else []
+        self.pinned = pinned
 
     @abstractmethod
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -248,10 +267,11 @@ class ValidationPipeline:
         raise KeyError(f"Phase '{name}' not found in pipeline")
 
     def _validate_dependencies(self) -> None:
-        """Validate that all phase dependencies are satisfied.
+        """Validate that all phase dependencies are satisfied and pins hold.
 
         Raises:
-            PipelineError: If dependencies are not satisfied.
+            PipelineError: If dependencies are not satisfied, or a pinned phase is
+                not at its required position.
         """
         phase_names = {p.name for p in self.phases}
 
@@ -275,6 +295,32 @@ class ValidationPipeline:
                         f"Current ordering: {current_order}",
                         phase=phase.name,
                     )
+
+        self._validate_pins()
+
+    def _validate_pins(self) -> None:
+        """Validate that phases pinned "first"/"last" sit at that position.
+
+        Independent of `dependencies`: a pin is a statement about the pipeline's
+        shape, not about what a phase reads, so it holds even for a phase with no
+        dependencies of its own (nullability declares none).
+
+        Raises:
+            PipelineError: If a phase pinned "first" is not at index 0, or a phase
+                pinned "last" is not at the final index.
+        """
+        last_index = len(self.phases) - 1
+        for i, phase in enumerate(self.phases):
+            if phase.pinned == "first" and i != 0:
+                raise PipelineError(
+                    f"Phase '{phase.name}' is pinned first, but is at position {i} of {len(self.phases)}.",
+                    phase=phase.name,
+                )
+            if phase.pinned == "last" and i != last_index:
+                raise PipelineError(
+                    f"Phase '{phase.name}' is pinned last, but is at position {i} of {len(self.phases)}.",
+                    phase=phase.name,
+                )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
         """Execute the validation pipeline.

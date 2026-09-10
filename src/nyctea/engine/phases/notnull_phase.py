@@ -24,7 +24,11 @@ __all__ = ["NotNullPhase"]
 class NotNullPhase(PipelinePhase):
     """Register a not-null mask for every `nullable=False` column.
 
-    Runs last, after anything that could introduce a null.
+    Pinned last: unlike a parser or check, whose meaning does not depend on where
+    it runs, nullability's answer changes with position. Checked early it answers
+    "did the input contain nulls"; checked last it answers "does the output
+    contain nulls", and only the second is a contract a caller can rely on. See
+    #87 and `.agents/design/202609052323_phase-ordering-invariants.md`.
     """
 
     def __init__(self) -> None:
@@ -33,6 +37,7 @@ class NotNullPhase(PipelinePhase):
             name="not_null",
             phase_type=PhaseType.CHECKING,
             dependencies=[],
+            pinned="last",
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:

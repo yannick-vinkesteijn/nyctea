@@ -19,7 +19,10 @@ class ColumnCheckPhase(PipelinePhase):
     This phase applies all column-level checks defined in the schema,
     collecting validation errors for the error report.
 
-    Dependencies: coercion (checks run on typed data)
+    Depends only on resolved names, not on coercion: a check is freely orderable
+    against coercion, column parsing, and frame parsing, since it judges whatever
+    value it is handed rather than assuming a particular dtype. See #87 and
+    `.agents/design/202609052323_phase-ordering-invariants.md`.
     """
 
     def __init__(self) -> None:
@@ -27,7 +30,7 @@ class ColumnCheckPhase(PipelinePhase):
         super().__init__(
             name="column_checks",
             phase_type=PhaseType.CHECKING,
-            dependencies=["coercion"],
+            dependencies=["column_resolution"],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:

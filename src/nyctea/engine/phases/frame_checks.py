@@ -10,12 +10,13 @@ __all__ = ["FrameCheckPhase"]
 class FrameCheckPhase(PipelinePhase):
     """Apply frame-level checks (whole-DataFrame validations).
 
-    Runs after coercion so frame checks see typed data, and before column
-    checks. The base class only enforces row count and column set on a
+    Depends only on resolved names, not on coercion: a frame check is freely
+    orderable against coercion, column parsing, and frame parsing, since it judges
+    whatever the frame looks like when it runs rather than assuming a particular
+    dtype. The base class only enforces row count and column set on a
     ``FrameCheck``'s output, not order or values, so it should pass the frame
-    through unchanged or raise, though nothing currently enforces the former.
-
-    Dependencies: coercion
+    through unchanged or raise, though nothing currently enforces the former. See
+    #87 and `.agents/design/202609052323_phase-ordering-invariants.md`.
     """
 
     def __init__(self) -> None:
@@ -23,7 +24,7 @@ class FrameCheckPhase(PipelinePhase):
         super().__init__(
             name="frame_checks",
             phase_type=PhaseType.CHECKING,
-            dependencies=["coercion"],
+            dependencies=["column_resolution"],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:

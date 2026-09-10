@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- `CoercionPhase` is no longer forced to run before `ColumnCheckPhase`/`FrameCheckPhase`: a check written against raw string values can now run before coercion, one written against typed values can run after. `PipelinePhase` gained a `pinned` position (`"first"`/`"last"`), independent of `dependencies`, for the two positions that are still fixed: `ColumnResolutionPhase` always first, `NotNullPhase` always last. `ValidationPipeline` rejects any custom phase ordering that violates either (#87).
 - The per-phase metrics block no longer collects when no observers are registered (#11).
 - Result models now live in `nyctea.engine.results`, leaving one canonical implementation after the legacy validation module was removed. Public imports from `nyctea` are unchanged (#12, #43).
 - Public APIs are layered: common workflow objects come from `nyctea`, schema configuration models from `nyctea.schema`, and extension types from `nyctea.validators` (#43).
