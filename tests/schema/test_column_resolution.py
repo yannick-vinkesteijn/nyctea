@@ -3,7 +3,7 @@
 Resolution is pure set work over the schema's cached name index: intersect the
 physical names with the accepted names, reverse-map to canonical, group to find
 ambiguity, difference against required. Nothing about the schema is recomputed
-per call. See #86.
+per call.
 """
 
 import pytest

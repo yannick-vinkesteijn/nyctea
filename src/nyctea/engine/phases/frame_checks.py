@@ -15,8 +15,7 @@ class FrameCheckPhase(PipelinePhase):
     whatever the frame looks like when it runs rather than assuming a particular
     dtype. The base class only enforces row count and column set on a
     ``FrameCheck``'s output, not order or values, so it should pass the frame
-    through unchanged or raise, though nothing currently enforces the former. See
-    #87 and `.agents/design/202609052323_phase-ordering-invariants.md`.
+    through unchanged or raise, though nothing currently enforces the former.
     """
 
     def __init__(self) -> None:

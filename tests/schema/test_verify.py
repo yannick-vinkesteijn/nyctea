@@ -1,4 +1,4 @@
-"""`schema.verify(registry)` catches authoring mistakes before any data is read (#25)."""
+"""`schema.verify(registry)` catches authoring mistakes before any data is read."""
 
 import polars as pl
 import pytest

@@ -31,8 +31,8 @@ def build_notnull_mask_exprs(
     Args:
         schema: Schema being validated.
         phase: Name of the phase registering these masks, for the collision error.
-            Passed in rather than hardcoded, so #87 can move the caller without the
-            error attributing a failure to a phase that did not raise it.
+            Passed in rather than hardcoded, so a different caller's error still
+            attributes to the phase that actually raised it.
         current_columns: Column names currently present in the data.
         occupied_columns: Input and schema column names unavailable to
             internal helpers.

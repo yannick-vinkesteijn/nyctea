@@ -24,16 +24,8 @@ __all__ = [
 class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
     """Abstract base class for all column-level validators.
 
-    Column validators operate on a single column (Polars expression) and must
-    maintain "column purity" - they can only reference the input column
-    and cannot access other columns in the DataFrame.
-
-    This base class enforces purity through runtime validation in the __call__
-    method by checking the column references in both input and output expressions.
-
-    Subclasses must implement:
-    - execute(column: pl.Expr, **kwargs) -> pl.Expr
-    - validate_args(**kwargs) -> None
+    Enforces "column purity" at runtime: a validator can only reference the input
+    column, never another column in the DataFrame.
     """
 
     def __init__(self, metadata: ValidatorMetadata) -> None:
@@ -63,11 +55,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
     def _validate_signature(self) -> None:
         """Validate that execute() has correct signature.
 
-        The execute() method must:
-        - Have 'column' as the first parameter
-        - Accept **kwargs for additional arguments
-        - Return pl.Expr
-
         Raises:
             RegistrationError: If signature validation fails.
         """
@@ -81,11 +68,9 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
             ) from e
         params = list(sig.parameters.values())
 
-        # Skip 'self' parameter
         if params and params[0].name == "self":
             params = params[1:]
 
-        # Check first parameter
         if not params or params[0].name != "column":
             raise RegistrationError(
                 f"Validator '{self.name}' execute() must have 'column' as first parameter",
@@ -93,7 +78,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
                 validator_type=self.__class__.__name__,
             )
 
-        # Check that parameter is annotated as pl.Expr
         first_param = params[0]
         if first_param.annotation not in (pl.Expr, inspect.Parameter.empty):
             raise RegistrationError(
@@ -114,7 +98,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
             ValidatorExecutionError: If expression references multiple columns.
         """
         try:
-            # Get root column names referenced by this expression
             root_names = expr.meta.root_names()
 
             if len(root_names) == 0:
@@ -136,7 +119,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
         except Exception as e:
             if isinstance(e, ValidatorExecutionError):
                 raise
-            # If meta.root_names() fails for any reason, raise an error
             raise ValidatorExecutionError(
                 f"Validator '{self.name}' failed to validate {context} expression: {e}",
                 validator_name=self.name,
@@ -146,10 +128,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
 
     def __call__(self, column: pl.Expr, **kwargs: Any) -> pl.Expr:  # ty: ignore[invalid-method-override]
         """Execute validator with purity validation.
-
-        This method wraps execute() to enforce column purity constraints.
-        It validates that both input and output expressions reference exactly
-        one column, and that they reference the same column.
 
         Args:
             column: Input column expression.
@@ -162,18 +140,14 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
             ValidatorExecutionError: If purity validation fails.
             TypeError: If column is not a Polars expression.
         """
-        # Type check
         if not isinstance(column, pl.Expr):
             raise TypeError(f"Validator '{self.name}' expected pl.Expr, got {type(column).__name__}")
 
-        # Validate input purity
         self._validate_purity(column, "input")
         input_column = column.meta.root_names()[0]
 
-        # Validate arguments
         self.validate_args(**kwargs)
 
-        # Execute validator
         try:
             result = self.execute(column, **kwargs)
         except Exception as e:
@@ -185,7 +159,6 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
                 original_error=e,
             ) from e
 
-        # Type check output
         if not isinstance(result, pl.Expr):
             raise ValidatorExecutionError(
                 f"Validator '{self.name}' must return pl.Expr, got {type(result).__name__}",
@@ -194,11 +167,9 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
                 column=input_column,
             )
 
-        # Validate output purity
         self._validate_purity(result, "output")
         output_column = result.meta.root_names()[0]
 
-        # Ensure input and output reference the same column
         if input_column != output_column:
             raise ValidatorExecutionError(
                 f"Validator '{self.name}' violated purity constraint: "
@@ -213,48 +184,8 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
 
 
 class ColumnParser(ColumnValidator):
-    """Base class for column parsers (transformations).
-
-    Column parsers transform column values while maintaining the column structure.
-    Common examples: trim whitespace, convert case, parse dates, clean strings.
-
-    Parsers are executed before type coercion and checks in the validation pipeline.
-
-    Example:
-        >>> from nyctea.validators.base import ValidatorMetadata
-        >>> import polars as pl
-        >>>
-        >>> class TrimParser(ColumnParser):
-        ...     def __init__(self):
-        ...         super().__init__(ValidatorMetadata(name="trim"))
-        ...
-        ...     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
-        ...         return column.str.strip_chars()
-        ...
-        ...     def validate_args(self, **kwargs) -> None:
-        ...         pass  # No args to validate
-    """
+    """Base class for column parsers (transformations). Run before checks in the pipeline."""
 
 
 class ColumnCheck(ColumnValidator):
-    """Base class for column checks (validations).
-
-    Column checks validate column values and return a boolean expression
-    indicating which rows pass validation.
-
-    Checks are executed after parsing and type coercion in the validation pipeline.
-
-    Example:
-        >>> from nyctea.validators.base import ValidatorMetadata
-        >>> import polars as pl
-        >>>
-        >>> class PositiveCheck(ColumnCheck):
-        ...     def __init__(self):
-        ...         super().__init__(ValidatorMetadata(name="positive"))
-        ...
-        ...     def execute(self, column: pl.Expr, **kwargs) -> pl.Expr:
-        ...         return column > 0
-        ...
-        ...     def validate_args(self, **kwargs) -> None:
-        ...         pass  # No args to validate
-    """
+    """Base class for column checks (validations). Run after parsing and coercion."""

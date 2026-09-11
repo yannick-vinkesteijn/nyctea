@@ -1,8 +1,4 @@
-"""Type-safe validator registry system.
-
-This module provides generic registry classes for managing validators with type safety,
-metadata-based discovery, and lifecycle management.
-"""
+"""Type-safe validator registry system."""
 
 from typing import Generic, TypeVar
 
@@ -23,12 +19,6 @@ T = TypeVar("T", bound=Validator)
 
 class ValidatorRegistry(Generic[T]):
     """Type-safe registry for a specific validator type.
-
-    This generic class manages a collection of validators of a single type,
-    providing name-based lookup, tag-based discovery, and collision detection.
-
-    Type Parameters:
-        T: The validator type this registry manages (must extend Validator).
 
     Attributes:
         validator_type: The class of validators this registry accepts.
@@ -54,11 +44,9 @@ class ValidatorRegistry(Generic[T]):
             TypeError: If validator is not of the correct type.
             RegistrationError: If a validator with the same name is already registered.
         """
-        # Type validation
         if not isinstance(validator, self.validator_type):
             raise TypeError(f"Registry expects {self.validator_type.__name__}, got {type(validator).__name__}")
 
-        # Name collision check
         if validator.name in self._validators:
             existing = self._validators[validator.name]
             raise RegistrationError(
@@ -68,10 +56,8 @@ class ValidatorRegistry(Generic[T]):
                 validator_type=self.validator_type.__name__,
             )
 
-        # Register validator
         self._validators[validator.name] = validator
 
-        # Index by tags
         for tag in validator.metadata.tags:
             if tag not in self._tags:
                 self._tags[tag] = []
@@ -146,9 +132,6 @@ class ValidatorRegistry(Generic[T]):
 
 class Registry(BaseModel):
     """Registry containing all validator types.
-
-    This Pydantic model manages separate registries for each validator type,
-    providing type-safe registration methods and centralized validator management.
 
     Attributes:
         column_parsers: Registry for column parser validators.

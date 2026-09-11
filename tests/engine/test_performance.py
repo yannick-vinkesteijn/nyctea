@@ -71,7 +71,7 @@ def test_observers_add_one_collect(schema, registry, frame, collect_calls):
     """The row count for phase metrics is taken once per run, not once per phase.
 
     It used to materialise the whole `__row_index__` column inside `_execute_phase`,
-    so a six-phase run re-executed the upstream plan six times for one number (#84).
+    so a six-phase run re-executed the upstream plan six times for one number.
     """
     from nyctea.engine.factory import create_pipeline_from_schema
     from nyctea.engine.observability import LoggingObserver

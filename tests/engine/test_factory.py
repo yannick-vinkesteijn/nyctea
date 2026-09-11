@@ -52,10 +52,7 @@ def test_frame_check_phase_ordering():
 
 
 def test_not_null_is_the_last_phase():
-    """Anything before it can introduce a null, so anywhere else answers a different question.
-
-    See `.agents/design/202609052323_phase-ordering-invariants.md` and #87.
-    """
+    """Anything before it can introduce a null, so anywhere else answers a different question."""
     names = _phase_names(
         {
             "frame_parsers": [{"name": "whatever"}],
@@ -93,9 +90,8 @@ def test_nullability_is_not_the_check_phase():
 
 
 # ---------------------------------------------------------------------------
-# #87: coercion, parsing, and checks are freely orderable against each other.
-# Only resolution (first) and nullability (last) are fixed positions. See
-# `.agents/design/202609052323_phase-ordering-invariants.md`.
+# Coercion, parsing, and checks are freely orderable against each other. Only
+# resolution (first) and nullability (last) are fixed positions.
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""Cleaned column matching (#85). Exact stays the default and stays unchanged."""
+"""Cleaned column matching. Exact stays the default and stays unchanged."""
 
 import pytest
 

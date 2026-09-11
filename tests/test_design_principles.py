@@ -117,9 +117,8 @@ KNOWN_SCHEMA_COLUMN_LOOPS = {
 def test_no_caller_loops_the_authoring_shape():
     """`schema.columns` is the authoring shape. Consumers read named views.
 
-    Re-deriving a predicate from `columns.items()` is the duplication #86 exists to
-    remove: every consumer that does it reimplements inheritance resolution and can
-    disagree with the others.
+    Re-deriving a predicate from `columns.items()` reimplements inheritance
+    resolution per caller, and callers can disagree with each other.
     """
     offenders = set()
     for path, tree in _modules():
@@ -150,8 +149,7 @@ def test_no_row_data_in_python_lists():
 
     Measured at a consistent 10x memory for the round trip out of Arrow, and
     unbounded when no error limit is set. The three below are the error builders'
-    `implode()` to `.item().to_list()` round trip, tracked in #84. The count only
-    goes down.
+    `implode()` to `.item().to_list()` round trip. The count only goes down.
     """
     found = [
         f"{_rel(path)}:{i}"
@@ -160,4 +158,4 @@ def test_no_row_data_in_python_lists():
         if ".to_list()" in line or ".to_dicts()" in line or ".rows()" in line
     ]
 
-    assert len(found) <= 3, "new Arrow-to-Python round trip, keep it in Polars (see #84):\n" + "\n".join(found)
+    assert len(found) <= 3, "new Arrow-to-Python round trip, keep it in Polars:\n" + "\n".join(found)

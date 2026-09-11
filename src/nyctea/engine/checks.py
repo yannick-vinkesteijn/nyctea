@@ -20,8 +20,7 @@ STRUCTURAL_CHECKS = frozenset({NOT_NULL_CHECK, COERCION_CHECK, PARSING_CHECK})
 """Failures about the shape of the data rather than a rule the author wrote.
 
 A value that will not cast, or a null in a non-nullable column, is a precondition the
-data did not meet. A failing `min_value` is a business rule it did not satisfy. Callers
-had to know that `check in (...)` meant the first kind; the category says it (#33).
+data did not meet. A failing `min_value` is a business rule it did not satisfy.
 """
 
 

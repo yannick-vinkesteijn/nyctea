@@ -14,11 +14,8 @@ def configure_logging(level: str | None = None) -> None:
     """Configure package-wide logging once.
 
     Args:
-        level: Optional log level string. Overrides environment and default.
-
-    Notes:
-        - Level can be provided directly or via the VALIDATOR_LOG_LEVEL env var.
-        - No duplicate handlers are attached on repeated calls.
+        level: Log level, overriding the NYCTEA_LOG_LEVEL env var and the default.
+            Repeated calls do not attach duplicate handlers.
     """
     chosen_level = (level or os.getenv(LOG_LEVEL_ENV) or DEFAULT_LEVEL).upper()
     root = logging.getLogger("nyctea")

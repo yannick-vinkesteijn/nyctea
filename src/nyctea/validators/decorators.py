@@ -10,8 +10,7 @@ registered immediately, which is what user code with a registry in hand should d
 
 Each decorator works bare (`@checker`) or parameterized (`@checker(name=...)`). Bare
 form infers the validator's name from the function. Two `@overload`s per decorator
-give each call shape its own return type, rather than the union-typed single
-signature #42 found unusable under a real type checker.
+give each call shape its own return type.
 """
 
 from collections.abc import Callable, Sequence

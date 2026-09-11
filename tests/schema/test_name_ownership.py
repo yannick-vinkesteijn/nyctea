@@ -2,8 +2,7 @@
 
 Every name a schema accepts, canonical or synonym, must be claimed by exactly one
 column. A schema whose names overlap cannot be resolved unambiguously, so it is a
-schema error and is rejected when the schema is built, before any data is
-involved. See #86.
+schema error and is rejected when the schema is built, before any data is involved.
 """
 
 import pytest

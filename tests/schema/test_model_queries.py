@@ -1,7 +1,7 @@
 """Tests for SchemaModel's schema query layer.
 
 These are the named views consumers use instead of re-implementing a traversal
-over ``schema.columns``. See #86.
+over ``schema.columns``.
 """
 
 import copy

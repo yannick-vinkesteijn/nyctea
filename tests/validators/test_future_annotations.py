@@ -1,9 +1,9 @@
 """Regression tests for signature validation under postponed annotation evaluation.
 
 This file intentionally uses `from __future__ import annotations`, unlike the rest
-of the codebase, because the bug under test (#50) only reproduces when a
-validator's defining module has postponed evaluation enabled: `inspect.signature`
-then returns unresolved annotation strings unless resolved with `eval_str=True`.
+of the codebase, because the bug under test only reproduces when a validator's
+defining module has postponed evaluation enabled: `inspect.signature` then returns
+unresolved annotation strings unless resolved with `eval_str=True`.
 """
 
 from __future__ import annotations
