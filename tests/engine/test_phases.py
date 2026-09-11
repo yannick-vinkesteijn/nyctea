@@ -504,6 +504,34 @@ class TestFullPipeline:
         with pytest.raises(PipelineError, match="nullable=False"):
             schema.validate(df, registry)
 
+    def test_nulled_check_reports_not_null(self, registry):
+        """A nulled check failure on a non-nullable column reports both failures.
+
+        `apply_check_null` nulls the failing value after `NotNullPhase` has already
+        registered its mask, so the not-null mask has to predict the nulling rather
+        than observe it. Without that, the null it introduces into a nullable=False
+        column goes unreported and the row counts as valid.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "on_failure": "null",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [25, -5, 30]})
+
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [25, None, 30]
+        by_check = {row["check"]: row["count"] for row in result.errors.to_dicts()}
+        assert by_check == {"min_value": 1, "not_null": 1}
+
     def test_nullable_false_leaks_no_internals(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
         df = pl.DataFrame({"age": [1, 2, 3]})
