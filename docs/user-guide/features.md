@@ -162,6 +162,55 @@ Per-column settings override the schema default:
 `on_failure: "null"` is legal on a non-nullable column.
 A resulting not-null violation is reported rather than raised, the same way `on_failure: "ignore"` behaves.
 
+### Which exception you get
+
+`schema.validate` raises three kinds of error, and the distinction is about whose problem it is.
+
+`ConfigurationError` means the schema itself does not hold up.
+A check or parser it names is not in the registry, an argument does not bind, or a column declares the same check twice.
+This is checked before any data is read, so it comes first and does not depend on the data at all.
+
+`ValidationError` means your input does not have the structure the schema describes.
+A required column is missing from the input, or a name resolves ambiguously because both the canonical name and a synonym are present.
+Nyctea cannot start validating, because it cannot tell which column is which.
+This covers resolving the columns you passed in.
+A frame parser that removes a required column mid-run is reported as `PipelineError`, because by then validation had started.
+
+`PipelineError` covers the rest of a validation run.
+That means a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and a phase that failed while building its part of the query.
+When a phase fails unexpectedly, the original exception is kept as the `__cause__`.
+
+`ValidationError` and `PipelineError` carry a `phase` attribute, and a `column` whenever one column owns the failure.
+Expect `column` to be `None` for a failure that belongs to the frame rather than to any single column, such as a frame parser removing required columns.
+`ConfigurationError` carries neither, because it is raised against the schema before any phase has run.
+A `PipelineError` raised before the first phase, such as a reserved internal column already present in your data, also has `phase` set to `None`.
+
+```python
+from nyctea import ConfigurationError, PipelineError, ValidationError
+
+try:
+    result = schema.validate(df, registry)
+except ConfigurationError as e:
+    print(f"Schema does not verify against the registry: {e}")
+except ValidationError as e:
+    print(f"Schema does not fit the input: column {e.column!r} in phase {e.phase!r}")
+except PipelineError as e:
+    print(f"Validation stopped: column {e.column!r} in phase {e.phase!r}")
+```
+
+All three inherit from `NycteaError`, so catch that to handle any of them.
+
+Nyctea builds a lazy query and evaluates it in one pass, so a check or parser whose expression builds correctly but fails on the data fails after every phase has run.
+That surfaces as `PipelineError` with the underlying Polars exception as its `__cause__`, and with no `phase`, because no phase was running.
+A check that casts with `strict=True` against a value that will not fit is one way to get there.
+Prefer checks that return a boolean expression over the column and leave failure handling to `on_failure`, rather than ones that fail on bad data.
+
+A custom phase can raise `ValidationError` itself to report a structural problem of its own.
+The pipeline passes it through untouched rather than wrapping it, which is how a phase you write says "this data cannot be validated" instead of "this phase broke".
+Everything else a phase raises, from `execute` or from the `can_skip` and `can_change_row_count` hooks, is wrapped as `PipelineError` with the original kept as `__cause__`.
+That includes a `PipelineError` the phase raised itself.
+The wrapper sets `phase` to the phase that was running, so a phase cannot attribute its failure elsewhere, and carries across the `column` the phase set.
+
 ## Parser failures and null counts
 
 A parser failure occurs when a non-null value becomes null anywhere across a

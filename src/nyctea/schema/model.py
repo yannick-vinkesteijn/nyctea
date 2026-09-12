@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import ValidationError as PydanticValidationError
 
 from nyctea.config import Config
 from nyctea.exceptions import ConfigurationError
@@ -618,7 +619,7 @@ class SchemaModel(BaseModel):
         """
         try:
             return cls.model_validate(data)
-        except ValidationError as err:
+        except PydanticValidationError as err:
             raise ValueError(f"Invalid schema configuration: {err}") from err
 
     @classmethod
@@ -821,8 +822,14 @@ class SchemaModel(BaseModel):
             ValidationResult with validated data, errors, and report.
 
         Raises:
-            ValidationError: If validation fails in strict mode.
-            PipelineError: If pipeline execution fails.
+            ConfigurationError: If the schema does not verify against the registry. This
+                runs before any data is read, so it precedes both errors below.
+            nyctea.ValidationError: If the input does not match the schema's structure,
+                because a required column is missing from it or a name resolves
+                ambiguously. Named in full because this module binds pydantic's
+                `ValidationError` under an alias.
+            nyctea.PipelineError: If a check, parser, coercion or nullability failure is
+                set to `on_failure="raise"`, or if a phase fails for any other reason.
 
         Example:
             >>> from nyctea.validators.registry import Registry

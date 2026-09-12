@@ -5,7 +5,8 @@ it builds the pipeline for a schema, executes it against the data, and assembles
 the report. It reads the schema and never modifies it.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import polars as pl
@@ -13,10 +14,11 @@ import polars as pl
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.masks import MaskIndex, index_masks, resolving_to
+from nyctea.engine.phase_names import COERCION_PHASE, COLUMN_CHECKS_PHASE, COLUMN_PARSING_PHASE, NOT_NULL_PHASE
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.reporting import build_errors, build_report
 from nyctea.engine.results import ErrorReportConfig, ValidationResult
-from nyctea.exceptions import PipelineError
+from nyctea.exceptions import NycteaError, PipelineError
 from nyctea.schema.model import SchemaModel
 from nyctea.utils import occupied_columns
 from nyctea.utils.collect import collect, pick_aggregate_engine
@@ -25,17 +27,41 @@ from nyctea.validators.registry import Registry
 __all__ = ["DataValidator"]
 
 
+@contextmanager
+def _evaluating(what: str) -> Iterator[None]:
+    """Turn a failure while evaluating user expressions into a `PipelineError`.
+
+    Phases only build the lazy query, so a check or parser that builds correctly and
+    fails on the data fails here rather than inside a phase. Without this the caller
+    gets a raw Polars exception that `except NycteaError` does not catch.
+
+    Args:
+        what: What was being evaluated, for the message.
+
+    Raises:
+        PipelineError: If evaluation fails for a reason Nyctea did not raise itself.
+    """
+    try:
+        yield
+    except NycteaError:
+        raise
+    except Exception as e:
+        raise PipelineError(f"{what} failed: {e}") from e
+
+
 @dataclass(frozen=True)
 class _RaiseRule:
     """One on_failure=raise aggregate, paired with what to raise when it is non-zero.
 
     ``message`` takes the collected count because three of the four kinds interpolate
-    it and the not-null one deliberately does not. The kind and column it was built
-    from are already baked into ``alias`` and into the closure.
+    it and the not-null one deliberately does not. The kind is baked into ``alias``.
+    ``column`` is carried separately so the raised error can expose it as an attribute
+    rather than only inside the message text.
     """
 
     alias: str
     phase: str
+    column: str
     message: Callable[[int], str]
 
 
@@ -100,7 +126,8 @@ def build_aggregate_exprs(
     raise_plan: list[_RaiseRule] = [
         _RaiseRule(
             f"__parsing_fail__{col}",
-            "column_parsing",
+            COLUMN_PARSING_PHASE,
+            col,
             lambda n, c=col: f"Parsing failed for column '{c}': {n} non-null value(s) became null.",
         )
         for col in resolving_to(index.parsing, schema, "raise")
@@ -108,7 +135,8 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__coercion_fail__{col}",
-            "coercion",
+            COERCION_PHASE,
+            col,
             lambda n, c=col, d=schema.columns[col].dtype: (
                 f"Coercion failed for column '{c}': {n} value(s) could not be cast to {d}"
             ),
@@ -118,7 +146,8 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__notnull_raise__{col}",
-            "column_checks",
+            NOT_NULL_PHASE,
+            col,
             lambda _n, c=col: f"Column '{c}' has nullable=False but contains null values.",
         )
         for col in notnull_raise
@@ -126,7 +155,8 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__raise_fail__{col}",
-            "column_checks",
+            COLUMN_CHECKS_PHASE,
+            col,
             lambda n, c=col: (
                 f"Check failed for column '{c}': {n} value(s) failed validation and on_failure is 'raise'."
             ),
@@ -178,7 +208,7 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     for rule in raise_plan:
         count = int(row[rule.alias].item())
         if count > 0:
-            raise PipelineError(rule.message(count), phase=rule.phase)
+            raise PipelineError(rule.message(count), phase=rule.phase, column=rule.column)
 
     return row, null_fail_exprs
 
@@ -276,8 +306,12 @@ class DataValidator:
             ValidationResult with validated data, errors, and report.
 
         Raises:
-            ValidationError: If validation fails for on_failure=raise columns.
-            PipelineError: If pipeline execution fails.
+            ConfigurationError: If the schema does not verify against the registry. This
+                runs before any data is read, so it precedes both errors below.
+            ValidationError: If the input does not match the schema's structure, because
+                a required column is missing from it or a name resolves ambiguously.
+            PipelineError: If a check, parser, coercion or nullability failure is set to
+                `on_failure="raise"`, or if a phase fails for any other reason.
 
         Example:
             >>> result = validator.validate(df)
@@ -299,7 +333,6 @@ class DataValidator:
             raise PipelineError(
                 "Cannot build row tracking: the data or schema already contains "
                 "a column named '__row_index__'. Rename it before validating.",
-                phase="row_tracking",
             )
         lf = lf.with_row_index("__row_index__")
 
@@ -322,11 +355,13 @@ class DataValidator:
         # (coercion and check), on_failure=null fail counts, and the report's own
         # aggregates. Raises PipelineError here if any on_failure=raise column failed.
         index = index_masks(context.check_masks)
-        row, null_fail_exprs = run_aggregates_and_raise(context, index)
+        with _evaluating("Evaluating the validation aggregates"):
+            row, null_fail_exprs = run_aggregates_and_raise(context, index)
 
         # Build errors before nulling failures, so the report reflects the
         # original failing values (targeted collect of mask + relevant columns only)
-        errors = build_errors(context, index)
+        with _evaluating("Building the error report"):
+            errors = build_errors(context, index)
 
         # Apply on_failure=null: null out values that failed a check (no collect,
         # reuses the counts already collected above)

@@ -70,7 +70,12 @@ class ValidatorExecutionError(ValidatorError):
 
 
 class ValidationError(NycteaError):
-    """Raised when column resolution fails: a required column is missing or ambiguous."""
+    """Raised when the input does not have the structure the schema describes.
+
+    Column resolution raises it when a required column is missing from the input or a
+    name resolves ambiguously. A custom phase may raise it for a structural problem of
+    its own, and the pipeline passes it to the caller unwrapped.
+    """
 
     def __init__(
         self,
@@ -106,6 +111,7 @@ class PipelineError(NycteaError):
         *,
         phase: str | None = None,
         pipeline_state: str | None = None,
+        column: str | None = None,
     ) -> None:
         """Initialize pipeline error with context.
 
@@ -113,10 +119,12 @@ class PipelineError(NycteaError):
             message: Error description.
             phase: Name of the phase that caused the error.
             pipeline_state: Current state of the pipeline.
+            column: Column whose failure triggered the error, when one column owns it.
         """
         super().__init__(message)
         self.phase = phase
         self.pipeline_state = pipeline_state
+        self.column = column
 
 
 class ConfigurationError(NycteaError):

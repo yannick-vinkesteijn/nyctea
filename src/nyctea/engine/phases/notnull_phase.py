@@ -18,6 +18,7 @@ import polars as pl
 from nyctea.engine.checks import NOT_NULL_CHECK
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.masks import index_masks
+from nyctea.engine.phase_names import NOT_NULL_PHASE
 from nyctea.engine.phases.common import reserved_columns
 from nyctea.engine.phases.notnull import build_notnull_mask_exprs
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
@@ -31,7 +32,7 @@ class NotNullPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize the nullability phase."""
         super().__init__(
-            name="not_null",
+            name=NOT_NULL_PHASE,
             phase_type=PhaseType.CHECKING,
             dependencies=[],
             pinned="last",

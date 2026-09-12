@@ -2317,3 +2317,51 @@ def test_error_report_empty_without_registered_masks(registry, mode):
     schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64", "nullable": True}}})
     result = schema.validate(pl.DataFrame({"a": [1, 2]}), registry, error_report_config=ErrorReportConfig(mode=mode))
     assert result.errors.is_empty()
+
+
+def test_phase_names_come_from_one_module():
+    """No phase hand-writes its own name.
+
+    The name is read by the phase, by the `dependencies` of phases ordered against
+    it, and by the raise plan that attributes a failure. Three hand-written copies
+    is how the raise plan kept saying `column_checks` for a not-null failure after
+    nullability moved into a phase of its own.
+
+    Phases are discovered rather than listed, so a new one is covered without this
+    test being updated, and names are matched against the constants module's source
+    rather than its values, so a literal that happens to match still fails.
+    """
+    import ast
+    import importlib
+    import inspect
+    import pkgutil
+
+    from nyctea.engine import phase_names, phases
+    from nyctea.engine.pipeline import PipelinePhase
+
+    declared = {getattr(phase_names, name) for name in phase_names.__all__}
+
+    discovered: set[type[PipelinePhase]] = set()
+    for info in pkgutil.iter_modules(phases.__path__):
+        module = importlib.import_module(f"{phases.__name__}.{info.name}")
+        discovered.update(
+            obj
+            for _, obj in inspect.getmembers(module, inspect.isclass)
+            if issubclass(obj, PipelinePhase) and obj is not PipelinePhase and obj.__module__ == module.__name__
+        )
+
+    assert discovered, "no phases discovered, the walk is broken rather than the phases being clean"
+    assert {phase().name for phase in discovered} == declared
+
+    for phase in discovered:
+        tree = ast.parse(inspect.getsource(phase))
+        literals = [
+            node.value
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            for node in call.keywords
+            if node.arg in {"name", "dependencies"}
+            for node in ast.walk(node.value)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        ]
+        assert not literals, f"{phase.__name__} hand-writes {literals}, import it from nyctea.engine.phase_names"

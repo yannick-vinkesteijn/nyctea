@@ -4,6 +4,7 @@ import polars as pl
 
 from nyctea.engine.checks import PARSING_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_PARSING_PHASE, COLUMN_RESOLUTION_PHASE
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
@@ -20,9 +21,9 @@ class ColumnParsingPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize column parsing phase."""
         super().__init__(
-            name="column_parsing",
+            name=COLUMN_PARSING_PHASE,
             phase_type=PhaseType.PARSING,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -62,12 +63,14 @@ class ColumnParsingPhase(PipelinePhase):
                 reserved,
                 self.name,
                 f"the pre-parser null snapshot for column '{col_name}'",
+                col_name,
             )
             reject_alias_collision(
                 parse_ok_alias,
                 reserved,
                 self.name,
                 f"the parser failure mask for column '{col_name}'",
+                col_name,
             )
             if capture_error_values:
                 reject_alias_collision(
@@ -75,6 +78,7 @@ class ColumnParsingPhase(PipelinePhase):
                     reserved,
                     self.name,
                     f"the pre-parser error value for column '{col_name}'",
+                    col_name,
                 )
 
             expr = pl.col(col_name)
@@ -87,6 +91,7 @@ class ColumnParsingPhase(PipelinePhase):
                         f"Parser '{parser_spec.name}' not found in registry. "
                         f"Available: {registry.column_parsers.list_names()}",
                         phase=self.name,
+                        column=col_name,
                     ) from e
 
                 args = parser_spec.args or {}
@@ -96,6 +101,7 @@ class ColumnParsingPhase(PipelinePhase):
                     raise PipelineError(
                         f"Failed to apply parser '{parser_spec.name}' to column '{col_name}': {e}",
                         phase=self.name,
+                        column=col_name,
                     ) from e
 
             transformations.append(expr.alias(col_name))

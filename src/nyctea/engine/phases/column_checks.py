@@ -4,6 +4,7 @@ import polars as pl
 
 from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_CHECKS_PHASE, COLUMN_RESOLUTION_PHASE
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
@@ -27,9 +28,9 @@ class ColumnCheckPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize column check phase."""
         super().__init__(
-            name="column_checks",
+            name=COLUMN_CHECKS_PHASE,
             phase_type=PhaseType.CHECKING,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -75,6 +76,7 @@ class ColumnCheckPhase(PipelinePhase):
                     occupied_columns,
                     self.name,
                     f"the mask for check '{check_spec.name}' on column '{col_name}'",
+                    col_name,
                 )
                 mask_exprs.append(check_expr.alias(alias))
                 check_masks[(col_name, check_spec.name)] = alias
@@ -109,6 +111,7 @@ class ColumnCheckPhase(PipelinePhase):
                 f"Column '{col_name}' has a check named '{check_name}'. The name is "
                 "reserved for built-in failure tracking. Rename the check.",
                 phase=self.name,
+                column=col_name,
             )
 
         # check_masks is keyed on (column, check name), and so are the error report and
@@ -122,6 +125,7 @@ class ColumnCheckPhase(PipelinePhase):
                 f"validation report are keyed on (column, check name). Give the checks "
                 f"distinct names.",
                 phase=self.name,
+                column=col_name,
             )
 
     def _resolve_check_expr(self, registry: Registry, col_name: str, check_spec: Check) -> pl.Expr:
@@ -144,6 +148,7 @@ class ColumnCheckPhase(PipelinePhase):
             raise PipelineError(
                 f"Check '{check_spec.name}' not found in registry. Available: {registry.column_checks.list_names()}",
                 phase=self.name,
+                column=col_name,
             ) from e
 
         try:
@@ -152,6 +157,7 @@ class ColumnCheckPhase(PipelinePhase):
             raise PipelineError(
                 f"Failed to apply check '{check_spec.name}' to column '{col_name}': {e}",
                 phase=self.name,
+                column=col_name,
             ) from e
 
     def can_skip(self, context: PipelineContext) -> bool:

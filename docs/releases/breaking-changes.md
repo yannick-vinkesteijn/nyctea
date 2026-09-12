@@ -1,5 +1,40 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: a structural mismatch raises `ValidationError`
+
+`schema.validate` raised `PipelineError` for every failure of a validation run, including a missing required column and an ambiguous column name.
+Schema verification, which runs first and raises `ConfigurationError`, is unchanged by this.
+`ColumnResolutionPhase` raised `ValidationError` for those two, but the pipeline caught every exception a phase produced and rewrapped it, so the type never reached the caller.
+The documentation disagreed with itself as a result, with the user guide describing `ValidationError` and the source docstrings describing both.
+
+A structural mismatch now propagates as `ValidationError`.
+The two are worth telling apart because they call for different responses.
+`ValidationError` means the schema does not fit the data at all, so nothing was validated.
+`PipelineError` means validation ran and something in it failed, whether a rule the data broke under `on_failure: "raise"` or a phase that crashed.
+
+```python
+try:
+    result = schema.validate(df, registry)
+except ValidationError as e:
+    ...  # missing or ambiguous column: e.column, e.phase
+except PipelineError as e:
+    ...  # a raised failure or a broken phase: e.column, e.phase
+```
+
+`PipelineError` also gained a `column` attribute, which was previously available only by reading the message text.
+It is set whenever one column owns the failure, and stays `None` for a frame-level failure that belongs to no single column.
+A custom phase can now raise `ValidationError` to report a structural problem of its own and have it reach the caller unwrapped.
+A `PipelineError` it raises is still wrapped, so `phase` names the phase that was running, but the `column` it set is now carried across instead of discarded.
+The `can_skip` and `can_change_row_count` hooks now follow the same contract as `execute`.
+A `ValidationError` raised from either reaches the caller unchanged, and everything else is wrapped as `PipelineError`.
+`can_change_row_count` is now called on every run rather than only when an observer is attached, so its contract does not depend on observability.
+A custom phase that does real work in it will now pay that cost unobserved, but these predicates are meant to be cheap reads of the schema.
+Every one of them previously escaped the pipeline unwrapped, so anything that was not already a `NycteaError` went uncaught by `except NycteaError`.
+The not-null failure now reports `phase="not_null"` rather than `phase="column_checks"`, naming the phase whose mask actually found it.
+
+**Migration:** code catching `PipelineError` around a missing or ambiguous column needs to catch `ValidationError` instead.
+Both still inherit from `NycteaError`, so `except NycteaError` keeps working unchanged and is the smallest fix.
+
 ## Within v0.2.0 pre-release: `result.errors` says which kind of failure it is
 
 Every report mode gains a `category` column: `structural` or `check`.

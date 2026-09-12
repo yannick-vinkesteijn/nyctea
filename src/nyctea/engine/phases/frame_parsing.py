@@ -1,6 +1,7 @@
 """Whole-frame transformations, before any column parser runs."""
 
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_RESOLUTION_PHASE, FRAME_PARSING_PHASE
 from nyctea.engine.phases.common import reject_alias_collision
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
@@ -20,9 +21,9 @@ class FrameParsingPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize frame parsing phase."""
         super().__init__(
-            name="frame_parsing",
+            name=FRAME_PARSING_PHASE,
             phase_type=PhaseType.PARSING,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
