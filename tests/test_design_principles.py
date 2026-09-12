@@ -1,8 +1,8 @@
 """Guards on the design principles that can be checked mechanically.
 
-`.agents/design/202609022241_schema-object-and-pipeline-structure.md` ends with a
-review checklist. Most of it is judgement, but several items are structural facts
-about the source, and a rule in prose drifts while a rule here fails loudly.
+The project's design review checklist is mostly judgement, but several items are
+structural facts about the source, and a rule in prose drifts while a rule here
+fails loudly.
 
 `tests/test_import_structure.py` covers the layering items. This file covers the
 rest. Rules ruff already enforces are not repeated: the lint config selects `ALL`,
