@@ -11,6 +11,9 @@ import polars as pl
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.observability import PhaseMetrics, PipelineObserver
 from nyctea.exceptions import PipelineError, ValidationError
+from nyctea.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 __all__ = [
     "PhaseType",
@@ -90,9 +93,9 @@ class PipelinePhase(ABC):
             ValidationError: If the data does not have the structure the schema
                 describes. The pipeline passes this through to the caller unchanged
                 rather than wrapping it.
-            PipelineError: If phase execution fails for any other reason. Raise it
-                directly to keep your own `phase` and `column`; anything else is
-                wrapped into one.
+            PipelineError: If phase execution fails for any other reason. Anything
+                raised here, including a `PipelineError`, is wrapped in one whose
+                `phase` names this phase. A `column` set on it is carried across.
         """
 
     def can_skip(self, context: PipelineContext) -> bool:
@@ -322,8 +325,7 @@ class ValidationPipeline:
         start_time = time.time()
 
         try:
-            for observer in self.observers:
-                observer.on_pipeline_start(context)
+            self._notify("on_pipeline_start", context)
 
             # Reuse the count while row cardinality is stable. A phase that may change
             # it triggers one refresh for all later phase metrics.
@@ -332,8 +334,7 @@ class ValidationPipeline:
             for phase in self.phases:
                 if self._call_hook(phase, "can_skip", context):
                     continue
-                # The hook is asked every run so its contract does not depend on an
-                # observer being attached. Only the recount it gates is conditional.
+                # Asked every run so the contract does not depend on observability.
                 may_change_rows = self._call_hook(phase, "can_change_row_count", context)
                 refresh_row_count = bool(self.observers) and may_change_rows
                 context = self._execute_phase(phase, context, row_count)
@@ -341,13 +342,11 @@ class ValidationPipeline:
                     row_count = self._count_rows(context)
 
         except Exception as e:
-            for observer in self.observers:
-                observer.on_pipeline_error(context, e)
+            self._notify("on_pipeline_error", context, e)
             raise
         else:
             total_duration = time.time() - start_time
-            for observer in self.observers:
-                observer.on_pipeline_complete(context, total_duration)
+            self._notify("on_pipeline_complete", context, total_duration)
             return context
         finally:
             self._locked = False
@@ -369,8 +368,23 @@ class ValidationPipeline:
             return 0
         return int(context.data.select(pl.len()).collect().item())
 
+    def _notify(self, hook: str, *args: object) -> None:
+        """Tell every observer, without letting one change the outcome of the run.
+
+        Args:
+            hook: Name of the observer method to call.
+            *args: Arguments for that method.
+        """
+        for observer in self.observers:
+            try:
+                getattr(observer, hook)(*args)
+            except Exception:
+                logger.exception("Observer %s failed in %s()", type(observer).__name__, hook)
+
     @staticmethod
-    def _call_hook(phase: PipelinePhase, hook: str, context: PipelineContext) -> bool:
+    def _call_hook(
+        phase: PipelinePhase, hook: Literal["can_skip", "can_change_row_count"], context: PipelineContext
+    ) -> bool:
         """Run one of a phase's lifecycle predicates under the same contract as execute().
 
         Args:
@@ -413,8 +427,7 @@ class ValidationPipeline:
                 does not match the schema's structure.
             PipelineError: If the phase's execute() fails for any other reason.
         """
-        for observer in self.observers:
-            observer.on_phase_start(phase.name, context)
+        self._notify("on_phase_start", phase.name, context)
 
         phase_start = time.time()
         try:
@@ -424,9 +437,8 @@ class ValidationPipeline:
             # would report a library fault for a schema the data does not satisfy.
             raise
         except PipelineError as e:
-            # Attribution is the phase that was running, not whatever phase the inner
-            # error named: `add_phase` labels errors with the phase being added, which
-            # never ran. The column is carried across so the rewrap does not lose it.
+            # Attribution is the phase that ran, not whatever phase the inner error
+            # named: `add_phase` labels errors with the phase being added.
             raise PipelineError(f"Phase '{phase.name}' failed: {e}", phase=phase.name, column=e.column) from e
         except Exception as e:
             raise PipelineError(
@@ -441,8 +453,7 @@ class ValidationPipeline:
                 duration_seconds=phase_duration,
                 rows_processed=row_count,
             )
-            for observer in self.observers:
-                observer.on_phase_end(phase.name, context, metrics)
+            self._notify("on_phase_end", phase.name, context, metrics)
 
         return context
 

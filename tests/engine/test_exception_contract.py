@@ -28,6 +28,7 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
 from nyctea.engine.validator import DataValidator
+from nyctea.validators.decorators import checker
 
 
 @pytest.fixture
@@ -351,6 +352,56 @@ def test_observers_are_told_the_run_failed(registry):
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
     collector = MetricsCollector()
     pipeline = ValidationPipeline([_CrashingPhase()], observers=[collector])
+
+    with pytest.raises(PipelineError, match="Phase 'crashing' failed"):
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
+
+
+def test_evaluation_failure_is_a_pipeline_error():
+    """A check that builds but fails on the data stays inside the contract.
+
+    Phases only build the lazy query, so this fails after every phase has run and
+    outside the pipeline's own error handling. It used to reach the caller as a raw
+    Polars exception that `except NycteaError` does not catch.
+    """
+    registry = Registry()
+    register_builtins(registry)
+
+    @checker(name="strict_cast", registry=registry)
+    def strict_cast(column: pl.Expr) -> pl.Expr:
+        return column.cast(pl.Int8, strict=True) > 0
+
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "checks": [{"name": "strict_cast"}]}}})
+
+    with pytest.raises(PipelineError, match="Evaluating the validation aggregates failed") as exc:
+        schema.validate(pl.DataFrame({"age": [100000]}), registry)
+
+    assert isinstance(exc.value, NycteaError)
+    assert isinstance(exc.value.__cause__, pl.exceptions.InvalidOperationError)
+    assert exc.value.phase is None
+
+
+def test_failing_observer_keeps_the_real_error(registry):
+    """An observer is a listener, so its own failure cannot replace the run's error.
+
+    `on_pipeline_error` raising used to propagate in place of the error it was being
+    told about, leaving the caller with the observer's exception instead.
+    """
+
+    class _BrokenObserver:
+        def on_pipeline_start(self, context): ...
+
+        def on_phase_start(self, phase_name, context): ...
+
+        def on_phase_end(self, phase_name, context, metrics): ...
+
+        def on_pipeline_complete(self, context, duration): ...
+
+        def on_pipeline_error(self, context, error):
+            raise ZeroDivisionError("observer blew up")
+
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    pipeline = ValidationPipeline([_CrashingPhase()], observers=[_BrokenObserver()])
 
     with pytest.raises(PipelineError, match="Phase 'crashing' failed"):
         DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))

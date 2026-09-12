@@ -5,7 +5,8 @@ it builds the pipeline for a schema, executes it against the data, and assembles
 the report. It reads the schema and never modifies it.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import polars as pl
@@ -13,16 +14,39 @@ import polars as pl
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.masks import MaskIndex, index_masks, resolving_to
+from nyctea.engine.phase_names import COERCION_PHASE, COLUMN_CHECKS_PHASE, COLUMN_PARSING_PHASE, NOT_NULL_PHASE
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.reporting import build_errors, build_report
 from nyctea.engine.results import ErrorReportConfig, ValidationResult
-from nyctea.exceptions import PipelineError
+from nyctea.exceptions import NycteaError, PipelineError
 from nyctea.schema.model import SchemaModel
 from nyctea.utils import occupied_columns
 from nyctea.utils.collect import collect, pick_aggregate_engine
 from nyctea.validators.registry import Registry
 
 __all__ = ["DataValidator"]
+
+
+@contextmanager
+def _evaluating(what: str) -> Iterator[None]:
+    """Turn a failure while evaluating user expressions into a `PipelineError`.
+
+    Phases only build the lazy query, so a check or parser that builds correctly and
+    fails on the data fails here rather than inside a phase. Without this the caller
+    gets a raw Polars exception that `except NycteaError` does not catch.
+
+    Args:
+        what: What was being evaluated, for the message.
+
+    Raises:
+        PipelineError: If evaluation fails for a reason Nyctea did not raise itself.
+    """
+    try:
+        yield
+    except NycteaError:
+        raise
+    except Exception as e:
+        raise PipelineError(f"{what} failed: {e}") from e
 
 
 @dataclass(frozen=True)
@@ -102,7 +126,7 @@ def build_aggregate_exprs(
     raise_plan: list[_RaiseRule] = [
         _RaiseRule(
             f"__parsing_fail__{col}",
-            "column_parsing",
+            COLUMN_PARSING_PHASE,
             col,
             lambda n, c=col: f"Parsing failed for column '{c}': {n} non-null value(s) became null.",
         )
@@ -111,7 +135,7 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__coercion_fail__{col}",
-            "coercion",
+            COERCION_PHASE,
             col,
             lambda n, c=col, d=schema.columns[col].dtype: (
                 f"Coercion failed for column '{c}': {n} value(s) could not be cast to {d}"
@@ -122,7 +146,7 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__notnull_raise__{col}",
-            "not_null",
+            NOT_NULL_PHASE,
             col,
             lambda _n, c=col: f"Column '{c}' has nullable=False but contains null values.",
         )
@@ -131,7 +155,7 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__raise_fail__{col}",
-            "column_checks",
+            COLUMN_CHECKS_PHASE,
             col,
             lambda n, c=col: (
                 f"Check failed for column '{c}': {n} value(s) failed validation and on_failure is 'raise'."
@@ -331,11 +355,13 @@ class DataValidator:
         # (coercion and check), on_failure=null fail counts, and the report's own
         # aggregates. Raises PipelineError here if any on_failure=raise column failed.
         index = index_masks(context.check_masks)
-        row, null_fail_exprs = run_aggregates_and_raise(context, index)
+        with _evaluating("Evaluating the validation aggregates"):
+            row, null_fail_exprs = run_aggregates_and_raise(context, index)
 
         # Build errors before nulling failures, so the report reflects the
         # original failing values (targeted collect of mask + relevant columns only)
-        errors = build_errors(context, index)
+        with _evaluating("Building the error report"):
+            errors = build_errors(context, index)
 
         # Apply on_failure=null: null out values that failed a check (no collect,
         # reuses the counts already collected above)

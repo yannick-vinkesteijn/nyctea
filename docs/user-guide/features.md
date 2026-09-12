@@ -181,8 +181,9 @@ That means a check, parser, coercion or nullability failure on a column set to `
 When a phase fails unexpectedly, the original exception is kept as the `__cause__`.
 
 `ValidationError` and `PipelineError` carry a `phase` attribute, and a `column` whenever one column owns the failure.
-Expect `column` to be `None` for a failure that belongs to the frame rather than to any single column.
+Expect `column` to be `None` for a failure that belongs to the frame rather than to any single column, such as a frame parser removing required columns.
 `ConfigurationError` carries neither, because it is raised against the schema before any phase has run.
+A `PipelineError` raised before the first phase, such as a reserved internal column already present in your data, also has `phase` set to `None`.
 
 ```python
 from nyctea import ConfigurationError, PipelineError, ValidationError
@@ -199,15 +200,16 @@ except PipelineError as e:
 
 All three inherit from `NycteaError`, so catch that to handle any of them.
 
-One case falls outside this contract.
-Nyctea builds a lazy query and evaluates it in one pass, so a check or parser whose expression builds correctly but fails during evaluation surfaces as the underlying Polars exception rather than a `NycteaError`.
-A check that casts with `strict=True` against a value that will not fit raises `polars.exceptions.InvalidOperationError`, for example.
-Write checks that return a boolean expression over the column and leave failure handling to `on_failure`, rather than ones that raise on bad data.
+Nyctea builds a lazy query and evaluates it in one pass, so a check or parser whose expression builds correctly but fails on the data fails after every phase has run.
+That surfaces as `PipelineError` with the underlying Polars exception as its `__cause__`, and with no `phase`, because no phase was running.
+A check that casts with `strict=True` against a value that will not fit is one way to get there.
+Prefer checks that return a boolean expression over the column and leave failure handling to `on_failure`, rather than ones that fail on bad data.
 
 A custom phase can raise `ValidationError` itself to report a structural problem of its own.
 The pipeline passes it through untouched rather than wrapping it, which is how a phase you write says "this data cannot be validated" instead of "this phase broke".
-Raising `PipelineError` directly works the same way and keeps the `phase` and `column` you set.
-Any other exception a phase raises, from `execute` or from the `can_skip` and `can_change_row_count` hooks, is wrapped as `PipelineError` with the original kept as `__cause__`.
+Everything else a phase raises, from `execute` or from the `can_skip` and `can_change_row_count` hooks, is wrapped as `PipelineError` with the original kept as `__cause__`.
+That includes a `PipelineError` the phase raised itself.
+The wrapper sets `phase` to the phase that was running, so a phase cannot attribute its failure elsewhere, and carries across the `column` the phase set.
 
 ## Parser failures and null counts
 

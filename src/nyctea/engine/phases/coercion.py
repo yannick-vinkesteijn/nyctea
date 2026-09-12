@@ -4,6 +4,7 @@ import polars as pl
 
 from nyctea.engine.checks import COERCION_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COERCION_PHASE, COLUMN_RESOLUTION_PHASE
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.utils import resolve_dtype
@@ -28,9 +29,9 @@ class CoercionPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize coercion phase."""
         super().__init__(
-            name="coercion",
+            name=COERCION_PHASE,
             phase_type=PhaseType.COERCION,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:

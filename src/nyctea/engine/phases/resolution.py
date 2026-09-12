@@ -1,6 +1,7 @@
 """Match the frame's column names against the schema."""
 
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_RESOLUTION_PHASE
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import ValidationError
 
@@ -20,7 +21,7 @@ class ColumnResolutionPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize column resolution phase."""
         super().__init__(
-            name="column_resolution",
+            name=COLUMN_RESOLUTION_PHASE,
             phase_type=PhaseType.RESOLUTION,
             dependencies=[],
             pinned="first",

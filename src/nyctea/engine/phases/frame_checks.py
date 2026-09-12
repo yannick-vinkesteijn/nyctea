@@ -1,6 +1,7 @@
 """Whole-frame checks."""
 
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_RESOLUTION_PHASE, FRAME_CHECKS_PHASE
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
 
@@ -21,9 +22,9 @@ class FrameCheckPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize frame check phase."""
         super().__init__(
-            name="frame_checks",
+            name=FRAME_CHECKS_PHASE,
             phase_type=PhaseType.CHECKING,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:

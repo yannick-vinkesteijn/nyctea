@@ -27,7 +27,9 @@ A custom phase can now raise `ValidationError` to report a structural problem of
 A `PipelineError` it raises is still wrapped, so `phase` names the phase that was running, but the `column` it set is now carried across instead of discarded.
 The `can_skip` and `can_change_row_count` hooks now follow the same contract as `execute`.
 A `ValidationError` raised from either reaches the caller unchanged, and everything else is wrapped as `PipelineError`.
-Every one of them previously escaped the pipeline unwrapped, so `except NycteaError` did not catch them.
+`can_change_row_count` is now called on every run rather than only when an observer is attached, so its contract does not depend on observability.
+A custom phase that does real work in it will now pay that cost unobserved, but these predicates are meant to be cheap reads of the schema.
+Every one of them previously escaped the pipeline unwrapped, so anything that was not already a `NycteaError` went uncaught by `except NycteaError`.
 The not-null failure now reports `phase="not_null"` rather than `phase="column_checks"`, naming the phase whose mask actually found it.
 
 **Migration:** code catching `PipelineError` around a missing or ambiguous column needs to catch `ValidationError` instead.

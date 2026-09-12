@@ -4,6 +4,7 @@ import polars as pl
 
 from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.phase_names import COLUMN_CHECKS_PHASE, COLUMN_RESOLUTION_PHASE
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
@@ -27,9 +28,9 @@ class ColumnCheckPhase(PipelinePhase):
     def __init__(self) -> None:
         """Initialize column check phase."""
         super().__init__(
-            name="column_checks",
+            name=COLUMN_CHECKS_PHASE,
             phase_type=PhaseType.CHECKING,
-            dependencies=["column_resolution"],
+            dependencies=[COLUMN_RESOLUTION_PHASE],
         )
 
     def execute(self, context: PipelineContext) -> PipelineContext:
