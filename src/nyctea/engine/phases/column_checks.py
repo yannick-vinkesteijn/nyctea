@@ -75,6 +75,7 @@ class ColumnCheckPhase(PipelinePhase):
                     occupied_columns,
                     self.name,
                     f"the mask for check '{check_spec.name}' on column '{col_name}'",
+                    col_name,
                 )
                 mask_exprs.append(check_expr.alias(alias))
                 check_masks[(col_name, check_spec.name)] = alias

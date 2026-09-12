@@ -62,12 +62,14 @@ class ColumnParsingPhase(PipelinePhase):
                 reserved,
                 self.name,
                 f"the pre-parser null snapshot for column '{col_name}'",
+                col_name,
             )
             reject_alias_collision(
                 parse_ok_alias,
                 reserved,
                 self.name,
                 f"the parser failure mask for column '{col_name}'",
+                col_name,
             )
             if capture_error_values:
                 reject_alias_collision(
@@ -75,6 +77,7 @@ class ColumnParsingPhase(PipelinePhase):
                     reserved,
                     self.name,
                     f"the pre-parser error value for column '{col_name}'",
+                    col_name,
                 )
 
             expr = pl.col(col_name)
@@ -87,6 +90,7 @@ class ColumnParsingPhase(PipelinePhase):
                         f"Parser '{parser_spec.name}' not found in registry. "
                         f"Available: {registry.column_parsers.list_names()}",
                         phase=self.name,
+                        column=col_name,
                     ) from e
 
                 args = parser_spec.args or {}
@@ -96,6 +100,7 @@ class ColumnParsingPhase(PipelinePhase):
                     raise PipelineError(
                         f"Failed to apply parser '{parser_spec.name}' to column '{col_name}': {e}",
                         phase=self.name,
+                        column=col_name,
                     ) from e
 
             transformations.append(expr.alias(col_name))

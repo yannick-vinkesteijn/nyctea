@@ -824,10 +824,12 @@ class SchemaModel(BaseModel):
         Raises:
             ConfigurationError: If the schema does not verify against the registry. This
                 runs before any data is read, so it precedes both errors below.
-            ValidationError: If the input does not match the schema's structure, because
-                a required column is missing from it or a name resolves ambiguously.
-            PipelineError: If a check, parser, coercion or nullability failure is set to
-                `on_failure="raise"`, or if a phase fails for any other reason.
+            nyctea.ValidationError: If the input does not match the schema's structure,
+                because a required column is missing from it or a name resolves
+                ambiguously. Named in full because this module binds pydantic's
+                `ValidationError` under an alias.
+            nyctea.PipelineError: If a check, parser, coercion or nullability failure is
+                set to `on_failure="raise"`, or if a phase fails for any other reason.
 
         Example:
             >>> from nyctea.validators.registry import Registry

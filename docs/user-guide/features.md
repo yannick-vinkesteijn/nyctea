@@ -173,14 +173,16 @@ This is checked before any data is read, so it comes first and does not depend o
 `ValidationError` means your input does not have the structure the schema describes.
 A required column is missing from the input, or a name resolves ambiguously because both the canonical name and a synonym are present.
 Nyctea cannot start validating, because it cannot tell which column is which.
-This covers resolving the columns you passed in. A frame parser that removes a required column mid-run is reported as `PipelineError`, because by then validation had started.
+This covers resolving the columns you passed in.
+A frame parser that removes a required column mid-run is reported as `PipelineError`, because by then validation had started.
 
 `PipelineError` covers the rest of a validation run.
-That means a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and a phase that failed for a reason unrelated to your data, such as a custom validator raising.
+That means a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and a phase that failed while building its part of the query.
 When a phase fails unexpectedly, the original exception is kept as the `__cause__`.
 
-All three carry a `phase` attribute, and they carry `column` whenever one column owns the failure.
+`ValidationError` and `PipelineError` carry a `phase` attribute, and a `column` whenever one column owns the failure.
 Expect `column` to be `None` for a failure that belongs to the frame rather than to any single column.
+`ConfigurationError` carries neither, because it is raised against the schema before any phase has run.
 
 ```python
 from nyctea import ConfigurationError, PipelineError, ValidationError
@@ -196,6 +198,11 @@ except PipelineError as e:
 ```
 
 All three inherit from `NycteaError`, so catch that to handle any of them.
+
+One case falls outside this contract.
+Nyctea builds a lazy query and evaluates it in one pass, so a check or parser whose expression builds correctly but fails during evaluation surfaces as the underlying Polars exception rather than a `NycteaError`.
+A check that casts with `strict=True` against a value that will not fit raises `polars.exceptions.InvalidOperationError`, for example.
+Write checks that return a boolean expression over the column and leave failure handling to `on_failure`, rather than ones that raise on bad data.
 
 A custom phase can raise `ValidationError` itself to report a structural problem of its own.
 The pipeline passes it through untouched rather than wrapping it, which is how a phase you write says "this data cannot be validated" instead of "this phase broke".

@@ -21,6 +21,7 @@ from nyctea import (
     Registry,
     SchemaModel,
     ValidationError,
+    parser,
     register_builtins,
 )
 from nyctea.engine.context import PipelineContext
@@ -85,8 +86,8 @@ def test_coercion_failure_raises_pipeline_error(registry):
 def test_notnull_violation_names_its_phase(registry):
     """The not-null rule attributes to `not_null`, the phase whose mask found it.
 
-    `NotNullPhase` became a phase of its own in #87. The raise plan kept labelling its
-    failures `column_checks`, which is where nullability used to be enforced.
+    Nullability used to be enforced inside `ColumnCheckPhase`. When it became a phase
+    of its own, the raise plan kept the old label.
     """
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
@@ -173,8 +174,8 @@ def test_raised_phase_names_a_real_phase(kind, registry):
 
     The raise plan labels each rule with a phase name by hand, so a label can drift
     out of step with the phases as they are renamed or extracted. That already
-    happened once: the not-null rule kept saying `column_checks` after #87 moved
-    nullability into a phase of its own.
+    happened once: the not-null rule kept saying `column_checks` after nullability
+    moved into a phase of its own.
     """
     schema = SchemaModel.from_dict(RAISING_SCHEMAS[kind])
     phase_names = {phase.name for phase in create_pipeline_from_schema(schema).phases}
@@ -233,20 +234,22 @@ class _InnerPipelineErrorPhase(PipelinePhase):
         raise PipelineError("inner failure", phase=self.name, column="age")
 
 
-def test_phase_pipeline_error_keeps_its_context(registry):
-    """A `PipelineError` a phase raised is not rewrapped.
+def test_phase_pipeline_error_carries_column_out(registry):
+    """Rewrapping a phase's `PipelineError` no longer discards its column.
 
-    Rewrapping built a fresh error with no `column`, so the phase's own context was
-    lost on the way out and the caller saw `column=None`.
+    The wrap itself is kept, because `phase` has to name the phase that was running.
+    A phase can raise an error labelled with a different phase entirely: `add_phase`
+    labels one with the phase being added, which never ran.
     """
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
     pipeline = ValidationPipeline([_InnerPipelineErrorPhase()])
 
-    with pytest.raises(PipelineError, match="^inner failure$") as exc:
+    with pytest.raises(PipelineError, match="Phase 'inner' failed: inner failure") as exc:
         DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
 
     assert exc.value.column == "age"
     assert exc.value.phase == "inner"
+    assert isinstance(exc.value.__cause__, PipelineError)
 
 
 class _HookCrashPhase(PipelinePhase):
@@ -277,24 +280,21 @@ def test_hook_failure_wraps_as_pipeline_error(hook, registry):
 
     They run outside `_execute_phase`, so a raise from either used to leave the
     pipeline unwrapped and reach the caller as a bare `RuntimeError`, which
-    `except NycteaError` does not catch.
+    `except NycteaError` does not catch. Neither hook's contract depends on an
+    observer being attached, even though only one of them is read without one.
     """
-    from nyctea.engine.observability import MetricsCollector
-
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
-    # can_change_row_count is only consulted when an observer is attached.
-    observers = [MetricsCollector()] if hook == "can_change_row_count" else []
-    pipeline = ValidationPipeline([_HookCrashPhase(hook)], observers=observers)
+    pipeline = ValidationPipeline([_HookCrashPhase(hook)])
 
     with pytest.raises(PipelineError, match=f"failed in {hook}"):
         DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
 
 
 def test_hook_validation_error_passes_through(registry):
-    """A hook gets the same passthrough as `execute`, not just the same wrapping.
+    """A hook's `ValidationError` reaches the caller unwrapped, keeping its column.
 
-    A phase that decides during `can_skip` that the input cannot be validated should
-    reach the caller as `ValidationError`, keeping the column it named.
+    This held before the hooks were wrapped, because nothing touched them at all.
+    It is pinned here so adding the wrapping does not quietly swallow it.
     """
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
     error = ValidationError("structural problem from a hook", column="age", phase="hooked")
@@ -305,3 +305,52 @@ def test_hook_validation_error_passes_through(registry):
 
     assert exc.value.column == "age"
     assert exc.value.__cause__ is None
+
+
+def test_parser_failure_names_its_column():
+    """A parser that cannot be applied names the column it was applied to.
+
+    The message already identified the column. Without `column` on the error, a
+    caller had to parse the text to recover it. The parser verifies against the
+    registry and only fails when the expression is built, which is the path that
+    reaches `ColumnParsingPhase`.
+    """
+    registry = Registry()
+    register_builtins(registry)
+
+    @parser(name="explodes", registry=registry)
+    def explodes(column: pl.Expr) -> pl.Expr:  # noqa: ARG001
+        raise RuntimeError("parser blew up")
+
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Utf8", "parsers": [{"name": "explodes"}]}}})
+
+    with pytest.raises(PipelineError, match="Failed to apply parser 'explodes'") as exc:
+        schema.validate(pl.DataFrame({"age": ["1"]}), registry)
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "column_parsing"
+
+
+def test_hook_pipeline_error_keeps_its_column(registry):
+    """A hook's `PipelineError` is wrapped like `execute`'s, keeping its column."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    error = PipelineError("hook rule broke", phase="elsewhere", column="age")
+    pipeline = ValidationPipeline([_HookCrashPhase("can_skip", error)])
+
+    with pytest.raises(PipelineError, match="failed in can_skip") as exc:
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "hooked"
+
+
+def test_observers_are_told_the_run_failed(registry):
+    """A failing run notifies observers before the error leaves the pipeline."""
+    from nyctea.engine.observability import MetricsCollector
+
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    collector = MetricsCollector()
+    pipeline = ValidationPipeline([_CrashingPhase()], observers=[collector])
+
+    with pytest.raises(PipelineError, match="Phase 'crashing' failed"):
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))

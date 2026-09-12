@@ -332,7 +332,10 @@ class ValidationPipeline:
             for phase in self.phases:
                 if self._call_hook(phase, "can_skip", context):
                     continue
-                refresh_row_count = self.observers and self._call_hook(phase, "can_change_row_count", context)
+                # The hook is asked every run so its contract does not depend on an
+                # observer being attached. Only the recount it gates is conditional.
+                may_change_rows = self._call_hook(phase, "can_change_row_count", context)
+                refresh_row_count = bool(self.observers) and may_change_rows
                 context = self._execute_phase(phase, context, row_count)
                 if refresh_row_count:
                     row_count = self._count_rows(context)
@@ -370,17 +373,13 @@ class ValidationPipeline:
     def _call_hook(phase: PipelinePhase, hook: str, context: PipelineContext) -> bool:
         """Run one of a phase's lifecycle predicates under the same contract as execute().
 
-        `can_skip` and `can_change_row_count` run outside `_execute_phase`, so without
-        this a custom phase raising from either escaped the pipeline unwrapped: callers
-        got a bare `RuntimeError` that `except NycteaError` does not catch.
-
         Args:
             phase: Phase owning the hook.
             hook: Name of the predicate to call.
             context: Current pipeline context.
 
         Returns:
-            Whatever the predicate answered.
+            The predicate's answer, coerced to bool.
 
         Raises:
             ValidationError: Propagated unchanged, as from `execute()`.
@@ -388,8 +387,12 @@ class ValidationPipeline:
         """
         try:
             return bool(getattr(phase, hook)(context))
-        except (ValidationError, PipelineError):
+        except ValidationError:
             raise
+        except PipelineError as e:
+            raise PipelineError(
+                f"Phase '{phase.name}' failed in {hook}(): {e}", phase=phase.name, column=e.column
+            ) from e
         except Exception as e:
             raise PipelineError(f"Phase '{phase.name}' failed in {hook}(): {e}", phase=phase.name) from e
 
@@ -416,12 +419,15 @@ class ValidationPipeline:
         phase_start = time.time()
         try:
             context = phase.execute(context)
-        except (ValidationError, PipelineError):
+        except ValidationError:
             # A structural mismatch is the caller's data, not a broken phase. Wrapping it
-            # would report a library fault for a schema the data does not satisfy. A
-            # PipelineError the phase raised already names its phase and column, and
-            # rewrapping built a fresh one that dropped both.
+            # would report a library fault for a schema the data does not satisfy.
             raise
+        except PipelineError as e:
+            # Attribution is the phase that was running, not whatever phase the inner
+            # error named: `add_phase` labels errors with the phase being added, which
+            # never ran. The column is carried across so the rewrap does not lose it.
+            raise PipelineError(f"Phase '{phase.name}' failed: {e}", phase=phase.name, column=e.column) from e
         except Exception as e:
             raise PipelineError(
                 f"Phase '{phase.name}' failed: {e}",

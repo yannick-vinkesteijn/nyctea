@@ -309,7 +309,6 @@ class DataValidator:
             raise PipelineError(
                 "Cannot build row tracking: the data or schema already contains "
                 "a column named '__row_index__'. Rename it before validating.",
-                phase="row_tracking",
             )
         lf = lf.with_row_index("__row_index__")
 

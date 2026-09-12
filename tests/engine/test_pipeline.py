@@ -289,7 +289,7 @@ def test_skipped_row_phase_does_not_recount(collect_calls):
 
 
 # ---------------------------------------------------------------------------
-# Pipeline mutation API (#68 coverage)
+# Pipeline mutation API
 #
 # Every path below is public and had no test behind it. `copy()` in particular
 # is a public method nothing in the package calls.
@@ -309,6 +309,8 @@ def test_copy_shares_no_phase_list():
 
     assert [p.name for p in original.phases] == ["p1"]
     assert [p.name for p in duplicate.phases] == ["p1", "p2"]
+    assert duplicate.phases is not original.phases
+    assert duplicate.observers is not original.observers
     assert duplicate.observers == original.observers
 
 

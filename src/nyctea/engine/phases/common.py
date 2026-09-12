@@ -9,7 +9,13 @@ from nyctea.utils import occupied_columns
 __all__ = ["reject_alias_collision", "reserved_columns"]
 
 
-def reject_alias_collision(alias: str, occupied_columns: Collection[str], phase: str, what: str) -> None:
+def reject_alias_collision(
+    alias: str,
+    occupied_columns: Collection[str],
+    phase: str,
+    what: str,
+    column: str | None = None,
+) -> None:
     """Raise if a generated internal column would overwrite a declared or input column.
 
     Args:
@@ -17,6 +23,7 @@ def reject_alias_collision(alias: str, occupied_columns: Collection[str], phase:
         occupied_columns: Input or schema column names that cannot be overwritten.
         phase: Phase name, for the error.
         what: Human description of what the alias is for.
+        column: Schema column the alias belongs to, when one owns it.
 
     Raises:
         PipelineError: If the alias collides with an existing column.
@@ -26,6 +33,7 @@ def reject_alias_collision(alias: str, occupied_columns: Collection[str], phase:
             f"Cannot build {what}: the data or schema already contains a column named "
             f"'{alias}'. Rename it before validating.",
             phase=phase,
+            column=column,
         )
 
 

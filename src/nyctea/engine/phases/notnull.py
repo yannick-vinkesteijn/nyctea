@@ -53,6 +53,7 @@ def build_notnull_mask_exprs(
             occupied_columns,
             phase,
             f"the not-null mask for column '{col_name}'",
+            col_name,
         )
         not_null_expr = pl.col(col_name).is_not_null()
         check_aliases = declared_check_aliases.get(col_name)
