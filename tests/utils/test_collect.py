@@ -3,7 +3,7 @@
 import polars as pl
 import pytest
 
-from nyctea import SchemaModel
+from nyctea import Config, SchemaModel
 from nyctea.utils.collect import collect, pick_aggregate_engine
 
 
@@ -35,10 +35,10 @@ def test_pick_engine_lazyframe_streams():
 def test_threshold_rejects_negative():
     """A negative row count is meaningless and would silently invert engine choice."""
     with pytest.raises(ValueError, match="greater than or equal to 0"):
-        SchemaModel.from_dict({"streaming_row_threshold": -1, "columns": {"a": {"dtype": "Int64"}}})
+        Config.set_streaming_row_threshold(-1)
 
 
 def test_threshold_allows_zero():
     """0 is the deliberate boundary: stream everything, including empty frames."""
-    schema = SchemaModel.from_dict({"streaming_row_threshold": 0, "columns": {"a": {"dtype": "Int64"}}})
-    assert schema.streaming_row_threshold == 0
+    with Config(streaming_row_threshold=0):
+        assert SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64"}}}).resolved_streaming_row_threshold == 0

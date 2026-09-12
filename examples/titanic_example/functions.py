@@ -2,7 +2,7 @@
 
 import polars as pl
 
-from nyctea import Registry, checker, parser
+from nyctea import Registry, checker, frame_parser, parser
 
 registry = Registry()
 

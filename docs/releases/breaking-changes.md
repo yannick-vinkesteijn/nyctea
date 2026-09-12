@@ -1,5 +1,52 @@
 # Breaking Changes
 
+## Within v0.2.0 pre-release: the public API surface is frozen for 0.3.0b1
+
+Four changes to what `from nyctea import ...` promises, landing together so that anyone integrating against `0.3.0b1` absorbs one break rather than four.
+
+### `SchemaModel.validate` is the only entry point
+
+`DataValidator` is no longer exported from `nyctea`.
+`SchemaModel.validate` gained the one thing it could not do before, running a custom `ValidationPipeline`, so there is nothing left that needed the class directly.
+
+```python
+result = schema.validate(df, registry, pipeline=my_pipeline)
+```
+
+Its loose `**kwargs` is gone too, replaced by the three real parameters `error_report_config`, `lazy` and `pipeline`.
+A misspelled keyword is now a `TypeError` at the call rather than a silently ignored argument.
+
+**Migration:** replace `DataValidator(schema, registry, pipeline=p).validate(df)` with `schema.validate(df, registry, pipeline=p)`.
+The class still exists at `nyctea.engine.validator.DataValidator` for anyone who needs it.
+It is simply no longer part of the promised surface.
+
+### Run settings moved off the schema
+
+`SchemaModel.lazy` and `SchemaModel.streaming_row_threshold` are removed.
+They describe the machine and the run rather than what valid data looks like, so putting them in a schema file meant repeating them in every schema and keeping them in sync by hand.
+They have raised a `DeprecationWarning` pointing at `nyctea.Config` since the previous pre-release.
+
+```python
+import nyctea
+
+nyctea.Config.set_streaming_row_threshold(10_000)
+
+with nyctea.Config(lazy=False):        # or scope it to one block
+    result = schema.validate(df, registry)
+```
+
+**Migration:** delete both keys from your schema files and set them on `nyctea.Config`, or pass `lazy=` to the `validate()` call.
+A schema that still declares either is now rejected at construction, because `SchemaModel` forbids unknown fields.
+
+### Importing Nyctea no longer configures logging
+
+`import nyctea` used to attach a `StreamHandler` to the `nyctea` logger and set it to INFO.
+Any application that imported Nyctea got Nyctea's records in its stderr, in Nyctea's format, at a level it had not chosen.
+A library emits records and lets the application decide handlers, levels and format, so Nyctea now attaches only a `logging.NullHandler`.
+
+**Migration:** if you relied on Nyctea's records appearing without configuring anything, configure logging in your application, or call `nyctea.configure_logging()` yourself.
+That function and the `NYCTEA_LOG_LEVEL` variable are unchanged and remain available for scripts and the command line.
+
 ## Within v0.2.0 pre-release: a structural mismatch raises `ValidationError`
 
 `schema.validate` raised `PipelineError` for every failure of a validation run, including a missing required column and an ambiguous column name.
@@ -180,6 +227,8 @@ from nyctea import DataValidator
 validator = DataValidator(schema, registry)
 result = validator.validate(df)
 ```
+
+Superseded by the surface freeze above, which removed the export entirely. Use `schema.validate(df, registry)`.
 
 ## Within v0.2.0 pre-release: `resolve_column_names` and `SchemaResolutionError` were removed
 

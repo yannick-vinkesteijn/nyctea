@@ -20,16 +20,19 @@ result = schema.validate(df, registry, lazy=False)  # result.data is a DataFrame
 ## Streaming engine for internal aggregates
 
 Validation's internal aggregate collects (check and coercion enforcement, summary error counts, report building) are pure reductions: sums, lengths, boolean `all()`.
-Above `schema.streaming_row_threshold` rows, they use Polars' streaming engine, which cuts peak memory substantially on large data.
+Above `nyctea.Config.streaming_row_threshold()` rows, they use Polars' streaming engine, which cuts peak memory substantially on large data.
 Below it, they use the default engine, since streaming has a fixed per-query setup cost that outweighs the reduction itself on small data.
 The default threshold is 100,000 rows, based on a measured crossover.
-Override it per schema if your workload sits far from that:
+Override it if your workload sits far from that.
+It describes the machine and the run rather than what valid data looks like, so it lives on `nyctea.Config`, not in a schema file:
 
 ```python
-schema = SchemaModel.from_dict({
-    "streaming_row_threshold": 10_000,  # lower it if you mostly validate large files
-    "columns": {"age": {"dtype": "Int64"}},
-})
+import nyctea
+
+nyctea.Config.set_streaming_row_threshold(10_000)  # lower it if you mostly validate large files
+
+with nyctea.Config(streaming_row_threshold=10_000):  # or scope it to one block
+    result = schema.validate(df, registry)
 ```
 
 A `LazyFrame` input always uses streaming, since its row count isn't known without collecting, and passing lazy input in the first place signals larger or out-of-core data.

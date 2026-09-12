@@ -24,11 +24,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Removed
 
+- `DataValidator` is no longer exported from `nyctea`. `SchemaModel.validate` gained a `pipeline` parameter, so it now covers every run including a customized pipeline, and its loose `**kwargs` is replaced by the real parameters `error_report_config`, `lazy` and `pipeline`. The class remains at `nyctea.engine.validator` (#100).
+- `SchemaModel.lazy` and `SchemaModel.streaming_row_threshold`, deprecated in favour of `nyctea.Config`. A schema declaring either is now rejected at construction (#100).
+- `import nyctea` no longer configures logging. It attached a `StreamHandler` and set the level to INFO, which wrote Nyctea's records into an application's stderr at a level it had not chosen. Only a `logging.NullHandler` is attached now. `configure_logging` and `NYCTEA_LOG_LEVEL` stay as an opt-in for scripts and the command line (#100).
 - The untested legacy validation system: `nyctea.functions`, `FunctionRegistry`, and the standalone `nyctea.engine.validate.validate()` function. Use `Registry`, `ValidatorDecorator`, and `SchemaModel.validate()` instead. Removing the legacy registry also resolves its decorator typing defect (#42, #43).
 - The Titanic-specific `register_titanic_validators()` helper from the library API. The example owns its validators directly now (#43).
 
 ### Fixed
 
+- The Titanic example's `functions.py` used `@frame_parser` without importing it, so the example could not run. Pre-existing, unrelated to the surface freeze, fixed here because it was found while verifying the examples (#100).
 - A check or parser whose expression builds but fails on the data now raises `PipelineError` with the underlying Polars exception as its `__cause__`, instead of escaping as a raw Polars exception that `except NycteaError` does not catch. Evaluation happens after every phase has run, so it was outside the pipeline's own error handling (#72).
 - An observer that raises can no longer change the outcome of a run. A failure in `on_pipeline_error` used to replace the error it was told about, leaving the caller with the observer's exception and the real one only as `__context__`. Observer failures are logged instead (#72).
 - `ValidationPipeline`'s mutation API is now covered: `add_phase` with a conflicting or unknown neighbour, `add_phase` and `remove_phase` during a run, `copy()`, and `PipelinePhase.__repr__`. No behaviour changed, but every one of those paths was public and untested (#68).

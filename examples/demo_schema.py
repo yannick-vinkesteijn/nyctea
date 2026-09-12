@@ -51,7 +51,6 @@ def no_duplicate_ids(lf: pl.LazyFrame) -> pl.LazyFrame:
 
 
 schema = SchemaModel(
-    lazy=True,
     coerce=True,
     columns={
         "patient_id": ColumnSchema(

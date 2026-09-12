@@ -65,12 +65,15 @@ def test_negative_threshold_is_rejected():
         Config.set_streaming_row_threshold(-1)
 
 
-def test_schema_setting_still_wins():
-    """Kept as a fallback for one release, so an existing schema keeps working."""
-    Config.set_lazy(True)
-    with pytest.warns(DeprecationWarning, match="set them on `nyctea.Config`"):
-        schema = SchemaModel.from_dict({"lazy": False, "columns": {"a": {"dtype": "Int64"}}})
-    assert schema.resolved_lazy is False
+def test_schema_rejects_run_settings():
+    """A run setting on a schema is refused rather than quietly honoured.
+
+    `extra="forbid"` does the work, so removing the fields turned what used to be a
+    deprecation warning into a construction error.
+    """
+    for field in ("lazy", "streaming_row_threshold"):
+        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+            SchemaModel.from_dict({field: False, "columns": {"a": {"dtype": "Int64"}}})
 
 
 def test_config_applies_when_schema_is_silent():

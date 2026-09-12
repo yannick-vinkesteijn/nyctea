@@ -2,7 +2,6 @@
 
 import copy
 import json
-import warnings
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cached_property
@@ -25,7 +24,8 @@ if TYPE_CHECKING:
     # schemas, so the schema must not import it at module scope.
     # `SchemaModel.validate()` is kept for ergonomics and pays for it with a
     # deferred import, see `tests/test_import_structure.py`.
-    from nyctea.engine.results import ValidationResult
+    from nyctea.engine.pipeline import ValidationPipeline
+    from nyctea.engine.results import ErrorReportConfig, ValidationResult
 
 # Views derived from the schema's own fields. Built at construction and rebuilt
 # after unpickling, so they never need to travel with the object.
@@ -229,16 +229,6 @@ class SchemaModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    lazy: bool | None = Field(
-        None,
-        description=(
-            "Deprecated. Whether to use Polars lazy execution during validation. "
-            "This is a property of the run, not of what valid data looks like, so it "
-            "belongs in `nyctea.Config`. Kept as a fallback for one release: when set "
-            "it still wins over the config value. Read `resolved_lazy` rather than this."
-        ),
-    )
-
     column_matching: Literal["exact", "cleaned"] = Field(
         "exact",
         description=(
@@ -264,27 +254,6 @@ class SchemaModel(BaseModel):
             "- 'raise': error, stop\n"
             "- 'null': failure value becomes or remains null\n"
             "- 'ignore': parser/coercion nulls remain, check failures are kept and reported"
-        ),
-    )
-
-    streaming_row_threshold: int | None = Field(
-        None,
-        ge=0,
-        description=(
-            "Deprecated, set it on `nyctea.Config` instead. "
-            "Row count at or above which internal reduction-only aggregates (check "
-            "and coercion enforcement, summary error counts, report building) use "
-            "Polars' streaming engine instead of the in-memory one. Below this, an "
-            "eager DataFrame input uses the in-memory engine, since streaming's "
-            "fixed pipeline setup cost outweighs the reduction itself on small "
-            "data. A LazyFrame input always uses streaming, since its size is "
-            "unknown without collecting and choosing lazy signals "
-            "larger/out-of-core intent. Those aggregates pass engine= explicitly, "
-            "so this threshold overrides any global engine affinity. The 'rows' "
-            "and 'cells' error report modes are not aggregates -- they materialise "
-            "row indices and values, pass no engine= at all, and so fall to Polars' "
-            "own default selection (engine='auto'), which does follow your global "
-            "affinity. 0 means always stream."
         ),
     )
 
@@ -328,7 +297,7 @@ class SchemaModel(BaseModel):
     def __repr__(self) -> str:
         """Return string representation of the schema."""
         cols = ", ".join(self.columns.keys())
-        return f"<SchemaModel lazy={self.lazy}, coerce={self.coerce}, on_failure={self.on_failure!r}, columns=[{cols}]>"
+        return f"<SchemaModel coerce={self.coerce}, on_failure={self.on_failure!r}, columns=[{cols}]>"
 
     # ------------------------------------------------------------------
     # Schema queries
@@ -735,28 +704,13 @@ class SchemaModel(BaseModel):
 
     @property
     def resolved_lazy(self) -> bool:
-        """Whether this run stays lazy, from the schema if set, else `nyctea.Config`."""
-        return Config.lazy() if self.lazy is None else self.lazy
+        """Whether this run stays lazy."""
+        return Config.lazy()
 
     @property
     def resolved_streaming_row_threshold(self) -> int:
-        """The streaming threshold, from the schema if set, else `nyctea.Config`."""
-        return (
-            Config.streaming_row_threshold() if self.streaming_row_threshold is None else self.streaming_row_threshold
-        )
-
-    @model_validator(mode="after")
-    def warn_on_run_settings_in_schema(self) -> "SchemaModel":
-        """Warn once, at construction, that a run setting is living in a data contract."""
-        moved = [name for name in ("lazy", "streaming_row_threshold") if getattr(self, name) is not None]
-        if moved:
-            warnings.warn(
-                f"{', '.join(moved)} on a schema is deprecated and will be removed. "
-                "These describe the run, not the data, so set them on `nyctea.Config`.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return self
+        """The streaming threshold."""
+        return Config.streaming_row_threshold()
 
     def verify(self, registry: Registry) -> None:
         """Check the schema against a registry, without touching any data.
@@ -809,14 +763,21 @@ class SchemaModel(BaseModel):
         self,
         df: pl.DataFrame | pl.LazyFrame,
         registry: Registry,
-        **kwargs: Any,
+        *,
+        error_report_config: "ErrorReportConfig | None" = None,
+        lazy: bool | None = None,
+        pipeline: "ValidationPipeline | None" = None,
     ) -> "ValidationResult":
         """Validate a DataFrame against this schema.
 
         Args:
             df: DataFrame to validate.
             registry: Validator registry with parsers and checks.
-            **kwargs: Additional validation options passed to DataValidator.
+            error_report_config: How much detail `result.errors` carries.
+            lazy: Return a LazyFrame (True) or a DataFrame (False). If None, reads
+                `nyctea.Config`.
+            pipeline: Phases to run. If None, the phases the schema needs are built
+                for you. Pass one to reorder phases or add your own.
 
         Returns:
             ValidationResult with validated data, errors, and report.
@@ -841,5 +802,5 @@ class SchemaModel(BaseModel):
         """
         from nyctea.engine.validator import DataValidator
 
-        validator = DataValidator(self, registry)
-        return validator.validate(df, **kwargs)
+        validator = DataValidator(self, registry, pipeline=pipeline)
+        return validator.validate(df, error_report_config=error_report_config, lazy=lazy)
