@@ -286,3 +286,77 @@ def test_skipped_row_phase_does_not_recount(collect_calls):
     pipeline.execute(_context_with_row_index())
 
     assert len(collect_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Pipeline mutation API (#68 coverage)
+#
+# Every path below is public and had no test behind it. `copy()` in particular
+# is a public method nothing in the package calls.
+# ---------------------------------------------------------------------------
+
+
+def test_phase_repr_names_the_phase():
+    assert repr(SimplePhase(name="p1")) == "SimplePhase(name='p1')"
+
+
+def test_copy_shares_no_phase_list():
+    """A copy can be reordered without disturbing the pipeline it came from."""
+    original = ValidationPipeline(phases=[SimplePhase(name="p1")], observers=[MetricsCollector()])
+
+    duplicate = original.copy()
+    duplicate.add_phase(SimplePhase(name="p2"))
+
+    assert [p.name for p in original.phases] == ["p1"]
+    assert [p.name for p in duplicate.phases] == ["p1", "p2"]
+    assert duplicate.observers == original.observers
+
+
+def test_add_phase_rejects_after_and_before():
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+
+    with pytest.raises(ValueError, match="Cannot specify both 'after' and 'before'"):
+        pipeline.add_phase(SimplePhase(name="p2"), after="p1", before="p1")
+
+
+@pytest.mark.parametrize("position", ["after", "before"])
+def test_add_phase_rejects_unknown_neighbour(position):
+    """Naming a phase that is not in the pipeline fails instead of appending silently."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+
+    with pytest.raises(PipelineError, match=f"{position} 'nope': phase 'nope' not found"):
+        pipeline.add_phase(SimplePhase(name="p2"), **{position: "nope"})
+
+    assert [p.name for p in pipeline.phases] == ["p1"]
+
+
+class _MutatingPhase(PipelinePhase):
+    """A phase that tries to reshape the pipeline it is running inside."""
+
+    def __init__(self, pipeline_ref: dict, action: str) -> None:
+        super().__init__(name="mutating", phase_type=PhaseType.CHECKING, dependencies=[])
+        self._pipeline_ref = pipeline_ref
+        self._action = action
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        pipeline = self._pipeline_ref["pipeline"]
+        if self._action == "add":
+            pipeline.add_phase(SimplePhase(name="late"))
+        else:
+            pipeline.remove_phase("mutating")
+        return context
+
+
+@pytest.mark.parametrize("action", ["add", "remove"])
+def test_pipeline_locked_during_execution(action):
+    """The phase list is frozen for the duration of a run.
+
+    Reshaping it mid-run would leave the loop iterating a list that no longer
+    matches the ordering the pipeline validated before it started.
+    """
+    ref = {}
+    pipeline = ValidationPipeline(phases=[_MutatingPhase(ref, action)])
+    ref["pipeline"] = pipeline
+
+    with pytest.raises(PipelineError, match="Cannot modify pipeline after validation has started"):
+        pipeline.execute(_context_with_row_index())

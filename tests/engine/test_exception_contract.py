@@ -252,18 +252,19 @@ def test_phase_pipeline_error_keeps_its_context(registry):
 class _HookCrashPhase(PipelinePhase):
     """A phase whose lifecycle predicate fails rather than its `execute`."""
 
-    def __init__(self, hook: str) -> None:
+    def __init__(self, hook: str, error: Exception | None = None) -> None:
         super().__init__(name="hooked", phase_type=PhaseType.CHECKING, dependencies=[])
         self._hook = hook
+        self._error = error or RuntimeError("hook exploded")
 
     def can_skip(self, context: PipelineContext) -> bool:
         if self._hook == "can_skip":
-            raise RuntimeError("hook exploded")
+            raise self._error
         return False
 
     def can_change_row_count(self, context: PipelineContext) -> bool:
         if self._hook == "can_change_row_count":
-            raise RuntimeError("hook exploded")
+            raise self._error
         return False
 
     def execute(self, context: PipelineContext) -> PipelineContext:
@@ -287,3 +288,20 @@ def test_hook_failure_wraps_as_pipeline_error(hook, registry):
 
     with pytest.raises(PipelineError, match=f"failed in {hook}"):
         DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
+
+
+def test_hook_validation_error_passes_through(registry):
+    """A hook gets the same passthrough as `execute`, not just the same wrapping.
+
+    A phase that decides during `can_skip` that the input cannot be validated should
+    reach the caller as `ValidationError`, keeping the column it named.
+    """
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    error = ValidationError("structural problem from a hook", column="age", phase="hooked")
+    pipeline = ValidationPipeline([_HookCrashPhase("can_skip", error)])
+
+    with pytest.raises(ValidationError, match="structural problem from a hook") as exc:
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
+
+    assert exc.value.column == "age"
+    assert exc.value.__cause__ is None
