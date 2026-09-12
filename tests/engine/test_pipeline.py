@@ -138,7 +138,7 @@ def test_pipeline_dependency_ordering():
 
 
 # ---------------------------------------------------------------------------
-# Pinned phases (#87): a structural position, independent of `dependencies`.
+# Pinned phases: a structural position, independent of `dependencies`.
 # ---------------------------------------------------------------------------
 
 
@@ -220,7 +220,7 @@ def _context_with_row_index():
 
 
 def test_metrics_skipped_without_observers(collect_calls):
-    """#11 step 1: the per-phase metrics block must not collect when nothing observes it."""
+    """The per-phase metrics block must not collect when nothing observes it."""
     pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
     pipeline.execute(_context_with_row_index())
 

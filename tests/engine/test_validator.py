@@ -77,13 +77,7 @@ def test_schema_validate_rejects_unknown_kwargs(failing_schema, registry):
 
 
 def test_non_nullable_raises_bare_message(registry):
-    """The not-null raise happens after the pipeline, so it is not phase-wrapped.
-
-    #57 predicted this message change when the not-null enforcement moved out of
-    `ColumnCheckPhase` and into the merged aggregate pass. That move has happened,
-    and the message is user-visible and was unpinned. Phase 1.3 rewrites the raise
-    loops that produce it.
-    """
+    """The not-null raise happens after the pipeline, so it is not phase-wrapped."""
     schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
 
     with pytest.raises(PipelineError) as exc:

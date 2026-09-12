@@ -1,4 +1,4 @@
-"""The collect wrapper and the engine choice that feeds it (#11 step 4)."""
+"""The collect wrapper and the engine choice that feeds it."""
 
 import polars as pl
 import pytest

@@ -1,31 +1,4 @@
-"""Pydantic models describing the validation schema.
-
-This module provides Pydantic models for defining data validation schemas. Schemas
-can be defined programmatically or loaded from YAML/JSON files.
-
-The schema defines:
-    - Column specifications (dtypes, nullability, parsers, checks)
-    - Frame-level operations (parsers and checks)
-    - Failure handling (on_failure: raise, null, ignore)
-    - Synonym mappings for column names
-
-Example:
-    Basic schema definition::
-
-        from nyctea.schema.model import SchemaModel
-
-        schema = SchemaModel.from_dict(
-            {"columns": {"age": {"dtype": "Int64", "nullable": False, "checks": [{"name": "positive"}]}}}
-        )
-
-    Load from YAML::
-
-        schema = SchemaModel.from_yaml_file("schema.yaml")
-
-Note:
-    All schemas are validated at creation time to ensure consistency
-    (e.g., `nullable=False` cannot be combined with `on_failure="null"`).
-"""
+"""Pydantic models describing the validation schema. Defined programmatically or loaded from YAML/JSON."""
 
 import copy
 import json
@@ -148,7 +121,8 @@ class ColumnSchema(BaseModel):
         description=(
             "How to handle parsing/coercion/check failures for this column:\n"
             "- 'raise': error, stop\n"
-            "- 'null': failure value becomes or remains null (requires nullable=True)\n"
+            "- 'null': failure value becomes or remains null. On a non-nullable "
+            "column the resulting violation is reported rather than raised\n"
             "- 'ignore': parser/coercion nulls remain, check failures are kept and reported\n"
             "- None: inherit from schema on_failure"
         ),
@@ -164,15 +138,6 @@ class ColumnSchema(BaseModel):
         if not isinstance(dtype_obj, type) or not issubclass(dtype_obj, pl.DataType):
             raise TypeError(f"'{v}' is not a valid Polars DataType")
         return v
-
-    @model_validator(mode="after")
-    def verify_on_failure_nullable_consistency(self) -> "ColumnSchema":
-        """Ensure on_failure='null' requires nullable=True."""
-        if self.on_failure == "null" and not self.nullable:
-            raise ValueError(
-                "on_failure='null' requires nullable=True. Cannot nullify failures in a non-nullable column."
-            )
-        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,14 +167,10 @@ class ColumnResolution:
 class ResolvedColumn:
     """A column definition with every inherited setting already resolved.
 
-    ``ColumnSchema`` is the authoring shape: it mirrors the YAML a user writes,
-    so ``coerce`` and ``on_failure`` are tri-state and ``None`` means "inherit
-    from the schema". It also does not carry its own name, since the name is the
-    key in ``SchemaModel.columns``.
-
-    Consumers want neither of those things. This is the consumption shape: it
-    knows its name and every setting is a concrete value, so a column can answer
-    questions about itself without going back through the schema.
+    ``ColumnSchema`` is the authoring shape, where ``coerce``/``on_failure`` are
+    tri-state (``None`` means inherit) and the name lives in ``SchemaModel.columns``'
+    key rather than the value. This is the consumption shape: name included, every
+    setting concrete.
 
     Attributes:
         name: Canonical column name.
@@ -548,14 +509,7 @@ class SchemaModel(BaseModel):
     def _resolve_on_failure(self, col_name: str) -> OnFailureBehavior:
         """Resolve on_failure for one column, before ``resolved_columns`` exists."""
         col_schema = self.columns[col_name]
-        behavior = col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
-
-        # Guard: can't nullify non-nullable columns. See #25, which tracks making
-        # this consistent with the construction-time rejection of the explicit case.
-        if behavior == "null" and not col_schema.nullable:
-            return "raise"
-
-        return behavior
+        return col_schema.on_failure if col_schema.on_failure is not None else self.on_failure
 
     @cached_property
     def required_columns(self) -> tuple[str, ...]:
@@ -640,8 +594,6 @@ class SchemaModel(BaseModel):
         Resolution order:
         1. Column on_failure if set explicitly.
         2. Schema on_failure as default.
-        3. Guard: on_failure=null requires nullable=True. Non-nullable columns
-           fall back to raise.
 
         Args:
             col_name: Name of the column.
@@ -808,12 +760,7 @@ class SchemaModel(BaseModel):
     def verify(self, registry: Registry) -> None:
         """Check the schema against a registry, without touching any data.
 
-        A typo in a check name, or an argument that does not fit the check it names,
-        is a schema-authoring mistake. Nothing about catching it depends on the data,
-        so it should not wait until a run is already loading rows.
-
-        Every problem is reported at once. A schema with three typos should take one
-        round trip to fix, not three.
+        Every problem is reported at once, not just the first one found.
 
         Args:
             registry: Registry the schema's checks and parsers must resolve in.
@@ -864,9 +811,6 @@ class SchemaModel(BaseModel):
         **kwargs: Any,
     ) -> "ValidationResult":
         """Validate a DataFrame against this schema.
-
-        This is the primary API for validation using the new validator-based
-        pipeline architecture.
 
         Args:
             df: DataFrame to validate.

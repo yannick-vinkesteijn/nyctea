@@ -14,9 +14,6 @@ __all__ = ["ColumnParsingPhase"]
 class ColumnParsingPhase(PipelinePhase):
     """Apply column parsers (transformations).
 
-    This phase applies all column-level parsers defined in the schema,
-    using the validator registry to look up parser implementations.
-
     Dependencies: column_resolution (needs resolved names)
     """
 
@@ -45,7 +42,6 @@ class ColumnParsingPhase(PipelinePhase):
         lf = context.data
         current_columns = set(context.get_column_names())
 
-        # Build the parser expressions before adding snapshots and failure masks.
         transformations: list[pl.Expr] = []
         parsed_columns: list[str] = []
         reserved = reserved_columns(context)
@@ -81,12 +77,9 @@ class ColumnParsingPhase(PipelinePhase):
                     f"the pre-parser error value for column '{col_name}'",
                 )
 
-            # Start with the column
             expr = pl.col(col_name)
 
-            # Chain parsers
             for parser_spec in schema.column(col_name).parsers:
-                # Look up parser validator
                 try:
                     parser = registry.column_parsers.get(parser_spec.name)
                 except KeyError as e:
@@ -96,7 +89,6 @@ class ColumnParsingPhase(PipelinePhase):
                         phase=self.name,
                     ) from e
 
-                # Apply parser with arguments
                 args = parser_spec.args or {}
                 try:
                     expr = parser(expr, **args)
@@ -106,7 +98,6 @@ class ColumnParsingPhase(PipelinePhase):
                         phase=self.name,
                     ) from e
 
-            # Add transformed column to batch
             transformations.append(expr.alias(col_name))
             parsed_columns.append(col_name)
 

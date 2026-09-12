@@ -46,11 +46,6 @@ def simple_schema():
 
 # ---------------------------------------------------------------------------
 # ColumnResolutionPhase
-#
-# Characterization tests for the production resolution path. Before #86 the
-# three error paths (phases.py:116, 124, 134) had no coverage at all, because
-# the only resolution tests exercised a duplicate implementation in
-# engine/utils.py that no production code called. That duplicate is now deleted.
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +137,7 @@ def test_resolution_rejects_colliding_physical_names():
 
 
 def test_resolution_independent_of_column_order():
-    """Column order must not affect resolution (#86 invariant 4)."""
+    """Column order must not affect resolution."""
     schema = SchemaModel.from_dict(
         {"columns": {"age": {"dtype": "Int64", "synonyms": ["Age"]}, "name": {"dtype": "Utf8"}}}
     )
@@ -325,7 +320,7 @@ class TestCoercionPhase:
 
 
 # ---------------------------------------------------------------------------
-# Collect count regression (#38)
+# Collect count regression
 # ---------------------------------------------------------------------------
 
 
@@ -391,7 +386,7 @@ class TestFullPipeline:
         assert len(result.errors) == 0
 
     def test_collect_count_bounded(self, simple_schema, registry, collect_calls):
-        """#11/#38: guards against silently regaining wasted collects.
+        """Guards against silently regaining wasted collects.
 
         2 today: _run_aggregates_and_raise (parser/coercion/not-null/check raise
         counts, on_failure=null counts, and report aggregates) and _build_errors.
@@ -405,9 +400,8 @@ class TestFullPipeline:
     def test_collect_count_bounded_with_coercion(self, registry, collect_calls):
         """Same guard as above, but for the path with coercion's own raise-check active.
 
-        2 today: _run_aggregates_and_raise and _build_errors. The issue this
-        guards against (#11) specifically called out that this path, not the
-        no-coercion one, is the one most likely to regain a collect.
+        2 today: _run_aggregates_and_raise and _build_errors. This path is the one
+        most likely to regain a collect, since coercion adds its own raise-check.
         """
         schema = SchemaModel.from_dict(
             {
@@ -460,7 +454,7 @@ class TestFullPipeline:
 
     @pytest.mark.parametrize("mode", ["rows", "cells"])
     def test_rows_cells_no_engine_override(self, registry, collect_calls, mode):
-        """#11 step 4: only pure reductions get an explicit engine.
+        """Only pure reductions get an explicit engine.
 
         The rows/cells error builders materialize row indices and failing values, so
         they call plain _collect() with no engine kwarg even when the frame is well
@@ -509,6 +503,34 @@ class TestFullPipeline:
         df = pl.DataFrame({"age": [1, None, 3]})
         with pytest.raises(PipelineError, match="nullable=False"):
             schema.validate(df, registry)
+
+    def test_nulled_check_reports_not_null(self, registry):
+        """A nulled check failure on a non-nullable column reports both failures.
+
+        `apply_check_null` nulls the failing value after `NotNullPhase` has already
+        registered its mask, so the not-null mask has to predict the nulling rather
+        than observe it. Without that, the null it introduces into a nullable=False
+        column goes unreported and the row counts as valid.
+        """
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "on_failure": "null",
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
+                    }
+                }
+            }
+        )
+        df = pl.DataFrame({"age": [25, -5, 30]})
+
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [25, None, 30]
+        by_check = {row["check"]: row["count"] for row in result.errors.to_dicts()}
+        assert by_check == {"min_value": 1, "not_null": 1}
 
     def test_nullable_false_leaks_no_internals(self, registry):
         schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
@@ -1296,7 +1318,7 @@ def test_parser_failure_distinct_from_original_null(registry):
 
 
 # ---------------------------------------------------------------------------
-# Frame-level parsers/checks (#8)
+# Frame-level parsers/checks
 # ---------------------------------------------------------------------------
 
 
@@ -1441,8 +1463,8 @@ class TestNullification:
         assert result.report.columns["age"].nullified == 1
 
     def test_coercion_and_check_nulls_under_streaming(self, registry):
-        """#11 step 4: the streaming-engine aggregate collect in _apply_check_null must
-        agree with the with_columns mutation that follows it on the same lazy graph.
+        """The streaming-engine aggregate collect in _apply_check_null must agree
+        with the with_columns mutation that follows it on the same lazy graph.
         """
         schema = SchemaModel.from_dict(
             {
@@ -1824,26 +1846,72 @@ class TestOnFailure:
         )
         assert schema.resolve_on_failure("age") == "ignore"
 
-    def test_resolve_null_guard_non_nullable(self):
-        """on_failure=null falls back to raise for non-nullable columns."""
+    def test_resolve_null_on_non_nullable_column(self):
+        """on_failure=null resolves unchanged for non-nullable columns."""
         schema = SchemaModel.from_dict(
             {
                 "on_failure": "null",
                 "columns": {"age": {"dtype": "Int64", "nullable": False}},
             }
         )
-        assert schema.resolve_on_failure("age") == "raise"
+        assert schema.resolve_on_failure("age") == "null"
 
-    def test_column_on_failure_null_requires_nullable(self):
-        """Setting on_failure=null on a non-nullable column is a schema error."""
-        with pytest.raises(ValueError, match="nullable=True"):
-            SchemaModel.from_dict(
-                {
-                    "columns": {
-                        "age": {"dtype": "Int64", "nullable": False, "on_failure": "null"},
+    def test_column_on_failure_null_allowed(self):
+        """Setting on_failure=null explicitly on a non-nullable column is legal."""
+        schema = SchemaModel.from_dict(
+            {
+                "columns": {
+                    "age": {"dtype": "Int64", "nullable": False, "on_failure": "null"},
+                },
+            }
+        )
+        assert schema.resolve_on_failure("age") == "null"
+
+    def test_null_check_failure_non_nullable_reports(self, registry):
+        """A non-nullable column's on_failure='null' checks get nulled and reported, not raised."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {
+                    "age": {
+                        "dtype": "Int64",
+                        "nullable": False,
+                        "checks": [{"name": "min_value", "args": {"min": 0}}],
                     },
-                }
-            )
+                },
+            }
+        )
+        df = pl.DataFrame({"age": [5, -1, 10]})
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [5, None, 10]
+        checks = set(result.errors["check"].to_list())
+        assert checks == {"min_value", "not_null"}
+        assert result.report.columns["age"].nullified == 1
+        assert result.report.columns["age"].final_null_count == 1
+        assert result.report.rows_valid == 2
+
+    def test_null_source_value_non_nullable_reports(self, registry):
+        """A genuinely null source value, with no check to null, reports rather than raises."""
+        schema = SchemaModel.from_dict(
+            {
+                "on_failure": "null",
+                "columns": {"age": {"dtype": "Int64", "nullable": False}},
+            }
+        )
+        df = pl.DataFrame({"age": [5, None, 10]})
+        result = schema.validate(df, registry)
+
+        assert result.data.collect()["age"].to_list() == [5, None, 10]
+        assert result.errors["check"].to_list() == ["not_null"]
+        assert result.report.columns["age"].nullified == 0
+
+    def test_raise_default_still_raises(self, registry):
+        """The default on_failure='raise' is unaffected: a source null still raises."""
+        schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "nullable": False}}})
+        df = pl.DataFrame({"age": [5, None, 10]})
+        with pytest.raises(PipelineError, match="nullable=False but contains null values"):
+            schema.validate(df, registry)
 
     def test_coercion_raise_on_failure(self, registry):
         """on_failure=raise + coercion failure raises PipelineError."""
@@ -2101,14 +2169,9 @@ def test_frame_parser_preserves_error_tracking(registry, mode):
 def test_check_mask_index_counts_per_check(registry):
     """The `__check__{n}` counter advances per check, not per column.
 
-    `ColumnCheckPhase` iterates `schema.columns_with_checks` and numbers the masks
-    from a counter incremented inside the inner loop over a column's checks. The
-    numbering therefore depends on that view preserving `schema.columns` order and
-    on columns without declared checks being skipped rather than consuming an index.
-
     Aliases are opaque handles that nothing parses, so a shift here does not fail
     anything on its own. It surfaces later as a collision or a missed lookup, which
-    is why it is pinned rather than left to the suite. Phase 1.3 rewrites this code.
+    is why it is pinned rather than left to the rest of the suite.
     """
     check = [{"name": "min_value", "args": {"min": 0}}]
     schema = SchemaModel.from_dict(

@@ -5,15 +5,19 @@ early it says "did the input contain nulls"; checked last it says "does the outp
 contain nulls", and only the second is a contract a caller can rely on. A failing
 parser or coercion can null a column after the fact.
 
+A failing declared check can too, later than position alone can fix: `apply_check_null`
+nulls it after this phase already ran. The mask predicts that by folding in the same
+failure expression.
+
 So it is not a check among checks, and it is not part of `ColumnCheckPhase`. It is a
-phase of its own, pinned last. See
-`.agents/design/202609052323_phase-ordering-invariants.md` and #87.
+phase of its own, pinned last.
 """
 
 import polars as pl
 
 from nyctea.engine.checks import NOT_NULL_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.masks import index_masks
 from nyctea.engine.phases.common import reserved_columns
 from nyctea.engine.phases.notnull import build_notnull_mask_exprs
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
@@ -22,14 +26,7 @@ __all__ = ["NotNullPhase"]
 
 
 class NotNullPhase(PipelinePhase):
-    """Register a not-null mask for every `nullable=False` column.
-
-    Pinned last: unlike a parser or check, whose meaning does not depend on where
-    it runs, nullability's answer changes with position. Checked early it answers
-    "did the input contain nulls"; checked last it answers "does the output
-    contain nulls", and only the second is a contract a caller can rely on. See
-    #87 and `.agents/design/202609052323_phase-ordering-invariants.md`.
-    """
+    """Register a not-null mask for every `nullable=False` column. Pinned last."""
 
     def __init__(self) -> None:
         """Initialize the nullability phase."""
@@ -54,12 +51,14 @@ class NotNullPhase(PipelinePhase):
         """
         lf = context.data
         mask_exprs: list[pl.Expr] = []
+        declared = index_masks(context.check_masks).declared
         aliases = build_notnull_mask_exprs(
             context.schema,
             self.name,
             set(context.get_column_names()),
             reserved_columns(context),
             mask_exprs,
+            declared,
         )
 
         if mask_exprs:

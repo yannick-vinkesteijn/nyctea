@@ -68,7 +68,7 @@ def build_errors(context: PipelineContext, index: MaskIndex) -> pl.DataFrame:
 
     Every mode carries ``source_column``, the header the input actually used, and
     ``category``, which is ``"structural"`` for a dtype, coercion or nullability
-    failure and ``"check"`` for a rule the schema author wrote (#33).
+    failure and ``"check"`` for a rule the schema author wrote.
 
     - **summary**: ``column | check | count`` (one row per failing check)
     - **rows**: ``column | check | count | row_indices`` (adds list of failing row indices)
@@ -149,7 +149,7 @@ def _build_errors_rows(context: PipelineContext, index: MaskIndex, config: Error
     The default engine is not incidental. `context.aggregate_engine` is only sound
     for pure reductions, and this query materialises row indices through `implode()`.
     That is also why this builder cannot share one `collect_all()` with the aggregate
-    pass, which #84 otherwise proposes.
+    pass.
     """
     entries = index.entries
     empty_schema = {
@@ -229,7 +229,7 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
     The default engine is not incidental. `context.aggregate_engine` is only sound
     for pure reductions, and this query materialises row indices through `implode()`.
     That is also why this builder cannot share one `collect_all()` with the aggregate
-    pass, which #84 otherwise proposes.
+    pass.
     """
     entries = index.entries
     empty_schema = {

@@ -141,11 +141,11 @@ transformed frame.
 
 The `on_failure` field controls what happens when validation fails. Set it at schema level or per column.
 
-| Value             | Behavior                                              |
-| ----------------- | ----------------------------------------------------- |
-| `raise` (default) | Raise `PipelineError` on failure                      |
-| `null`            | Set failing values to null (requires `nullable=True`) |
-| `ignore`          | Keep failing values as-is                             |
+| Value             | Behavior                         |
+| ----------------- | --------------------------------- |
+| `raise` (default) | Raise `PipelineError` on failure |
+| `null`            | Set failing values to null       |
+| `ignore`          | Keep failing values as-is        |
 
 Per-column settings override the schema default:
 
@@ -158,6 +158,9 @@ Per-column settings override the schema default:
     }
 }
 ```
+
+`on_failure: "null"` is legal on a non-nullable column.
+A resulting not-null violation is reported rather than raised, the same way `on_failure: "ignore"` behaves.
 
 ## Parser failures and null counts
 

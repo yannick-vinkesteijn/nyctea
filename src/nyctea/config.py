@@ -1,12 +1,6 @@
 """Package-level settings, in the shape of `pl.Config`.
 
-These describe the machine and the run, not what valid data looks like, so they do
-not belong in a schema. A user sets them once per project; putting them on
-`SchemaModel` meant writing them into every schema file and keeping them in sync by
-hand, and per-call options move that repetition to the call sites instead.
-
-Nyctea is a Polars library, so this mirrors an idiom its users already know. Set
-globally, scope with a `with` block, or decorate a function.
+Set globally, scope with a `with` block, or decorate a function.
 
     >>> import nyctea
     >>> nyctea.Config.set_streaming_row_threshold(0)  # doctest: +ELLIPSIS

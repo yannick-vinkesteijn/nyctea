@@ -2,8 +2,6 @@
 
 examples/ is excluded from ruff and sits outside pre-commit's `ty check src/nyctea`,
 so nothing else notices when a refactor deletes or renames something an example uses.
-That is not hypothetical: removing `nyctea.engine.results` left two dead imports in
-`examples/demo_v2_notebook.py`.
 
 This parses rather than imports, so it needs no optional dependency (marimo) and runs
 no example code.

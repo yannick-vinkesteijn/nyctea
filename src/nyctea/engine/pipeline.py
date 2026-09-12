@@ -1,8 +1,4 @@
-"""Validation pipeline with customizable phases and strict dependency enforcement.
-
-This module provides the core pipeline infrastructure for orchestrating
-validation phases with dependency validation and observability hooks.
-"""
+"""Validation pipeline with customizable phases and strict dependency enforcement."""
 
 import time
 from abc import ABC, abstractmethod
@@ -26,21 +22,18 @@ __all__ = [
 class PhaseType(StrEnum):
     """Types of pipeline phases."""
 
-    RESOLUTION = "resolution"  # Column name resolution
-    TRACKING = "tracking"  # State tracking (null counts, etc.)
-    PARSING = "parsing"  # Data transformations
-    COERCION = "coercion"  # Type coercion
-    CHECKING = "checking"  # Validation checks
-    REPORTING = "reporting"  # Error reporting
-    NULLIFICATION = "nullification"  # Lenient behavior
-    FINALIZATION = "finalization"  # Final checks and report generation
+    RESOLUTION = "resolution"
+    TRACKING = "tracking"
+    PARSING = "parsing"
+    COERCION = "coercion"
+    CHECKING = "checking"
+    REPORTING = "reporting"
+    NULLIFICATION = "nullification"
+    FINALIZATION = "finalization"
 
 
 class PipelinePhase(ABC):
     """Abstract base class for validation pipeline phases.
-
-    Each phase represents a discrete step in the validation pipeline.
-    Phases declare their dependencies and can be skipped conditionally.
 
     Attributes:
         name: Unique identifier for the phase.
@@ -129,9 +122,6 @@ class PipelinePhase(ABC):
 class ValidationPipeline:
     """Customizable validation pipeline with dependency enforcement.
 
-    This class manages an ordered list of pipeline phases, validates
-    dependencies, and orchestrates execution with observability hooks.
-
     Attributes:
         phases: Ordered list of pipeline phases.
         observers: List of pipeline observers for monitoring.
@@ -155,7 +145,6 @@ class ValidationPipeline:
         self.observers: list[PipelineObserver] = list(observers) if observers else []
         self._locked = False
 
-        # Validate dependencies on initialization
         if self.phases:
             self._validate_dependencies()
 
@@ -184,15 +173,12 @@ class ValidationPipeline:
                 pipeline_state="locked",
             )
 
-        # Determine insertion point
         if after is not None and before is not None:
             raise ValueError("Cannot specify both 'after' and 'before'")
 
         if after is None and before is None:
-            # Append to end
             self.phases.append(phase)
         elif after is not None:
-            # Insert after specified phase
             try:
                 idx = self._find_phase_index(after)
                 self.phases.insert(idx + 1, phase)
@@ -202,7 +188,6 @@ class ValidationPipeline:
                     phase=phase.name,
                 ) from e
         elif before is not None:
-            # Insert before specified phase
             try:
                 idx = self._find_phase_index(before)
                 self.phases.insert(idx, phase)
@@ -212,11 +197,9 @@ class ValidationPipeline:
                     phase=phase.name,
                 ) from e
 
-        # Validate dependencies after insertion
         try:
             self._validate_dependencies()
         except PipelineError:
-            # Rollback insertion on validation failure
             self.phases.remove(phase)
             raise
 
@@ -237,7 +220,6 @@ class ValidationPipeline:
                 pipeline_state="locked",
             )
 
-        # Check if any other phase depends on this one
         for phase in self.phases:
             if name in phase.dependencies:
                 raise PipelineError(
@@ -245,7 +227,6 @@ class ValidationPipeline:
                     phase=name,
                 )
 
-        # Find and remove phase
         idx = self._find_phase_index(name)
         self.phases.pop(idx)
 
@@ -276,7 +257,6 @@ class ValidationPipeline:
         phase_names = {p.name for p in self.phases}
 
         for i, phase in enumerate(self.phases):
-            # Check each dependency
             for dep in phase.dependencies:
                 if dep not in phase_names:
                     raise PipelineError(
@@ -284,7 +264,6 @@ class ValidationPipeline:
                         phase=phase.name,
                     )
 
-                # Ensure dependency comes before this phase
                 dep_idx = self._find_phase_index(dep)
                 if dep_idx >= i:
                     current_order = [p.name for p in self.phases]
@@ -334,14 +313,10 @@ class ValidationPipeline:
         Raises:
             PipelineError: If pipeline execution fails.
         """
-        # Lock pipeline to prevent modification during execution
         self._locked = True
-
-        # Track execution timing
         start_time = time.time()
 
         try:
-            # Notify observers: pipeline start
             for observer in self.observers:
                 observer.on_pipeline_start(context)
 
@@ -349,7 +324,6 @@ class ValidationPipeline:
             # it triggers one refresh for all later phase metrics.
             row_count = self._count_rows(context) if self.observers else 0
 
-            # Execute each phase
             for phase in self.phases:
                 if phase.can_skip(context):
                     continue
@@ -359,21 +333,15 @@ class ValidationPipeline:
                     row_count = self._count_rows(context)
 
         except Exception as e:
-            # Notify observers of error
             for observer in self.observers:
                 observer.on_pipeline_error(context, e)
             raise
         else:
-            # Calculate total duration
             total_duration = time.time() - start_time
-
-            # Notify observers: pipeline complete
             for observer in self.observers:
                 observer.on_pipeline_complete(context, total_duration)
-
             return context
         finally:
-            # Unlock pipeline after execution
             self._locked = False
 
     @staticmethod

@@ -6,8 +6,7 @@ into registrations.
 
 The argument spec is the function's own signature. Keyword-only parameters are the
 contract, so `inspect.Signature.bind` reports a missing or unexpected argument without
-running anything. That is what lets a schema's arguments be checked before any data is
-read, which #25 needs.
+running anything, letting a schema's arguments be checked before any data is read.
 """
 
 import inspect

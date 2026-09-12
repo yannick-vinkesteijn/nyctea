@@ -1,4 +1,4 @@
-"""Structural failures are told apart from business-rule failures (#33)."""
+"""Structural failures are told apart from business-rule failures."""
 
 import polars as pl
 import pytest

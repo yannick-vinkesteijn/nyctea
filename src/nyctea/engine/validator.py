@@ -140,12 +140,8 @@ def build_aggregate_exprs(
 def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tuple[pl.DataFrame, dict[str, pl.Expr]]:
     """Collect every non-row-level aggregate this validate() call needs in one pass.
 
-    Combines what were previously four separate collects -- coercion-raise counts,
-    check-raise counts, on_failure=null fail counts, and the report's own
-    aggregates -- into a single ``select()`` on the aggregate engine, since none of
-    them need row-level data and all run against the same lazy graph. ``build_errors``
-    stays a separate collect: its row/cell modes need the default engine, not the
-    aggregate engine (see ``collect``'s docstring).
+    ``build_errors`` stays a separate collect: its row/cell modes need the default
+    engine, not the aggregate engine.
 
     Args:
         context: Pipeline context with check_masks populated.
@@ -220,9 +216,6 @@ def apply_check_null(context: PipelineContext, row: pl.DataFrame, null_fail_expr
 class DataValidator:
     """Validates data against a schema using the validator pipeline.
 
-    This class orchestrates the validation process, managing the pipeline
-    and providing a clean API for validation.
-
     Attributes:
         schema: Schema definition.
         registry: Validator registry.
@@ -292,9 +285,8 @@ class DataValidator:
             ...     print(f"Found {len(result.errors)} errors")
             >>> print(result.report.summary())
         """
-        # Before anything reads the data. A schema whose checks do not resolve, or whose
-        # arguments do not fit them, is an authoring mistake, and finding it after the
-        # rows are loaded helps nobody. See #25.
+        # Before anything reads the data: a schema whose checks or arguments don't
+        # resolve is an authoring mistake, not something to discover after loading rows.
         self.schema.verify(self.registry)
 
         # Decided from the original df (before the LazyFrame conversion below), since

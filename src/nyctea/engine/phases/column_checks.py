@@ -21,8 +21,7 @@ class ColumnCheckPhase(PipelinePhase):
 
     Depends only on resolved names, not on coercion: a check is freely orderable
     against coercion, column parsing, and frame parsing, since it judges whatever
-    value it is handed rather than assuming a particular dtype. See #87 and
-    `.agents/design/202609052323_phase-ordering-invariants.md`.
+    value it is handed rather than assuming a particular dtype.
     """
 
     def __init__(self) -> None:

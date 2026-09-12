@@ -4,8 +4,6 @@ The intended shape is a tree: an orchestrator on top, phases below it, and share
 objects at the leaves. Layers import downward only. The one exception is the API
 boundary, where `SchemaModel.validate()` reaches into the engine through a
 deferred import so that users get one obvious entry point.
-
-See `.agents/design/202609022241_schema-object-and-pipeline-structure.md` and #86.
 """
 
 import ast

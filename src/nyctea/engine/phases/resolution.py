@@ -14,8 +14,7 @@ class ColumnResolutionPhase(PipelinePhase):
     the synonym definitions in the schema.
 
     Pinned first: every other phase reads resolved names, so nothing can act on a
-    column before the schema knows which physical column it is. See #87 and
-    `.agents/design/202609052323_phase-ordering-invariants.md`.
+    column before the schema knows which physical column it is.
     """
 
     def __init__(self) -> None:

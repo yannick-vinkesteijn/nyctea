@@ -1,4 +1,4 @@
-"""Errors name the header the input actually used (#84's sibling, old step 2.6)."""
+"""Errors name the header the input actually used."""
 
 import polars as pl
 import pytest

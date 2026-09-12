@@ -1,8 +1,4 @@
-"""Exception hierarchy for Nyctea validation library.
-
-This module defines a comprehensive exception hierarchy for all error conditions
-that can occur during schema validation, validator registration, and pipeline execution.
-"""
+"""Exception hierarchy for Nyctea validation library."""
 
 import polars as pl
 
@@ -18,11 +14,7 @@ __all__ = [
 
 
 class NycteaError(Exception):
-    """Base exception for all Nyctea errors.
-
-    All custom exceptions in Nyctea inherit from this base class,
-    making it easy to catch any library-specific error.
-    """
+    """Base exception for all Nyctea errors."""
 
 
 class ValidatorError(NycteaError):
@@ -48,24 +40,11 @@ class ValidatorError(NycteaError):
 
 
 class RegistrationError(ValidatorError):
-    """Raised when validator registration fails.
-
-    This occurs when:
-    - A validator with the same name is already registered
-    - Validator validation fails (invalid signature, missing methods, etc.)
-    - Validator metadata is invalid
-    """
+    """Raised when validator registration fails: name collision or invalid signature."""
 
 
 class ValidatorExecutionError(ValidatorError):
-    """Raised when validator execution fails.
-
-    This occurs when:
-    - Validator execute() method raises an exception
-    - Validator violates purity constraints (column validators)
-    - Validator violates shape constraints (frame validators)
-    - Validator arguments are invalid
-    """
+    """Raised when validator execution fails, or violates a purity/shape constraint."""
 
     def __init__(
         self,
@@ -91,14 +70,7 @@ class ValidatorExecutionError(ValidatorError):
 
 
 class ValidationError(NycteaError):
-    """Raised when data validation fails.
-
-    This occurs when:
-    - Data fails schema validation in strict mode
-    - Required columns are missing
-    - Nullable constraints are violated
-    - Type coercion fails in strict mode
-    """
+    """Raised when column resolution fails: a required column is missing or ambiguous."""
 
     def __init__(
         self,
@@ -126,14 +98,7 @@ class ValidationError(NycteaError):
 
 
 class PipelineError(NycteaError):
-    """Raised when pipeline execution or configuration fails.
-
-    This occurs when:
-    - Phase dependencies are violated
-    - Required phases are missing
-    - Phase ordering is invalid
-    - Phase execution fails
-    """
+    """Raised when pipeline construction, ordering, or phase execution fails."""
 
     def __init__(
         self,
@@ -155,11 +120,4 @@ class PipelineError(NycteaError):
 
 
 class ConfigurationError(NycteaError):
-    """Raised when configuration is invalid.
-
-    This occurs when:
-    - Schema definition is malformed
-    - Configuration file is invalid
-    - Environment variables are invalid
-    - Runtime options conflict with schema
-    """
+    """Raised when a schema does not verify against a registry."""

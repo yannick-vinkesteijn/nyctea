@@ -29,8 +29,9 @@ class MaskIndex:
     not-null failures are excluded because each has its own enforcement and report
     accounting. Their failed values are already null, so nulling them again through
     an ``on_failure='null'`` column would double-count them in ``nullified_counts``.
-    The not-null check can never resolve to ``'null'`` in any case: it exists only
-    for non-nullable columns, whose ``'null'`` behaviour resolves to ``'raise'``.
+    The not-null check itself can resolve to ``'null'`` too, but its mask already
+    predicts a pending declared-check nullification, so there is nothing left to
+    null here.
     """
 
     entries: tuple[tuple[str, str, str], ...]

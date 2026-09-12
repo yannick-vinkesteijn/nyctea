@@ -1,8 +1,4 @@
-"""Observability hooks for pipeline execution.
-
-This module provides observer protocols and implementations for monitoring
-pipeline execution, collecting metrics, and logging phase activity.
-"""
+"""Observability hooks for pipeline execution."""
 
 import logging
 import time
@@ -41,11 +37,7 @@ class PhaseMetrics:
 
 
 class PipelineObserver(Protocol):
-    """Protocol for observing pipeline execution.
-
-    Observers implement this protocol to receive notifications about
-    pipeline and phase lifecycle events.
-    """
+    """Protocol for observing pipeline and phase lifecycle events."""
 
     def on_pipeline_start(self, context: PipelineContext) -> None:
         """Called when pipeline starts execution.
@@ -108,9 +100,6 @@ class PipelineObserver(Protocol):
 
 class LoggingObserver:
     """Observer that logs pipeline execution to Python logger.
-
-    This observer provides structured logging of pipeline and phase
-    lifecycle events for debugging and monitoring.
 
     Attributes:
         logger: Python logger to use.
@@ -189,9 +178,6 @@ class LoggingObserver:
 
 class MetricsCollector:
     """Observer that collects metrics from pipeline execution.
-
-    This observer accumulates phase metrics for performance analysis
-    and monitoring.
 
     Attributes:
         phase_metrics: List of metrics collected from each phase.

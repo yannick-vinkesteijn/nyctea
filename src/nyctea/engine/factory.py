@@ -66,7 +66,7 @@ def create_pipeline_from_schema(
         phases.append(ColumnCheckPhase())
 
     # Last, always. Anything before it can introduce a null, so checked anywhere else
-    # it would answer a different question. See #87 and the phase-ordering design doc.
+    # it would answer a different question.
     if schema.non_nullable_columns:
         phases.append(NotNullPhase())
 
