@@ -1,8 +1,10 @@
 """The exception contract `schema.validate` promises its callers.
 
-A structural mismatch between schema and data raises `ValidationError`. Every other
-failure, whether a business rule the data broke or a phase that crashed, raises
-`PipelineError`. Both carry the column and phase that produced them.
+A schema that does not verify against the registry raises `ConfigurationError`, before
+any data is read. An input that does not have the structure the schema describes raises
+`ValidationError`. Every other failure of the run, whether a business rule the data
+broke or a phase that crashed, raises `PipelineError`. All three carry the phase, and
+the column whenever one column owns the failure.
 
 These go through `schema.validate` on purpose. The resolution phase's own tests call
 `execute()` directly, so they pin the phase's behaviour but not what a caller sees
@@ -12,7 +14,15 @@ after the pipeline has handled it.
 import polars as pl
 import pytest
 
-from nyctea import NycteaError, PipelineError, Registry, SchemaModel, ValidationError, register_builtins
+from nyctea import (
+    ConfigurationError,
+    NycteaError,
+    PipelineError,
+    Registry,
+    SchemaModel,
+    ValidationError,
+    register_builtins,
+)
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.pipeline import PhaseType, PipelinePhase, ValidationPipeline
@@ -203,3 +213,77 @@ def test_every_failure_is_a_nyctea_error(schema_dict, frame, registry):
 
     with pytest.raises(NycteaError):
         schema.validate(frame, registry)
+
+
+def test_unverifiable_schema_raises_configuration_error(registry):
+    """Verification runs before the data, so its failure precedes the other two."""
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64", "checks": [{"name": "nope"}]}}})
+
+    with pytest.raises(ConfigurationError, match="is not registered"):
+        schema.validate(pl.DataFrame({"age": [1]}), registry)
+
+
+class _InnerPipelineErrorPhase(PipelinePhase):
+    """A phase that raises a fully formed `PipelineError` of its own."""
+
+    def __init__(self) -> None:
+        super().__init__(name="inner", phase_type=PhaseType.CHECKING, dependencies=[])
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        raise PipelineError("inner failure", phase=self.name, column="age")
+
+
+def test_phase_pipeline_error_keeps_its_context(registry):
+    """A `PipelineError` a phase raised is not rewrapped.
+
+    Rewrapping built a fresh error with no `column`, so the phase's own context was
+    lost on the way out and the caller saw `column=None`.
+    """
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    pipeline = ValidationPipeline([_InnerPipelineErrorPhase()])
+
+    with pytest.raises(PipelineError, match="^inner failure$") as exc:
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))
+
+    assert exc.value.column == "age"
+    assert exc.value.phase == "inner"
+
+
+class _HookCrashPhase(PipelinePhase):
+    """A phase whose lifecycle predicate fails rather than its `execute`."""
+
+    def __init__(self, hook: str) -> None:
+        super().__init__(name="hooked", phase_type=PhaseType.CHECKING, dependencies=[])
+        self._hook = hook
+
+    def can_skip(self, context: PipelineContext) -> bool:
+        if self._hook == "can_skip":
+            raise RuntimeError("hook exploded")
+        return False
+
+    def can_change_row_count(self, context: PipelineContext) -> bool:
+        if self._hook == "can_change_row_count":
+            raise RuntimeError("hook exploded")
+        return False
+
+    def execute(self, context: PipelineContext) -> PipelineContext:
+        return context
+
+
+@pytest.mark.parametrize("hook", ["can_skip", "can_change_row_count"])
+def test_hook_failure_wraps_as_pipeline_error(hook, registry):
+    """A phase's predicates are held to the same contract as its `execute`.
+
+    They run outside `_execute_phase`, so a raise from either used to leave the
+    pipeline unwrapped and reach the caller as a bare `RuntimeError`, which
+    `except NycteaError` does not catch.
+    """
+    from nyctea.engine.observability import MetricsCollector
+
+    schema = SchemaModel.from_dict({"columns": {"age": {"dtype": "Int64"}}})
+    # can_change_row_count is only consulted when an observer is attached.
+    observers = [MetricsCollector()] if hook == "can_change_row_count" else []
+    pipeline = ValidationPipeline([_HookCrashPhase(hook)], observers=observers)
+
+    with pytest.raises(PipelineError, match=f"failed in {hook}"):
+        DataValidator(schema, registry, pipeline=pipeline).validate(pl.DataFrame({"age": [1]}))

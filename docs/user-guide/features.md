@@ -164,33 +164,43 @@ A resulting not-null violation is reported rather than raised, the same way `on_
 
 ### Which exception you get
 
-`schema.validate` raises two kinds of error, and the distinction is about whose problem it is.
+`schema.validate` raises three kinds of error, and the distinction is about whose problem it is.
 
-`ValidationError` means the data does not have the structure the schema describes.
-A required column is missing, or a name resolves ambiguously because both the canonical name and a synonym are present.
+`ConfigurationError` means the schema itself does not hold up.
+A check or parser it names is not in the registry, an argument does not bind, or a column declares the same check twice.
+This is checked before any data is read, so it comes first and does not depend on the data at all.
+
+`ValidationError` means your input does not have the structure the schema describes.
+A required column is missing from the input, or a name resolves ambiguously because both the canonical name and a synonym are present.
 Nyctea cannot start validating, because it cannot tell which column is which.
+This covers resolving the columns you passed in. A frame parser that removes a required column mid-run is reported as `PipelineError`, because by then validation had started.
 
-`PipelineError` means everything else.
-That covers a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and it covers a phase that failed for a reason unrelated to your data, such as a custom validator raising.
+`PipelineError` covers the rest of a validation run.
+That means a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and a phase that failed for a reason unrelated to your data, such as a custom validator raising.
 When a phase fails unexpectedly, the original exception is kept as the `__cause__`.
 
-Both carry a `column` and a `phase` attribute naming what produced them, so you do not have to parse the message to find out.
+All three carry a `phase` attribute, and they carry `column` whenever one column owns the failure.
+Expect `column` to be `None` for a failure that belongs to the frame rather than to any single column.
 
 ```python
-from nyctea import PipelineError, ValidationError
+from nyctea import ConfigurationError, PipelineError, ValidationError
 
 try:
     result = schema.validate(df, registry)
+except ConfigurationError as e:
+    print(f"Schema does not verify against the registry: {e}")
 except ValidationError as e:
-    print(f"Schema does not fit the data: column {e.column!r} in phase {e.phase!r}")
+    print(f"Schema does not fit the input: column {e.column!r} in phase {e.phase!r}")
 except PipelineError as e:
     print(f"Validation stopped: column {e.column!r} in phase {e.phase!r}")
 ```
 
-Both inherit from `NycteaError`, so catch that to handle either.
+All three inherit from `NycteaError`, so catch that to handle any of them.
 
 A custom phase can raise `ValidationError` itself to report a structural problem of its own.
 The pipeline passes it through untouched rather than wrapping it, which is how a phase you write says "this data cannot be validated" instead of "this phase broke".
+Raising `PipelineError` directly works the same way and keeps the `phase` and `column` you set.
+Any other exception a phase raises, from `execute` or from the `can_skip` and `can_change_row_count` hooks, is wrapped as `PipelineError` with the original kept as `__cause__`.
 
 ## Parser failures and null counts
 

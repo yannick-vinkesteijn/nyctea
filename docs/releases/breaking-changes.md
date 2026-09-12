@@ -2,7 +2,7 @@
 
 ## Within v0.2.0 pre-release: a structural mismatch raises `ValidationError`
 
-`schema.validate` raised `PipelineError` for every failure, including a missing required column and an ambiguous column name.
+`schema.validate` raised `PipelineError` for every failure of a validation run, including a missing required column and an ambiguous column name. Schema verification, which runs first and raises `ConfigurationError`, is unchanged by this.
 `ColumnResolutionPhase` raised `ValidationError` for those two, but the pipeline caught every exception a phase produced and rewrapped it, so the type never reached the caller.
 The documentation disagreed with itself as a result, with the user guide describing `ValidationError` and the source docstrings describing both.
 
@@ -20,8 +20,9 @@ except PipelineError as e:
     ...  # a raised failure or a broken phase: e.column, e.phase
 ```
 
-`PipelineError` also gained a `column` attribute, which was previously available only by reading the message text.
-A custom phase can now raise `ValidationError` to report a structural problem of its own and have it reach the caller unwrapped.
+`PipelineError` also gained a `column` attribute, which was previously available only by reading the message text. It is set whenever one column owns the failure, and stays `None` for a frame-level failure that belongs to no single column.
+A custom phase can now raise `ValidationError` to report a structural problem of its own and have it reach the caller unwrapped. A `PipelineError` it raises is no longer rewrapped either, so the `phase` and `column` it set survive.
+Exceptions raised from the `can_skip` and `can_change_row_count` hooks are now wrapped as `PipelineError` as well. They previously escaped the pipeline unwrapped, so `except NycteaError` did not catch them.
 The not-null failure now reports `phase="not_null"` rather than `phase="column_checks"`, naming the phase whose mask actually found it.
 
 **Migration:** code catching `PipelineError` around a missing or ambiguous column needs to catch `ValidationError` instead.

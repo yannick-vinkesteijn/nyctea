@@ -822,8 +822,10 @@ class SchemaModel(BaseModel):
             ValidationResult with validated data, errors, and report.
 
         Raises:
-            ValidationError: If the data does not match the schema's structure, because
-                a required column is missing or a name resolves ambiguously.
+            ConfigurationError: If the schema does not verify against the registry. This
+                runs before any data is read, so it precedes both errors below.
+            ValidationError: If the input does not match the schema's structure, because
+                a required column is missing from it or a name resolves ambiguously.
             PipelineError: If a check, parser, coercion or nullability failure is set to
                 `on_failure="raise"`, or if a phase fails for any other reason.
 

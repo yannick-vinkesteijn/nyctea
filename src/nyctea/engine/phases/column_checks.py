@@ -109,6 +109,7 @@ class ColumnCheckPhase(PipelinePhase):
                 f"Column '{col_name}' has a check named '{check_name}'. The name is "
                 "reserved for built-in failure tracking. Rename the check.",
                 phase=self.name,
+                column=col_name,
             )
 
         # check_masks is keyed on (column, check name), and so are the error report and
@@ -122,6 +123,7 @@ class ColumnCheckPhase(PipelinePhase):
                 f"validation report are keyed on (column, check name). Give the checks "
                 f"distinct names.",
                 phase=self.name,
+                column=col_name,
             )
 
     def _resolve_check_expr(self, registry: Registry, col_name: str, check_spec: Check) -> pl.Expr:
@@ -144,6 +146,7 @@ class ColumnCheckPhase(PipelinePhase):
             raise PipelineError(
                 f"Check '{check_spec.name}' not found in registry. Available: {registry.column_checks.list_names()}",
                 phase=self.name,
+                column=col_name,
             ) from e
 
         try:
@@ -152,6 +155,7 @@ class ColumnCheckPhase(PipelinePhase):
             raise PipelineError(
                 f"Failed to apply check '{check_spec.name}' to column '{col_name}': {e}",
                 phase=self.name,
+                column=col_name,
             ) from e
 
     def can_skip(self, context: PipelineContext) -> bool:

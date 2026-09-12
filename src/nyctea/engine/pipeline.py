@@ -87,7 +87,12 @@ class PipelinePhase(ABC):
             Updated pipeline context (may be same instance or new).
 
         Raises:
-            PipelineError: If phase execution fails.
+            ValidationError: If the data does not have the structure the schema
+                describes. The pipeline passes this through to the caller unchanged
+                rather than wrapping it.
+            PipelineError: If phase execution fails for any other reason. Raise it
+                directly to keep your own `phase` and `column`; anything else is
+                wrapped into one.
         """
 
     def can_skip(self, context: PipelineContext) -> bool:
@@ -325,9 +330,9 @@ class ValidationPipeline:
             row_count = self._count_rows(context) if self.observers else 0
 
             for phase in self.phases:
-                if phase.can_skip(context):
+                if self._call_hook(phase, "can_skip", context):
                     continue
-                refresh_row_count = self.observers and phase.can_change_row_count(context)
+                refresh_row_count = self.observers and self._call_hook(phase, "can_change_row_count", context)
                 context = self._execute_phase(phase, context, row_count)
                 if refresh_row_count:
                     row_count = self._count_rows(context)
@@ -361,6 +366,33 @@ class ValidationPipeline:
             return 0
         return int(context.data.select(pl.len()).collect().item())
 
+    @staticmethod
+    def _call_hook(phase: PipelinePhase, hook: str, context: PipelineContext) -> bool:
+        """Run one of a phase's lifecycle predicates under the same contract as execute().
+
+        `can_skip` and `can_change_row_count` run outside `_execute_phase`, so without
+        this a custom phase raising from either escaped the pipeline unwrapped: callers
+        got a bare `RuntimeError` that `except NycteaError` does not catch.
+
+        Args:
+            phase: Phase owning the hook.
+            hook: Name of the predicate to call.
+            context: Current pipeline context.
+
+        Returns:
+            Whatever the predicate answered.
+
+        Raises:
+            ValidationError: Propagated unchanged, as from `execute()`.
+            PipelineError: If the predicate fails for any other reason.
+        """
+        try:
+            return bool(getattr(phase, hook)(context))
+        except (ValidationError, PipelineError):
+            raise
+        except Exception as e:
+            raise PipelineError(f"Phase '{phase.name}' failed in {hook}(): {e}", phase=phase.name) from e
+
     def _execute_phase(self, phase: PipelinePhase, context: PipelineContext, row_count: int = 0) -> PipelineContext:
         """Run a single phase, notifying observers and collecting metrics.
 
@@ -384,9 +416,11 @@ class ValidationPipeline:
         phase_start = time.time()
         try:
             context = phase.execute(context)
-        except ValidationError:
-            # A structural mismatch is the caller's data, not a broken phase. Wrapping
-            # it would report a library fault for a schema the data does not satisfy.
+        except (ValidationError, PipelineError):
+            # A structural mismatch is the caller's data, not a broken phase. Wrapping it
+            # would report a library fault for a schema the data does not satisfy. A
+            # PipelineError the phase raised already names its phase and column, and
+            # rewrapping built a fresh one that dropped both.
             raise
         except Exception as e:
             raise PipelineError(
