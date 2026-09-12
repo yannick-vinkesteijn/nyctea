@@ -30,12 +30,14 @@ class _RaiseRule:
     """One on_failure=raise aggregate, paired with what to raise when it is non-zero.
 
     ``message`` takes the collected count because three of the four kinds interpolate
-    it and the not-null one deliberately does not. The kind and column it was built
-    from are already baked into ``alias`` and into the closure.
+    it and the not-null one deliberately does not. The kind is baked into ``alias``.
+    ``column`` is carried separately so the raised error can expose it as an attribute
+    rather than only inside the message text.
     """
 
     alias: str
     phase: str
+    column: str
     message: Callable[[int], str]
 
 
@@ -101,6 +103,7 @@ def build_aggregate_exprs(
         _RaiseRule(
             f"__parsing_fail__{col}",
             "column_parsing",
+            col,
             lambda n, c=col: f"Parsing failed for column '{c}': {n} non-null value(s) became null.",
         )
         for col in resolving_to(index.parsing, schema, "raise")
@@ -109,6 +112,7 @@ def build_aggregate_exprs(
         _RaiseRule(
             f"__coercion_fail__{col}",
             "coercion",
+            col,
             lambda n, c=col, d=schema.columns[col].dtype: (
                 f"Coercion failed for column '{c}': {n} value(s) could not be cast to {d}"
             ),
@@ -118,7 +122,8 @@ def build_aggregate_exprs(
     raise_plan += [
         _RaiseRule(
             f"__notnull_raise__{col}",
-            "column_checks",
+            "not_null",
+            col,
             lambda _n, c=col: f"Column '{c}' has nullable=False but contains null values.",
         )
         for col in notnull_raise
@@ -127,6 +132,7 @@ def build_aggregate_exprs(
         _RaiseRule(
             f"__raise_fail__{col}",
             "column_checks",
+            col,
             lambda n, c=col: (
                 f"Check failed for column '{c}': {n} value(s) failed validation and on_failure is 'raise'."
             ),
@@ -178,7 +184,7 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     for rule in raise_plan:
         count = int(row[rule.alias].item())
         if count > 0:
-            raise PipelineError(rule.message(count), phase=rule.phase)
+            raise PipelineError(rule.message(count), phase=rule.phase, column=rule.column)
 
     return row, null_fail_exprs
 
@@ -276,8 +282,10 @@ class DataValidator:
             ValidationResult with validated data, errors, and report.
 
         Raises:
-            ValidationError: If validation fails for on_failure=raise columns.
-            PipelineError: If pipeline execution fails.
+            ValidationError: If the data does not match the schema's structure, because
+                a required column is missing or a name resolves ambiguously.
+            PipelineError: If a check, parser, coercion or nullability failure is set to
+                `on_failure="raise"`, or if a phase fails for any other reason.
 
         Example:
             >>> result = validator.validate(df)

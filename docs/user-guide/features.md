@@ -162,6 +162,36 @@ Per-column settings override the schema default:
 `on_failure: "null"` is legal on a non-nullable column.
 A resulting not-null violation is reported rather than raised, the same way `on_failure: "ignore"` behaves.
 
+### Which exception you get
+
+`schema.validate` raises two kinds of error, and the distinction is about whose problem it is.
+
+`ValidationError` means the data does not have the structure the schema describes.
+A required column is missing, or a name resolves ambiguously because both the canonical name and a synonym are present.
+Nyctea cannot start validating, because it cannot tell which column is which.
+
+`PipelineError` means everything else.
+That covers a check, parser, coercion or nullability failure on a column set to `on_failure: "raise"`, and it covers a phase that failed for a reason unrelated to your data, such as a custom validator raising.
+When a phase fails unexpectedly, the original exception is kept as the `__cause__`.
+
+Both carry a `column` and a `phase` attribute naming what produced them, so you do not have to parse the message to find out.
+
+```python
+from nyctea import PipelineError, ValidationError
+
+try:
+    result = schema.validate(df, registry)
+except ValidationError as e:
+    print(f"Schema does not fit the data: column {e.column!r} in phase {e.phase!r}")
+except PipelineError as e:
+    print(f"Validation stopped: column {e.column!r} in phase {e.phase!r}")
+```
+
+Both inherit from `NycteaError`, so catch that to handle either.
+
+A custom phase can raise `ValidationError` itself to report a structural problem of its own.
+The pipeline passes it through untouched rather than wrapping it, which is how a phase you write says "this data cannot be validated" instead of "this phase broke".
+
 ## Parser failures and null counts
 
 A parser failure occurs when a non-null value becomes null anywhere across a

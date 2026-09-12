@@ -106,6 +106,7 @@ class PipelineError(NycteaError):
         *,
         phase: str | None = None,
         pipeline_state: str | None = None,
+        column: str | None = None,
     ) -> None:
         """Initialize pipeline error with context.
 
@@ -113,10 +114,12 @@ class PipelineError(NycteaError):
             message: Error description.
             phase: Name of the phase that caused the error.
             pipeline_state: Current state of the pipeline.
+            column: Column whose failure triggered the error, when one column owns it.
         """
         super().__init__(message)
         self.phase = phase
         self.pipeline_state = pipeline_state
+        self.column = column
 
 
 class ConfigurationError(NycteaError):

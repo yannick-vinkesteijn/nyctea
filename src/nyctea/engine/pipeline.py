@@ -10,7 +10,7 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.observability import PhaseMetrics, PipelineObserver
-from nyctea.exceptions import PipelineError
+from nyctea.exceptions import PipelineError, ValidationError
 
 __all__ = [
     "PhaseType",
@@ -374,7 +374,9 @@ class ValidationPipeline:
             Updated pipeline context.
 
         Raises:
-            PipelineError: If the phase's execute() raises.
+            ValidationError: Propagated unchanged when a phase reports that the data
+                does not match the schema's structure.
+            PipelineError: If the phase's execute() fails for any other reason.
         """
         for observer in self.observers:
             observer.on_phase_start(phase.name, context)
@@ -382,6 +384,10 @@ class ValidationPipeline:
         phase_start = time.time()
         try:
             context = phase.execute(context)
+        except ValidationError:
+            # A structural mismatch is the caller's data, not a broken phase. Wrapping
+            # it would report a library fault for a schema the data does not satisfy.
+            raise
         except Exception as e:
             raise PipelineError(
                 f"Phase '{phase.name}' failed: {e}",
