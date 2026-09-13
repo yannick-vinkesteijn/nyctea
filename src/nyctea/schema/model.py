@@ -224,10 +224,41 @@ class ResolvedColumn:
         return self.has_checks or not self.nullable
 
 
+# Settings that used to live on a schema and now live on `nyctea.Config`. Kept only so
+# that a schema written against an earlier pre-release says where they went, rather than
+# failing with pydantic's generic "extra inputs are not permitted".
+_MOVED_TO_CONFIG = ("lazy", "streaming_row_threshold")
+
+
 class SchemaModel(BaseModel):
     """Top-level schema definition."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_settings_moved_to_config(cls, data: Any) -> Any:
+        """Point a schema that still declares a run setting at `nyctea.Config`.
+
+        Args:
+            data: Raw input, before field validation.
+
+        Returns:
+            The input unchanged.
+
+        Raises:
+            ValueError: If the input declares a setting that moved to `nyctea.Config`.
+        """
+        if isinstance(data, dict):
+            moved = [name for name in _MOVED_TO_CONFIG if name in data]
+            if moved:
+                names = ", ".join(f"`{name}`" for name in moved)
+                raise ValueError(
+                    f"{names} moved from the schema to `nyctea.Config`. These describe the run "
+                    f"rather than what valid data looks like. Remove them from the schema and use "
+                    f"nyctea.Config.set_{moved[0]}(...), or a `with nyctea.Config({moved[0]}=...)` block."
+                )
+        return data
 
     column_matching: Literal["exact", "cleaned"] = Field(
         "exact",

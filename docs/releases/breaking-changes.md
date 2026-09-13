@@ -36,7 +36,7 @@ with nyctea.Config(lazy=False):        # or scope it to one block
 ```
 
 **Migration:** delete both keys from your schema files and set them on `nyctea.Config`, or pass `lazy=` to the `validate()` call.
-A schema that still declares either is now rejected at construction, because `SchemaModel` forbids unknown fields.
+A schema that still declares either is rejected at construction with an error naming `nyctea.Config`, so an out-of-date schema file says what to do rather than failing as an unknown field.
 
 ### Importing Nyctea no longer configures logging
 

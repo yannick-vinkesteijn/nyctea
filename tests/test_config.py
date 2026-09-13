@@ -66,14 +66,21 @@ def test_negative_threshold_is_rejected():
 
 
 def test_schema_rejects_run_settings():
-    """A run setting on a schema is refused rather than quietly honoured.
+    """A schema declaring a moved setting is told where the setting went.
 
-    `extra="forbid"` does the work, so removing the fields turned what used to be a
-    deprecation warning into a construction error.
+    `extra="forbid"` alone would reject it with pydantic's generic "extra inputs are
+    not permitted", which does not tell someone upgrading from an earlier pre-release
+    what to do. The error names `nyctea.Config` instead.
     """
     for field in ("lazy", "streaming_row_threshold"):
-        with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        with pytest.raises(ValueError, match=f"`{field}` moved from the schema to `nyctea.Config`"):
             SchemaModel.from_dict({field: False, "columns": {"a": {"dtype": "Int64"}}})
+
+
+def test_unknown_schema_field_still_rejected():
+    """The migration message does not swallow ordinary typos."""
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        SchemaModel.from_dict({"lzy": False, "columns": {"a": {"dtype": "Int64"}}})
 
 
 def test_config_applies_when_schema_is_silent():
