@@ -23,8 +23,10 @@ jobs:
       - name: Upgrade vulnerable packages
         run: uv lock --upgrade
 
-      - name: Run pip-audit
-        run: uvx pip-audit --require-hashes -r <(uv export --no-dev)
+      - name: Audit dependencies
+        # Reads `uv.lock` directly, so there is no export to strip the editable project
+        # out of. This is the same auditor as the `uv-audit` pre-commit hook.
+        run: uv audit --no-dev --preview-features audit-command
 
       - name: Create pull request
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0

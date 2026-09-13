@@ -113,7 +113,7 @@ build:
 # Build and verify package
 build-check: build
     @echo "Checking package..."
-    uv run twine check dist/*
+    uv run --group release twine check dist/*
     @echo "✓ Package check passed"
 
 # Install package locally for testing

@@ -70,9 +70,11 @@ rm -rf dist/
 uv build
 
 # Step 4: Check package
+# twine is declared in the `release` dependency group, so this needs no ad hoc install.
+# `uv run pip install twine` used to sit here and fails outright, because pip is not in
+# a uv-managed environment.
 info "Checking package with twine..."
-uv run pip install twine
-uv run twine check dist/*
+uv run --group release twine check dist/*
 
 # Step 5: Show files
 info "Package built successfully:"
