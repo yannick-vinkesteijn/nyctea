@@ -249,14 +249,16 @@ class SchemaModel(BaseModel):
         Raises:
             ValueError: If the input declares a setting that moved to `nyctea.Config`.
         """
-        if isinstance(data, dict):
+        if isinstance(data, Mapping):
             moved = [name for name in _MOVED_TO_CONFIG if name in data]
             if moved:
                 names = ", ".join(f"`{name}`" for name in moved)
+                calls = ", ".join(f"nyctea.Config.set_{name}(...)" for name in moved)
+                scoped = ", ".join(f"{name}=..." for name in moved)
                 raise ValueError(
                     f"{names} moved from the schema to `nyctea.Config`. These describe the run "
                     f"rather than what valid data looks like. Remove them from the schema and use "
-                    f"nyctea.Config.set_{moved[0]}(...), or a `with nyctea.Config({moved[0]}=...)` block."
+                    f"{calls}, or a `with nyctea.Config({scoped})` block."
                 )
         return data
 

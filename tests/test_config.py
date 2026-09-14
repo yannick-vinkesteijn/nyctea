@@ -96,3 +96,18 @@ def test_config_reaches_a_validation_run():
     with Config(lazy=False):
         result = schema.validate(pl.DataFrame({"a": [1, 2]}), registry)
     assert isinstance(result.data, pl.DataFrame)
+
+
+def test_repr_names_no_run_settings():
+    """`__repr__` interpolated `lazy=` until the field moved to `nyctea.Config`.
+
+    Nothing else would catch the name creeping back into that f-string, because a
+    repr is not asserted anywhere else in the suite.
+    """
+    schema = SchemaModel.from_dict({"columns": {"a": {"dtype": "Int64"}}})
+
+    text = repr(schema)
+
+    assert text == "<SchemaModel coerce=True, on_failure='raise', columns=[a]>"
+    for moved in ("lazy", "streaming_row_threshold"):
+        assert moved not in text

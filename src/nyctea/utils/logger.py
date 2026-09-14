@@ -23,7 +23,9 @@ def configure_logging(level: str | None = None) -> None:
     chosen_level = (level or os.getenv(LOG_LEVEL_ENV) or DEFAULT_LEVEL).upper()
     root = logging.getLogger("nyctea")
 
-    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+    # `type(...) is` rather than isinstance: `FileHandler` subclasses `StreamHandler`, and
+    # an application logging to a file should still get the stderr handler it asked for.
+    if not any(type(h) is logging.StreamHandler for h in root.handlers):
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT))
         root.addHandler(handler)

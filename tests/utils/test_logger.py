@@ -1,6 +1,7 @@
 """Nyctea emits log records; the application decides what happens to them."""
 
 import logging
+import os
 import subprocess
 import sys
 
@@ -56,6 +57,27 @@ def test_get_logger_configures_nothing():
 
     assert logger.handlers == []
     assert logger.level == logging.NOTSET
+
+
+def test_file_handler_allows_opt_in():
+    """`FileHandler` subclasses `StreamHandler`, so a naive check would skip the opt-in.
+
+    An application logging to a file that then calls `configure_logging` is asking for
+    stderr output as well, not instead.
+    """
+    package_logger = logging.getLogger("nyctea")
+    original = list(package_logger.handlers)
+    try:
+        package_logger.handlers = [logging.NullHandler(), logging.FileHandler(os.devnull)]
+        configure_logging("DEBUG")
+
+        assert any(type(h) is logging.StreamHandler for h in package_logger.handlers)
+    finally:
+        for handler in package_logger.handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+        package_logger.handlers = original
+        package_logger.setLevel(logging.NOTSET)
 
 
 def test_opt_in_attaches_one_handler():
