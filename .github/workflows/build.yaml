@@ -25,7 +25,7 @@ jobs:
 
       - name: Check package
         run: |
-          uv run --isolated --no-project --with twine twine check dist/*
+          uv run --only-group release twine check dist/*
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
