@@ -49,3 +49,22 @@ def test_example_nyctea_imports_resolve(path: Path) -> None:
             assert hasattr(module, attr), (
                 f"{path.relative_to(EXAMPLES)} imports '{attr}' from '{module_name}', which no longer provides it"
             )
+
+
+SCHEMA_FILES = sorted(
+    p for p in EXAMPLES.rglob("*") if p.suffix in {".yaml", ".yml", ".json"} and "__marimo__" not in p.parts
+)
+
+
+@pytest.mark.parametrize("path", SCHEMA_FILES, ids=lambda p: str(p.name))
+def test_example_schemas_still_load(path):
+    """Every schema file under examples/ parses against the current SchemaModel.
+
+    The import guard above catches a renamed symbol but not a renamed or removed
+    schema field, because a schema file names no Python. `SchemaModel` forbids extra
+    keys, so a field removed from the model turns every example declaring it into a
+    construction error that nothing else notices.
+    """
+    from nyctea import SchemaModel
+
+    SchemaModel.from_file(path)

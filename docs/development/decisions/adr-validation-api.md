@@ -209,6 +209,8 @@ The public entry point is:
 result = schema.validate(df, registry)
 ```
 
+As of 0.3.0b1 it is the only one. `DataValidator` is no longer exported from `nyctea`, and `schema.validate` takes the `pipeline` argument described below, so the class is an implementation detail rather than the advanced entry point this ADR originally described.
+
 The underlying `DataValidator.validate()` signature:
 
 ```python
@@ -226,5 +228,5 @@ Key decisions:
 - `registry` is on `self` (set at construction time), not passed per-call. A validator is bound to a registry; swapping registries means creating a new validator.
 - Failure handling is on the schema (`on_failure` at schema and column level), not a runtime parameter. See [ADR: on_failure](adr-on-failure.md).
 - `error_report_config` controls the shape of the `errors` DataFrame in `ValidationResult`. Defaults to `ErrorReportConfig(mode="summary")`.
-- `lazy` overrides `schema.lazy`. By default the output type matches what the schema declares.
+- `lazy` overrides `nyctea.Config.lazy()`, which is where the setting lives as of 0.3.0b1. It was a `SchemaModel` field when this ADR was written.
 - All optional arguments are keyword-only (`*`) to prevent positional coupling as the API evolves.

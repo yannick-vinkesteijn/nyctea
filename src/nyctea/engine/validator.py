@@ -299,8 +299,8 @@ class DataValidator:
         Args:
             df: Input DataFrame to validate.
             error_report_config: Configuration for error reporting.
-            lazy: Return LazyFrame (True) or DataFrame (False). If None, uses the
-                schema's setting, then `nyctea.Config`.
+            lazy: Return LazyFrame (True) or DataFrame (False). If None, reads
+                `nyctea.Config`.
 
         Returns:
             ValidationResult with validated data, errors, and report.

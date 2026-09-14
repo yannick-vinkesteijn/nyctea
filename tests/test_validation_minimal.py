@@ -29,7 +29,6 @@ def sample_schema():
     """Create a simple schema for testing."""
     return SchemaModel.from_dict(
         {
-            "lazy": False,
             "coerce": False,
             "columns": {
                 "name": {
@@ -85,7 +84,15 @@ def test_schema_loads_successfully(sample_schema):
 
 
 def test_top_level_public_api_exports() -> None:
-    """The root package stays focused on the common validation workflow."""
+    """The root package stays focused on the common validation workflow.
+
+    This list is the promise `from nyctea import ...` makes, so a name is added only
+    when a user needs it and removed only in a release that says so. `DataValidator`
+    came out for 0.3.0b1: `SchemaModel.validate` does everything it did, including
+    running a custom pipeline, and two entry points for one job cost more to explain
+    than the third parameter does. `configure_logging` stays, as the opt-in for
+    scripts and the CLI now that importing Nyctea no longer configures anything.
+    """
     assert set(nyctea.__all__) == {
         "Config",
         "ConfigurationError",
@@ -94,7 +101,6 @@ def test_top_level_public_api_exports() -> None:
         "PipelineError",
         "Registry",
         "SchemaModel",
-        "DataValidator",
         "ValidationError",
         "ValidationReport",
         "ValidationResult",
@@ -153,7 +159,7 @@ def test_validation_succeeds(sample_dataframe, sample_schema, registry):
 
 def test_parsers_applied_correctly(sample_dataframe, sample_schema, registry):
     """Test that parsers transform data correctly."""
-    result = sample_schema.validate(sample_dataframe, registry)
+    result = sample_schema.validate(sample_dataframe, registry, lazy=False)
 
     # Check that strip and lower were applied to names
     assert result.data["name"].to_list() == ["alice", "bob", "charlie"]

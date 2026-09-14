@@ -1,4 +1,3 @@
-lazy: true
 coerce: true
 columns:
   patient_id:
