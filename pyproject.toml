@@ -63,8 +63,8 @@ docs = [
     "zensical>=0.0.15",
     "mkdocstrings-python>=1.11.1",
 ]
-# Not in `dev`: only a release needs it, and `uv run --group release` installs it on
-# demand for the one command that does.
+# Not in `dev`, and excluded from `just setup`: only a release needs it, and
+# `uv run --only-group release` installs it on demand for the one command that does.
 release = [
     "twine>=7.0.0",
 ]

@@ -74,7 +74,7 @@ uv build
 # `uv run pip install twine` used to sit here and fails outright, because pip is not in
 # a uv-managed environment.
 info "Checking package with twine..."
-uv run --group release twine check dist/*
+uv run --only-group release twine check dist/*
 
 # Step 5: Show files
 info "Package built successfully:"

@@ -26,7 +26,7 @@ uv build
 
 echo ""
 echo "Checking package with twine..."
-uv run --group release twine check dist/*
+uv run --only-group release twine check dist/*
 
 echo ""
 echo -e "${GREEN}✓ Build job passed${NC}"
