@@ -154,8 +154,12 @@ If you're about to add a check, confirm an existing hook doesn't already cover i
 
 Two more workflows run on their own schedule rather than per PR.
 `Documentation` deploys the site on push to `main`.
-`Dependency Audit` scans weekly via `uv audit` and opens an upgrade PR on findings.
 `Draft Release` and `Publish to PyPI` run on tag push and release publish; see [Releasing](RELEASING.md).
+
+Dependencies are Dependabot's job rather than a workflow's.
+It opens weekly upgrade pull requests for `uv.lock` and for the pinned action versions in `.github/workflows/`, and its security alerts read the same lockfile.
+Routine upgrades wait out the cooldown in `.github/dependabot.yml` so a version yanked soon after release never reaches the lockfile, while security updates ignore cooldown and arrive immediately.
+The `uv-audit` pre-commit hook covers the same advisories locally, before a lockfile change is ever pushed.
 
 ## Environment
 

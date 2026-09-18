@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Dependency updates come from Dependabot rather than the `Dependency Audit` workflow, which is removed. `.github/dependabot.yml` covers `uv.lock` and the pinned action versions in the workflows. The workflow duplicated Dependabot's security alerts, needed the repository to allow Actions to create pull requests, and failed on that permission even after its audit step was fixed. The `uv-audit` pre-commit hook still runs the same scan locally when the lockfile changes (#64).
 - Every built-in phase name now has one definition, in `nyctea.engine.phase_names`. The name was previously hand-written by the phase, by the `dependencies` of phases ordered against it, and by the raise plan that attributes a failure, which is how the raise plan came to report a not-null failure under the wrong phase (#72).
 - `CoercionPhase` is no longer forced to run before `ColumnCheckPhase`/`FrameCheckPhase`: a check written against raw string values can now run before coercion, one written against typed values can run after. `PipelinePhase` gained a `pinned` position (`"first"`/`"last"`), independent of `dependencies`, for the two positions that are still fixed: `ColumnResolutionPhase` always first, `NotNullPhase` always last. `ValidationPipeline` rejects any custom phase ordering that violates either (#87).
 - The per-phase metrics block no longer collects when no observers are registered (#11).
