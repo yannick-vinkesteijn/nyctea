@@ -47,5 +47,5 @@ AggregateEngine = Literal["in-memory", "streaming"]
 ```
 
 The Polars engine used for validation's internal aggregate collects.
-Chosen per `validate()` call from `SchemaModel.streaming_row_threshold`, never set directly.
+Chosen per `validate()` call from `nyctea.Config.streaming_row_threshold()`, never set directly.
 See [streaming engine for internal aggregates](../user-guide/features.md#streaming-engine-for-internal-aggregates).

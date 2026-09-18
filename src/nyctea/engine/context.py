@@ -43,7 +43,7 @@ class PipelineContext:
         metadata: Additional phase-specific metadata.
         aggregate_engine: Polars ``collect()`` engine for internal reduction-only
             aggregates (not for materializing rows). Decided once per ``validate()``
-            call from ``schema.streaming_row_threshold`` before the pipeline runs,
+            call from ``nyctea.Config.streaming_row_threshold`` before the pipeline runs,
             so every phase and post-pipeline step uses the same choice.
 
     Read column names through ``frame_schema()`` or ``get_column_names()`` rather

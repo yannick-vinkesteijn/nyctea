@@ -15,5 +15,5 @@ __all__ = ["AggregateEngine", "OnFailureBehavior"]
 OnFailureBehavior = Literal["raise", "null", "ignore"]
 
 # The Polars engine used by validation's internal aggregate collects. Chosen once
-# per validate() call from the data's size, see `SchemaModel.streaming_row_threshold`.
+# per validate() call from the data's size, see `nyctea.Config.streaming_row_threshold`.
 AggregateEngine = Literal["in-memory", "streaming"]

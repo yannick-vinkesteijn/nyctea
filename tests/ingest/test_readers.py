@@ -11,7 +11,6 @@ from nyctea.schema.model import SchemaModel
 def schema():
     return SchemaModel.from_dict(
         {
-            "lazy": False,
             "columns": {
                 "passenger_id": {
                     "dtype": "Int64",
