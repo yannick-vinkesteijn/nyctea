@@ -179,3 +179,28 @@ def test_master_registry_repr():
 
     assert "Registry" in repr_str
     assert "column_parsers" in repr_str
+
+
+def test_get_by_tag_returns_a_copy():
+    """The tag index is the registry's own state, so a caller cannot reach into it.
+
+    `list_all` and `list_names` already return copies; this returned the internal
+    list, so appending to the result silently registered a validator.
+    """
+
+    class TaggedParser(ColumnParser):
+        def __init__(self):
+            super().__init__(ValidatorMetadata(name="tagged", tags=["shared"]))
+
+        def execute(self, column, **kwargs):
+            return column
+
+        def validate_args(self, **kwargs):
+            pass
+
+    registry = ValidatorRegistry(ColumnParser)
+    registry.register(TaggedParser())
+
+    registry.get_by_tag("shared").append("not a validator")
+
+    assert len(registry.get_by_tag("shared")) == 1

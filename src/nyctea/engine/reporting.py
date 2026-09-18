@@ -4,6 +4,8 @@ Both read the collected aggregates and the mask index. Neither touches the
 validator, so this module sits below it.
 """
 
+from collections.abc import Mapping
+
 import polars as pl
 
 from nyctea.engine.checks import PARSING_CHECK, category_of
@@ -199,7 +201,31 @@ def _build_errors_rows(context: PipelineContext, index: MaskIndex, config: Error
     return pl.DataFrame(rows, schema=empty_schema)
 
 
-def _cells_exprs(entries: tuple[tuple[str, str, str], ...], config: ErrorReportConfig) -> list[pl.Expr]:
+def _readable_value(column: str, dtype: pl.DataType) -> pl.Expr:
+    """Render one failing value as text for the error report.
+
+    Binary is hex-encoded rather than cast. Casting assumes the bytes are UTF-8, and
+    a column holding anything else made the whole report fail rather than that one
+    value render oddly. Hex is used for every Binary column, not only the ones that
+    would fail, so a value's meaning does not depend on its own contents.
+
+    Args:
+        column: Column to read the value from.
+        dtype: That column's dtype.
+
+    Returns:
+        A string expression over the column.
+    """
+    if dtype == pl.Binary:
+        return pl.col(column).bin.encode("hex")
+    return pl.col(column).cast(pl.String)
+
+
+def _cells_exprs(
+    entries: tuple[tuple[str, str, str], ...],
+    config: ErrorReportConfig,
+    dtypes: Mapping[str, pl.DataType],
+) -> list[pl.Expr]:
     """Build the per-alias limited indices (and optional values) list expressions."""
     exprs: list[pl.Expr] = []
     for col_name, check_name, alias in entries:
@@ -210,7 +236,7 @@ def _cells_exprs(entries: tuple[tuple[str, str, str], ...], config: ErrorReportC
         exprs.append(indices_expr.implode().alias(f"__indices__{alias}"))
         if config.include_values:
             value_column = f"__pre_parse_value__{col_name}" if check_name == PARSING_CHECK else col_name
-            values_expr = pl.col(value_column).filter(failed).cast(pl.String)
+            values_expr = _readable_value(value_column, dtypes[value_column]).filter(failed)
             if config.limit is not None:
                 values_expr = values_expr.head(config.limit)
             exprs.append(values_expr.implode().alias(f"__values__{alias}"))
@@ -245,7 +271,10 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
     if not entries:
         return empty
 
-    row = collect(context.data.select(_cells_exprs(entries, config)))
+    # The value rendering depends on each column's dtype. `frame_schema` is the cached
+    # accessor, so this costs nothing when a phase has already resolved the schema.
+    dtypes = context.frame_schema() if config.include_values else {}
+    row = collect(context.data.select(_cells_exprs(entries, config, dtypes)))
 
     parts: list[pl.DataFrame] = []
     for col_name, check_name, alias in entries:

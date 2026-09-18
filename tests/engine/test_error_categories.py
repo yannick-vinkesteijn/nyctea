@@ -59,3 +59,26 @@ def test_empty_errors_carry_the_category(schema, registry):
 
     assert "category" in result.errors.columns
     assert result.errors.height == 0
+
+
+def test_binary_values_render_as_hex(registry):
+    """A Binary column's failing value is hex-encoded rather than cast to text.
+
+    Casting assumes UTF-8, so a column holding anything else failed the whole
+    report rather than rendering one value oddly. Hex applies to every Binary
+    column, so a value's representation does not depend on its own bytes.
+    """
+    from nyctea.validators.decorators import checker
+
+    @checker(name="is_empty", registry=registry)
+    def is_empty(column: pl.Expr) -> pl.Expr:
+        return column.bin.size() < 1
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "ignore", "columns": {"payload": {"dtype": "Binary", "checks": [{"name": "is_empty"}]}}}
+    )
+    frame = pl.DataFrame({"payload": [b"\xff\xfe\x00", b"ok", b""]})
+
+    result = schema.validate(frame, registry, error_report_config=ErrorReportConfig(mode="cells"))
+
+    assert [row["value"] for row in result.errors.to_dicts()] == ["fffe00", "6f6b"]

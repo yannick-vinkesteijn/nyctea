@@ -362,3 +362,62 @@ def test_pipeline_locked_during_execution(action):
 
     with pytest.raises(PipelineError, match="Cannot modify pipeline after validation has started"):
         pipeline.execute(_context_with_row_index())
+
+
+# ---------------------------------------------------------------------------
+# Duplicate phase names
+# ---------------------------------------------------------------------------
+
+
+def test_constructor_rejects_duplicate_names():
+    """Two phases answering to one name make every lookup ambiguous."""
+    with pytest.raises(PipelineError, match="more than one phase named 'dup'"):
+        ValidationPipeline(phases=[SimplePhase(name="dup"), SimplePhase(name="dup")])
+
+
+def test_add_phase_rejects_duplicate_name():
+    """The rejection also covers a name that only collides once inserted."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+
+    with pytest.raises(PipelineError, match="more than one phase named 'p1'"):
+        pipeline.add_phase(SimplePhase(name="p1"))
+
+    assert [p.name for p in pipeline.phases] == ["p1"], "a rejected insertion must roll back"
+
+
+def test_duplicate_error_names_every_collision():
+    """Fixing one name at a time is a poor way to repair a hand-built pipeline."""
+    phases = [SimplePhase(name="a"), SimplePhase(name="b"), SimplePhase(name="a"), SimplePhase(name="b")]
+
+    with pytest.raises(PipelineError, match="named 'a', 'b'"):
+        ValidationPipeline(phases=phases)
+
+
+def test_removing_a_phase_frees_its_name():
+    """The check is about the current phase list, not names ever used."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+    pipeline.remove_phase("p1")
+
+    pipeline.add_phase(SimplePhase(name="p1"))
+
+    assert [p.name for p in pipeline.phases] == ["p1"]
+
+
+@pytest.mark.parametrize("where", [{}, {"after": "other"}, {"before": "other"}])
+def test_rollback_restores_the_exact_list(where):
+    """A rejected insert leaves the pipeline as it was, instance for instance.
+
+    Rollback removed by value, and `list.remove` deletes the first phase equal to the
+    one given. Re-inserting an instance the pipeline already holds therefore deleted
+    the original and kept the rejected copy, reordering the pipeline instead of
+    undoing the insert.
+    """
+    existing = SimplePhase(name="dup")
+    pipeline = ValidationPipeline(phases=[existing, SimplePhase(name="other")])
+    before = list(pipeline.phases)
+
+    with pytest.raises(PipelineError, match="more than one phase named 'dup'"):
+        pipeline.add_phase(existing, **where)
+
+    assert pipeline.phases == before
+    assert pipeline.phases[0] is existing
