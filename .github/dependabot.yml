@@ -1,0 +1,43 @@
+# Dependabot handles both jobs the weekly audit workflow used to attempt: it opens
+# upgrade pull requests, and its security alerts read the same lockfile. The workflow
+# also needed "Allow GitHub Actions to create and approve pull requests", which
+# Dependabot does not.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # Let a release settle before upgrading to it, so a version yanked within days of
+    # publishing never reaches the lockfile. Security updates ignore cooldown, so a
+    # vulnerability fix still arrives the day it lands. Raise these alongside
+    # `exclude-newer` if that is ever set in pyproject.toml, or uv may be unable to
+    # lock what Dependabot proposes.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    commit-message:
+      prefix: "chore"
+    labels:
+      - "dependencies"
+    groups:
+      # One pull request per week for routine bumps. Security updates are not grouped,
+      # so they still arrive on their own and stay easy to review in isolation.
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The workflows pin some actions to a commit SHA, which nothing else updates.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
