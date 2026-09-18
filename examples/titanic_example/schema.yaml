@@ -1,4 +1,3 @@
-lazy: true
 # Coerce is set to false because parsers (to_int, to_float) already handle type conversions
 # Using coerce: true with parsers causes dtype conflicts (parsers produce i64/f64, schema expects Int64/Float64)
 coerce: false

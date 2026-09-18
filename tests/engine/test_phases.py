@@ -5,7 +5,7 @@ column resolution, and report generation paths.
 import polars as pl
 import pytest
 
-from nyctea import Registry, SchemaModel, register_builtins
+from nyctea import Config, Registry, SchemaModel, register_builtins
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.phases import (
@@ -421,7 +421,7 @@ class TestFullPipeline:
         assert len(collect_calls) == 2
 
     def test_small_df_uses_default_engine(self, simple_schema, registry, collect_calls):
-        """Below schema.streaming_row_threshold, an eager DataFrame stays on the
+        """Below the configured streaming threshold, an eager DataFrame stays on the
         default engine -- streaming's fixed setup cost regresses small validations.
         """
         df = pl.DataFrame({"age": [25, 30, 40], "name": ["Alice", "Bob", "Carol"]})
@@ -433,12 +433,12 @@ class TestFullPipeline:
     def test_large_df_streams(self, registry, collect_calls):
         schema = SchemaModel.from_dict(
             {
-                "streaming_row_threshold": 10,
                 "columns": {"age": {"dtype": "Int64", "nullable": True}},
             }
         )
         df = pl.DataFrame({"age": list(range(20))})
-        schema.validate(df, registry)
+        with Config(streaming_row_threshold=10):
+            schema.validate(df, registry)
 
         assert collect_calls
         assert all(call.get("engine") == "streaming" for call in collect_calls)
@@ -458,14 +458,13 @@ class TestFullPipeline:
 
         The rows/cells error builders materialize row indices and failing values, so
         they call plain _collect() with no engine kwarg even when the frame is well
-        above streaming_row_threshold and every aggregate around them is streaming.
+        above the configured streaming threshold and every aggregate around them is streaming.
         Absence of the kwarg is the contract: it leaves those two on Polars' own
         engine="auto" selection, which follows global affinity. It does not mean they
         can never stream.
         """
         schema = SchemaModel.from_dict(
             {
-                "streaming_row_threshold": 10,
                 "on_failure": "ignore",
                 "columns": {
                     "age": {"dtype": "Int64", "nullable": True, "checks": [{"name": "min_value", "args": {"min": 0}}]}
@@ -473,7 +472,8 @@ class TestFullPipeline:
             }
         )
         df = pl.DataFrame({"age": [*range(19), -1]})
-        result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode=mode))
+        with Config(streaming_row_threshold=10):
+            result = schema.validate(df, registry, error_report_config=ErrorReportConfig(mode=mode))
 
         assert len(result.errors) == 1
         engines = [call.get("engine") for call in collect_calls]

@@ -67,7 +67,7 @@ lf = read_csv("data.csv", schema, lazy=True)
 df = read_csv("data.csv", schema, lazy=False)
 
 # Use schema default
-lf_or_df = read_csv("data.csv", schema)  # Uses schema.lazy
+lf_or_df = read_csv("data.csv", schema)  # Uses nyctea.Config.lazy()
 ```
 
 ## Advanced Usage
