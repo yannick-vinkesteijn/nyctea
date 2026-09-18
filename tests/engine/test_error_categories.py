@@ -77,7 +77,7 @@ def test_binary_values_render_as_hex(registry):
     schema = SchemaModel.from_dict(
         {"on_failure": "ignore", "columns": {"payload": {"dtype": "Binary", "checks": [{"name": "is_empty"}]}}}
     )
-    frame = pl.DataFrame({"payload": [b"\xff\xfe\x00", b"ok"]})
+    frame = pl.DataFrame({"payload": [b"\xff\xfe\x00", b"ok", b""]})
 
     result = schema.validate(frame, registry, error_report_config=ErrorReportConfig(mode="cells"))
 
