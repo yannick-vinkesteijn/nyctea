@@ -401,3 +401,23 @@ def test_removing_a_phase_frees_its_name():
     pipeline.add_phase(SimplePhase(name="p1"))
 
     assert [p.name for p in pipeline.phases] == ["p1"]
+
+
+@pytest.mark.parametrize("where", [{}, {"after": "other"}, {"before": "other"}])
+def test_rollback_restores_the_exact_list(where):
+    """A rejected insert leaves the pipeline as it was, instance for instance.
+
+    Rollback removed by value, and `list.remove` deletes the first phase equal to the
+    one given. Re-inserting an instance the pipeline already holds therefore deleted
+    the original and kept the rejected copy, reordering the pipeline instead of
+    undoing the insert.
+    """
+    existing = SimplePhase(name="dup")
+    pipeline = ValidationPipeline(phases=[existing, SimplePhase(name="other")])
+    before = list(pipeline.phases)
+
+    with pytest.raises(PipelineError, match="more than one phase named 'dup'"):
+        pipeline.add_phase(existing, **where)
+
+    assert pipeline.phases == before
+    assert pipeline.phases[0] is existing

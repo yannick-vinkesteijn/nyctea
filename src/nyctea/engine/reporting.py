@@ -271,9 +271,9 @@ def _build_errors_cells(context: PipelineContext, index: MaskIndex, config: Erro
     if not entries:
         return empty
 
-    # One schema resolution for the whole report rather than one per entry: the value
-    # rendering depends on each column's dtype.
-    dtypes = context.data.collect_schema() if config.include_values else {}
+    # The value rendering depends on each column's dtype. `frame_schema` is the cached
+    # accessor, so this costs nothing when a phase has already resolved the schema.
+    dtypes = context.frame_schema() if config.include_values else {}
     row = collect(context.data.select(_cells_exprs(entries, config, dtypes)))
 
     parts: list[pl.DataFrame] = []

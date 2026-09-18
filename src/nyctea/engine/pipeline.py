@@ -186,32 +186,36 @@ class ValidationPipeline:
         if after is not None and before is not None:
             raise ValueError("Cannot specify both 'after' and 'before'")
 
-        if after is None and before is None:
-            self.phases.append(phase)
-        elif after is not None:
+        if after is not None:
             try:
-                idx = self._find_phase_index(after)
-                self.phases.insert(idx + 1, phase)
+                inserted_at = self._find_phase_index(after) + 1
             except KeyError as e:
                 raise PipelineError(
                     f"Cannot insert phase '{phase.name}' after '{after}': phase '{after}' not found",
                     phase=phase.name,
                 ) from e
+            self.phases.insert(inserted_at, phase)
         elif before is not None:
             try:
-                idx = self._find_phase_index(before)
-                self.phases.insert(idx, phase)
+                inserted_at = self._find_phase_index(before)
             except KeyError as e:
                 raise PipelineError(
                     f"Cannot insert phase '{phase.name}' before '{before}': phase '{before}' not found",
                     phase=phase.name,
                 ) from e
+            self.phases.insert(inserted_at, phase)
+        else:
+            inserted_at = len(self.phases)
+            self.phases.append(phase)
 
         try:
             self._reject_duplicate_names()
             self._validate_dependencies()
         except PipelineError:
-            self.phases.remove(phase)
+            # Pop the slot rather than removing by value. `list.remove` deletes the
+            # first phase equal to this one, which is the phase that was already
+            # there when a caller re-inserts an instance the pipeline holds.
+            del self.phases[inserted_at]
             raise
 
     def _reject_duplicate_names(self) -> None:
