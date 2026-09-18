@@ -362,3 +362,42 @@ def test_pipeline_locked_during_execution(action):
 
     with pytest.raises(PipelineError, match="Cannot modify pipeline after validation has started"):
         pipeline.execute(_context_with_row_index())
+
+
+# ---------------------------------------------------------------------------
+# Duplicate phase names
+# ---------------------------------------------------------------------------
+
+
+def test_constructor_rejects_duplicate_names():
+    """Two phases answering to one name make every lookup ambiguous."""
+    with pytest.raises(PipelineError, match="more than one phase named 'dup'"):
+        ValidationPipeline(phases=[SimplePhase(name="dup"), SimplePhase(name="dup")])
+
+
+def test_add_phase_rejects_duplicate_name():
+    """The rejection also covers a name that only collides once inserted."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+
+    with pytest.raises(PipelineError, match="more than one phase named 'p1'"):
+        pipeline.add_phase(SimplePhase(name="p1"))
+
+    assert [p.name for p in pipeline.phases] == ["p1"], "a rejected insertion must roll back"
+
+
+def test_duplicate_error_names_every_collision():
+    """Fixing one name at a time is a poor way to repair a hand-built pipeline."""
+    phases = [SimplePhase(name="a"), SimplePhase(name="b"), SimplePhase(name="a"), SimplePhase(name="b")]
+
+    with pytest.raises(PipelineError, match="named 'a', 'b'"):
+        ValidationPipeline(phases=phases)
+
+
+def test_removing_a_phase_frees_its_name():
+    """The check is about the current phase list, not names ever used."""
+    pipeline = ValidationPipeline(phases=[SimplePhase(name="p1")])
+    pipeline.remove_phase("p1")
+
+    pipeline.add_phase(SimplePhase(name="p1"))
+
+    assert [p.name for p in pipeline.phases] == ["p1"]

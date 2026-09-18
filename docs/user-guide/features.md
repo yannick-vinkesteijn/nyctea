@@ -265,6 +265,11 @@ config = ErrorReportConfig(mode="cells", limit=100)
 result = schema.validate(df, registry, error_report_config=config)
 ```
 
+The `value` column renders each failing value as text.
+A `Binary` column is hex-encoded rather than decoded, because bytes that are not valid UTF-8 have no text form.
+That applies to every `Binary` column, so a value's representation does not depend on the bytes it happens to hold.
+Nested dtypes are the exception: a `List`, `Array` or `Object` column has no text rendering, so `include_values` is not supported for one and the report fails.
+
 ## Coercion
 
 When `coerce=True`, columns are cast to their target dtype before checks run. Failed casts are handled according to `on_failure`.

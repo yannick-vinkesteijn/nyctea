@@ -2,6 +2,7 @@
 
 import time
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import Literal
@@ -154,6 +155,7 @@ class ValidationPipeline:
         self._locked = False
 
         if self.phases:
+            self._reject_duplicate_names()
             self._validate_dependencies()
 
     def add_phase(
@@ -206,10 +208,32 @@ class ValidationPipeline:
                 ) from e
 
         try:
+            self._reject_duplicate_names()
             self._validate_dependencies()
         except PipelineError:
             self.phases.remove(phase)
             raise
+
+    def _reject_duplicate_names(self) -> None:
+        """Refuse a phase list that names the same phase twice.
+
+        A name identifies a phase throughout the pipeline: `dependencies` resolve
+        against it, `add_phase(after=)` and `remove_phase` find by it, and a failure
+        reports it. With two phases answering to one name, each of those silently
+        picks the first and the second is unreachable.
+
+        Raises:
+            PipelineError: If any name is used more than once.
+        """
+        counts = Counter(phase.name for phase in self.phases)
+        duplicates = sorted(name for name, count in counts.items() if count > 1)
+        if duplicates:
+            names = ", ".join(f"'{name}'" for name in duplicates)
+            raise PipelineError(
+                f"Pipeline has more than one phase named {names}. A phase name has to identify "
+                f"one phase, because dependencies, insertion and removal all resolve against it.",
+                phase=duplicates[0],
+            )
 
     def remove_phase(self, name: str) -> None:
         """Remove a phase from the pipeline.

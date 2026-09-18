@@ -90,9 +90,11 @@ class ValidatorRegistry(Generic[T]):
             tag: Tag to search for.
 
         Returns:
-            List of validators with that tag (empty if none found).
+            A copy of the validators with that tag, empty if none found. A copy so a
+            caller cannot reach into the registry's own index, the way `list_all` and
+            `list_names` already return copies.
         """
-        return self._tags.get(tag, [])
+        return list(self._tags.get(tag, []))
 
     def list_all(self) -> list[T]:
         """Get all registered validators.
