@@ -11,8 +11,10 @@ default:
 # === Environment Setup ===
 
 # Install development environment and pre-commit hooks
+# `release` is excluded: only a release needs twine, and `uv run --only-group release`
+# installs it on demand for the one command that does.
 setup:
-    uv sync --all-groups --all-extras
+    uv sync --all-groups --all-extras --no-group release
     uv run pre-commit install
 
 # Clean build artifacts and caches
@@ -113,7 +115,7 @@ build:
 # Build and verify package
 build-check: build
     @echo "Checking package..."
-    uv run twine check dist/*
+    uv run --only-group release twine check dist/*
     @echo "✓ Package check passed"
 
 # Install package locally for testing

@@ -232,6 +232,9 @@ __marimo__/
 # Local only, never committed. See .claude/CLAUDE.md.
 .agents/
 
+# Local agent tooling state. Not committed.
+.tara/
+
 # Agent scratch, local only. Workflows, the PR template, release.yaml and the
 # Copilot instructions stay tracked.
 .github/agents/

@@ -164,7 +164,7 @@ Two more workflows run on their own schedule rather than per PR.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv
-just setup                                        # or: uv sync --all-groups --all-extras
+just setup                                        # or: uv sync --all-groups --all-extras --no-group release
 ```
 
 See `justfile` for the full command list.
