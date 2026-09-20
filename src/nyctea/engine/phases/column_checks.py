@@ -80,14 +80,43 @@ class ColumnCheckPhase(PipelinePhase):
                 )
                 mask_exprs.append(check_expr.alias(alias))
                 check_masks[(col_name, check_spec.name)] = alias
+                context.check_exprs[(col_name, check_spec.name)] = check_expr
 
         if mask_exprs:
             context.data = lf.with_columns(mask_exprs)
             context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
+            self._reject_non_boolean_masks(context, check_masks)
 
         context.check_masks = check_masks
 
         return context
+
+    def _reject_non_boolean_masks(self, context: PipelineContext, check_masks: dict[tuple[str, str], str]) -> None:
+        """Refuse a check whose expression does not answer true or false.
+
+        Everything downstream reads these masks as booleans: enforcement inverts them,
+        the report sums them, and `apply_check_null` selects on them. A check returning
+        anything else reached aggregation and failed there with a Polars cast error
+        naming neither the check nor the column.
+
+        Args:
+            context: Pipeline context, already carrying the mask columns.
+            check_masks: Mapping of (column, check name) to mask alias.
+
+        Raises:
+            PipelineError: If any check's mask is not Boolean.
+        """
+        schema = context.frame_schema()
+        for (col_name, check_name), alias in check_masks.items():
+            dtype = schema.get(alias)
+            if dtype is not None and dtype != pl.Boolean:
+                raise PipelineError(
+                    f"Check '{check_name}' on column '{col_name}' returned {dtype}, not a boolean. "
+                    f"A check answers whether a value is valid, so its expression has to evaluate "
+                    f"to true or false per row.",
+                    phase=self.name,
+                    column=col_name,
+                )
 
     def _reject_reserved_or_duplicate_check(
         self,

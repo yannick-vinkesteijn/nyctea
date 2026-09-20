@@ -98,7 +98,9 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
             ValidatorExecutionError: If expression references multiple columns.
         """
         try:
-            root_names = expr.meta.root_names()
+            # Deduplicated: a self-referencing window such as `col.count().over(col)`
+            # names the same column twice, which is one column, not two.
+            root_names = set(expr.meta.root_names())
 
             if len(root_names) == 0:
                 raise ValidatorExecutionError(
@@ -111,7 +113,7 @@ class ColumnValidator(Validator[pl.Expr, pl.Expr], ABC):
             if len(root_names) > 1:
                 raise ValidatorExecutionError(
                     f"Validator '{self.name}' {context} expression references multiple "
-                    f"columns: {root_names}. Column validators must only reference "
+                    f"columns: {sorted(root_names)}. Column validators must only reference "
                     "the input column (single-column purity).",
                     validator_name=self.name,
                     validator_type=self.__class__.__name__,

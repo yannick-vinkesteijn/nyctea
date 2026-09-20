@@ -88,6 +88,15 @@ def build_aggregate_exprs(
     schema = context.schema
 
     exprs: list[pl.Expr] = [pl.len().alias("__total__")]
+    # A check answers once per row. One that aggregates without a window answers once
+    # for the frame, which `with_columns` then broadcasts, so every row reads as failing
+    # and `on_failure="null"` empties the column. The expression's own length still
+    # distinguishes the two, and costs nothing in the pass that was already running.
+    # Keyed on the mask's own alias, which is indexed precisely because "{col}__{check}"
+    # is ambiguous: column 'a__b' with check 'c' and column 'a' with check 'b__c' collide.
+    exprs.extend(
+        expr.len().alias(f"__masklen__{context.check_masks[key]}") for key, expr in context.check_exprs.items()
+    )
     exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
     exprs.extend((~pl.col(alias)).sum().alias(f"__coercion_fail__{col}") for col, alias in index.coercion.items())
     for col, aliases in index.reported.items():
@@ -204,6 +213,17 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     if original_null_exprs:
         aggregates = aggregates.join(original_data.select(original_null_exprs), how="cross")
     row = collect(aggregates, context.aggregate_engine)
+
+    total = int(row["__total__"].item())
+    for key, alias in ((k, context.check_masks[k]) for k in context.check_exprs):
+        col_name, check_name = key
+        if int(row[f"__masklen__{alias}"].item()) != total:
+            raise PipelineError(
+                f"Check '{check_name}' on column '{col_name}' answers once for the whole frame, not once "
+                f"per row. A check judges each value, so it cannot be reported per row or nulled per value.",
+                phase=COLUMN_CHECKS_PHASE,
+                column=col_name,
+            )
 
     for rule in raise_plan:
         count = int(row[rule.alias].item())

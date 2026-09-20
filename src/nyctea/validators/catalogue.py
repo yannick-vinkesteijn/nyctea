@@ -69,10 +69,6 @@ class Declared:
     version: str = "1.0.0"
     tags: tuple[str, ...] = ()
     author: str = ""
-    preserve_columns: bool = True
-    """Frame validators only: the output must keep the input's columns."""
-    preserve_rows: bool = False
-    """Frame validators only: the output must keep the input's row count."""
 
     @property
     def signature(self) -> inspect.Signature:

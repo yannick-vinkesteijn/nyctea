@@ -14,9 +14,11 @@ class FrameCheckPhase(PipelinePhase):
     Depends only on resolved names, not on coercion: a frame check is freely
     orderable against coercion, column parsing, and frame parsing, since it judges
     whatever the frame looks like when it runs rather than assuming a particular
-    dtype. The base class only enforces row count and column set on a
-    ``FrameCheck``'s output, not order or values, so it should pass the frame
-    through unchanged or raise, though nothing currently enforces the former.
+    dtype.
+
+    A check judges the frame and raises, so whatever it returns is discarded. That
+    makes it structurally unable to change the data, which is cheaper and more
+    certain than comparing its output against its input would be.
     """
 
     def __init__(self) -> None:
@@ -34,7 +36,7 @@ class FrameCheckPhase(PipelinePhase):
             context: Pipeline context.
 
         Returns:
-            Updated context with the frame checks applied.
+            The context unchanged. A check judges the data, it does not transform it.
 
         Raises:
             PipelineError: If a frame check is unregistered or fails.
@@ -53,14 +55,13 @@ class FrameCheckPhase(PipelinePhase):
                 ) from e
 
             try:
-                lf = check(lf, **check_spec.args)
+                check(lf, **check_spec.args)
             except Exception as e:
                 raise PipelineError(
                     f"Frame check '{check_spec.name}' failed: {e}",
                     phase=self.name,
                 ) from e
 
-        context.data = lf
         return context
 
     def can_skip(self, context: PipelineContext) -> bool:

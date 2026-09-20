@@ -134,7 +134,7 @@ schema = SchemaModel.from_dict({
 })
 ```
 
-Frame checks must preserve row count and the set of columns, and raise on failure.
+Frame checks raise on failure. Whatever a check returns is discarded, so it cannot change the data.
 Column order and values are not checked, so a well-behaved frame check should not
 change them even though nothing currently enforces it. Frame parsers may add, drop,
 or reorder columns and rows, and run before column parsers so later steps see the
@@ -257,6 +257,13 @@ column | check     | row_index | value
 age    | min_value | 0         | -5
 age    | min_value | 3         | -1
 ```
+
+A check answers one question per row, so its expression evaluates to one boolean per row.
+An expression that aggregates to a single answer for the whole frame is rejected, because it cannot be reported per row or nulled per value.
+Combining an aggregate with a per-row operand is fine, so `column - column.min() < 2` and `column.count().over(column) >= 3` both work.
+
+`row_index` is a position in `result.data`, not in the frame you passed in.
+The two agree unless a frame parser reordered or removed rows, since validation assigns positions again after frame parsing.
 
 Use `limit` to cap the number of error entries per column+check:
 

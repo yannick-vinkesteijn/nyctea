@@ -62,6 +62,10 @@ class PipelineContext:
 
     # Tracking state (populated by phases)
     check_masks: dict[tuple[str, str], str] = field(default_factory=dict)  # (col, check) -> mask column alias
+    # The unevaluated expression behind each user check. `with_columns` broadcasts a
+    # scalar over every row, so once a mask is a column it no longer knows whether it
+    # answered once or once per row. The expression still does.
+    check_exprs: dict[tuple[str, str], pl.Expr] = field(default_factory=dict)
     internal_columns: set[str] = field(default_factory=set)  # generated helper columns, stripped before output
     nullified_counts: dict[str, int] = field(default_factory=dict)
     source_names: dict[str, str] = field(default_factory=dict)  # canonical -> the header this file used

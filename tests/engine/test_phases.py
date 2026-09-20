@@ -1105,7 +1105,7 @@ def test_parser_chain_uses_prior_null_state(registry):
 
 def test_original_nulls_counted_before_frame_parsing(registry):
 
-    @frame_parser(registry=registry, name="drop_nulls", preserve_columns=True, preserve_rows=False)
+    @frame_parser(registry=registry, name="drop_nulls")
     def drop_nulls(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.filter(pl.col("age").is_not_null())
 
@@ -1325,7 +1325,7 @@ def test_parser_failure_distinct_from_original_null(registry):
 class TestFrameValidators:
     def test_frame_parser_runs_and_transforms_data(self, registry):
 
-        @frame_parser(registry=registry, name="add_total", preserve_columns=False, preserve_rows=True)
+        @frame_parser(registry=registry, name="add_total")
         def add_total(frame: pl.LazyFrame) -> pl.LazyFrame:
             return frame.with_columns((pl.col("a") + pl.col("b")).alias("total"))
 
@@ -1351,7 +1351,7 @@ class TestFrameValidators:
 
     def test_frame_parser_execution_failure_raises(self, registry):
 
-        @frame_parser(registry=registry, name="explode", preserve_columns=False)
+        @frame_parser(registry=registry, name="explode")
         def explode(frame: pl.LazyFrame) -> pl.LazyFrame:  # noqa: ARG001
             raise ValueError("boom")
 
@@ -2111,7 +2111,7 @@ class TestOnFailure:
 
 def test_frame_parser_cannot_remove_required_column(registry):
 
-    @frame_parser(registry=registry, name="drop_required", preserve_columns=False)
+    @frame_parser(registry=registry, name="drop_required")
     def drop_required(frame: pl.LazyFrame) -> pl.LazyFrame:
         return frame.drop("name")
 
@@ -2132,7 +2132,7 @@ def test_frame_parser_cannot_remove_required_column(registry):
 @pytest.mark.parametrize("mode", ["summary", "rows", "cells"])
 def test_frame_parser_preserves_error_tracking(registry, mode):
 
-    @frame_parser(registry=registry, name="select_columns", preserve_columns=False)
+    @frame_parser(registry=registry, name="select_columns")
     def select_columns(frame: pl.LazyFrame) -> pl.LazyFrame:
         assert "__row_index__" not in frame.collect_schema().names()
         return frame.select("age")
@@ -2365,3 +2365,140 @@ def test_phase_names_come_from_one_module():
             if isinstance(node, ast.Constant) and isinstance(node.value, str)
         ]
         assert not literals, f"{phase.__name__} hand-writes {literals}, import it from nyctea.engine.phase_names"
+
+
+def test_non_boolean_check_is_rejected(registry):
+    """A check has to answer true or false, and is told so by name.
+
+    Everything downstream reads a check's mask as a boolean. A non-boolean one used
+    to reach aggregation and fail there with a Polars cast error that named neither
+    the check nor the column.
+    """
+
+    @checker(name="doubles_it", registry=registry)
+    def doubles_it(column: pl.Expr) -> pl.Expr:
+        return column * 2
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "ignore", "columns": {"n": {"dtype": "Int64", "checks": [{"name": "doubles_it"}]}}}
+    )
+
+    with pytest.raises(PipelineError, match="Check 'doubles_it' on column 'n' returned Int64, not a boolean") as exc:
+        schema.validate(pl.DataFrame({"n": [1, -2]}), registry)
+
+    assert exc.value.column == "n"
+    assert exc.value.phase == "column_checks"
+
+
+def test_frame_parser_may_add_columns(registry):
+    """A parser adding a derived column no longer needs permission to do so.
+
+    `preserve_columns` asserted the output column set equalled the input's, which
+    rejected this while the schema was still satisfied. The pipeline's own check on
+    the schema's required columns is the contract that matters.
+    """
+
+    @frame_parser(name="add_doubled", registry=registry)
+    def add_doubled(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.with_columns((pl.col("n") * 2).alias("doubled"))
+
+    schema = SchemaModel.from_dict({"frame_parsers": [{"name": "add_doubled"}], "columns": {"n": {"dtype": "Int64"}}})
+
+    result = schema.validate(pl.DataFrame({"n": [1, 2]}), registry)
+
+    assert result.data.collect()["doubled"].to_list() == [2, 4]
+
+
+def test_frame_check_cannot_change_the_data(registry):
+    """A frame check judges the data, so whatever it returns is discarded.
+
+    `FrameCheck` used to hardcode the shape flags to True, which was the only thing
+    stopping a check from transforming the frame. Ignoring the return makes that
+    structurally impossible rather than merely detected.
+    """
+
+    @frame_checker(name="mutates", registry=registry)
+    def mutates(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.filter(pl.col("n") > 0).with_columns((pl.col("n") * 100).alias("n")).drop("extra")
+
+    schema = SchemaModel.from_dict(
+        {"frame_checks": [{"name": "mutates"}], "columns": {"n": {"dtype": "Int64"}, "extra": {"dtype": "Int64"}}}
+    )
+    frame = pl.DataFrame({"n": [1, -2, 3], "extra": [10, 20, 30]})
+
+    result = schema.validate(frame, registry)
+
+    assert result.data.collect().to_dicts() == frame.to_dicts()
+
+
+def test_self_window_check_is_allowed(registry):
+    """A window over the checked column is one column, not two.
+
+    `root_names()` lists a self-referencing window's column twice, and counting the
+    list rather than its distinct entries rejected a legitimate group-size check.
+    """
+
+    @checker(name="group_has_three", registry=registry)
+    def group_has_three(column: pl.Expr) -> pl.Expr:
+        return column.count().over(column) >= 3
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "ignore", "columns": {"week": {"dtype": "Int64", "checks": [{"name": "group_has_three"}]}}}
+    )
+
+    result = schema.validate(
+        pl.DataFrame({"week": [1, 1, 1, 2, 2]}), registry, error_report_config=ErrorReportConfig(mode="cells")
+    )
+
+    assert [row["row_index"] for row in result.errors.to_dicts()] == [3, 4]
+
+
+def test_collapsing_check_is_rejected(registry):
+    """A check answers once per row, not once for the frame.
+
+    `with_columns` broadcasts a single value over every row, so an aggregating
+    expression reads as every row failing and `on_failure="null"` empties the column.
+    The expression's own length still tells the two apart, inside the aggregate pass
+    that already runs.
+    """
+
+    @checker(name="frame_is_long", registry=registry)
+    def frame_is_long(column: pl.Expr) -> pl.Expr:
+        return column.count() >= 5
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "null", "columns": {"n": {"dtype": "Int64", "checks": [{"name": "frame_is_long"}]}}}
+    )
+
+    with pytest.raises(PipelineError, match="answers once for the whole frame") as exc:
+        schema.validate(pl.DataFrame({"n": [1, 2, 3]}), registry)
+
+    assert exc.value.column == "n"
+
+
+@pytest.mark.parametrize(
+    ("name", "body"),
+    [
+        ("near_minimum", lambda column: column - column.min() < 2),
+        ("group_of_two", lambda column: column.count().over(column) >= 2),
+    ],
+)
+def test_broadcast_checks_stay_allowed(registry, name, body):
+    """An aggregate combined with a per-row operand still answers per row.
+
+    Rejecting anything containing an aggregate would refuse both of these, and both
+    are ordinary rules: one compares each value against a column statistic, the other
+    judges each row by the size of its group.
+    """
+
+    @checker(name=name, registry=registry)
+    def rule(column: pl.Expr) -> pl.Expr:
+        return body(column)
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "ignore", "columns": {"n": {"dtype": "Int64", "checks": [{"name": name}]}}}
+    )
+
+    result = schema.validate(pl.DataFrame({"n": [1, 2, 3]}), registry)
+
+    assert result.data.collect().height == 3
