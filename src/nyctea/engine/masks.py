@@ -6,6 +6,12 @@ from typing import TypeVar
 from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.schema.model import SchemaModel
 
+MASK_LENGTH_PREFIX = "__masklen__"
+"""Prefix for the column holding a check mask's length, measured where the mask is built."""
+
+CHECK_TIME_LENGTH = "__checktime_len__"
+"""The frame's length when the masks were built, the only length they compare against."""
+
 __all__ = ["MaskIndex", "index_masks", "resolving_to"]
 
 

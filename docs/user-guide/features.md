@@ -134,11 +134,9 @@ schema = SchemaModel.from_dict({
 })
 ```
 
-Frame checks raise on failure. Whatever a check returns is discarded, so it cannot change the data.
-Column order and values are not checked, so a well-behaved frame check should not
-change them even though nothing currently enforces it. Frame parsers may add, drop,
-or reorder columns and rows, and run before column parsers so later steps see the
-transformed frame.
+Frame checks raise on failure.
+Whatever a check returns is discarded, so it cannot change the data.
+Frame parsers may add, drop, or reorder columns and rows, and run before column parsers so later steps see the transformed frame.
 
 ## Failure handling
 

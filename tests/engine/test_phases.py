@@ -13,8 +13,12 @@ from nyctea.engine.phases import (
     NOT_NULL_CHECK,
     PARSING_CHECK,
     CoercionPhase,
+    ColumnCheckPhase,
     ColumnResolutionPhase,
+    FrameParsingPhase,
+    NotNullPhase,
 )
+from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.results import ErrorReportConfig
 from nyctea.exceptions import ConfigurationError, PipelineError, ValidationError
 from nyctea.utils import resolve_dtype
@@ -2502,3 +2506,69 @@ def test_broadcast_checks_stay_allowed(registry, name, body):
     result = schema.validate(pl.DataFrame({"n": [1, 2, 3]}), registry)
 
     assert result.data.collect().height == 3
+
+
+def test_empty_frame_with_a_check(registry):
+    """A frame with no rows validates rather than failing.
+
+    Nothing in the suite validated an empty frame with a check, so a guard that read
+    the first row of an aggregate column passed every test while crashing here.
+    """
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {"n": {"dtype": "Int64", "checks": [{"name": "min_value", "args": {"min": 0}}]}},
+        }
+    )
+
+    result = schema.validate(pl.DataFrame({"n": []}, schema={"n": pl.Int64}), registry)
+
+    assert result.data.collect().height == 0
+    assert len(result.errors) == 0
+
+
+def test_check_survives_a_later_row_drop(registry):
+    """The per-row guard compares lengths measured at the same moment.
+
+    Phases are freely orderable, so a frame parser may drop rows after the checks have
+    run. Comparing the mask's length against the frame's length at aggregate time would
+    make a correct check look as though it had answered once for the whole frame.
+    """
+
+    @frame_parser(name="drop_twos", registry=registry)
+    def drop_twos(frame: pl.LazyFrame) -> pl.LazyFrame:
+        return frame.filter(pl.col("n") != 2)
+
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "frame_parsers": [{"name": "drop_twos"}],
+            "columns": {"n": {"dtype": "Int64", "checks": [{"name": "min_value", "args": {"min": 0}}]}},
+        }
+    )
+    pipeline = ValidationPipeline([ColumnResolutionPhase(), ColumnCheckPhase(), FrameParsingPhase(), NotNullPhase()])
+
+    result = schema.validate(pl.DataFrame({"n": [1, 2, 3]}), registry, pipeline=pipeline)
+
+    assert result.data.collect()["n"].to_list() == [1, 3]
+
+
+@pytest.mark.parametrize("reserved", ["__masklen____check__0", "__checktime_len__"])
+def test_mask_length_aliases_are_guarded(registry, reserved):
+    """The helper columns behind the per-row guard cannot overwrite a user's column.
+
+    They are added by `with_columns` and stripped afterwards, so a user column of the
+    same name was silently replaced and then dropped.
+    """
+    schema = SchemaModel.from_dict(
+        {
+            "on_failure": "ignore",
+            "columns": {
+                "n": {"dtype": "Int64", "checks": [{"name": "min_value", "args": {"min": 0}}]},
+                reserved: {"dtype": "Int64"},
+            },
+        }
+    )
+
+    with pytest.raises(PipelineError, match="already contains a column named"):
+        schema.validate(pl.DataFrame({"n": [1], reserved: [99]}), registry)

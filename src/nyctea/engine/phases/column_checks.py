@@ -4,14 +4,13 @@ import polars as pl
 
 from nyctea.engine.checks import COERCION_CHECK, NOT_NULL_CHECK, PARSING_CHECK
 from nyctea.engine.context import PipelineContext
+from nyctea.engine.masks import CHECK_TIME_LENGTH, MASK_LENGTH_PREFIX
 from nyctea.engine.phase_names import COLUMN_CHECKS_PHASE, COLUMN_RESOLUTION_PHASE
 from nyctea.engine.phases.common import reject_alias_collision, reserved_columns
 from nyctea.engine.pipeline import PhaseType, PipelinePhase
 from nyctea.exceptions import PipelineError
 from nyctea.schema.model import Check
 from nyctea.validators.registry import Registry
-
-_MASK_LENGTH_PREFIX = "__masklen__"
 
 __all__ = ["ColumnCheckPhase"]
 
@@ -84,10 +83,25 @@ class ColumnCheckPhase(PipelinePhase):
                 # Length alongside the mask, while the column still looks the way the
                 # check expects. `with_columns` broadcasts the mask, losing whether it
                 # answered once or once per row; this keeps the answer.
-                mask_exprs.append(check_expr.len().alias(f"{_MASK_LENGTH_PREFIX}{alias}"))
+                length_alias = f"{MASK_LENGTH_PREFIX}{alias}"
+                reject_alias_collision(
+                    length_alias,
+                    occupied_columns,
+                    self.name,
+                    f"the length of the mask for check '{check_spec.name}' on column '{col_name}'",
+                    col_name,
+                )
+                mask_exprs.append(check_expr.len().alias(length_alias))
                 check_masks[(col_name, check_spec.name)] = alias
 
         if mask_exprs:
+            # The frame's own length, captured in the same pass as the mask lengths. The
+            # aggregate runs after every phase, and one that drops rows would otherwise
+            # make a correct mask look like it had answered once for the frame.
+            reject_alias_collision(
+                CHECK_TIME_LENGTH, occupied_columns, self.name, "the frame's length when the masks were built"
+            )
+            mask_exprs.append(pl.len().alias(CHECK_TIME_LENGTH))
             context.data = lf.with_columns(mask_exprs)
             context.internal_columns.update(e.meta.output_name() for e in mask_exprs)
             self._reject_non_boolean_masks(context, check_masks)
