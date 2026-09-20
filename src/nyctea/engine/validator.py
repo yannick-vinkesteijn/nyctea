@@ -15,6 +15,7 @@ from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
 from nyctea.engine.masks import MaskIndex, index_masks, resolving_to
 from nyctea.engine.phase_names import COERCION_PHASE, COLUMN_CHECKS_PHASE, COLUMN_PARSING_PHASE, NOT_NULL_PHASE
+from nyctea.engine.phases.column_checks import _MASK_LENGTH_PREFIX
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.reporting import build_errors, build_report
 from nyctea.engine.results import ErrorReportConfig, ValidationResult
@@ -92,10 +93,13 @@ def build_aggregate_exprs(
     # for the frame, which `with_columns` then broadcasts, so every row reads as failing
     # and `on_failure="null"` empties the column. The expression's own length still
     # distinguishes the two, and costs nothing in the pass that was already running.
-    # Keyed on the mask's own alias, which is indexed precisely because "{col}__{check}"
-    # is ambiguous: column 'a__b' with check 'c' and column 'a' with check 'b__c' collide.
+    # The mask's length, measured where the mask was built. Read through rather than
+    # recomputed: by now the column may have been coerced, and a check written against
+    # its earlier dtype would no longer evaluate.
     exprs.extend(
-        expr.len().alias(f"__masklen__{context.check_masks[key]}") for key, expr in context.check_exprs.items()
+        pl.col(f"{_MASK_LENGTH_PREFIX}{alias}").first().alias(f"{_MASK_LENGTH_PREFIX}{alias}")
+        for alias in context.check_masks.values()
+        if f"{_MASK_LENGTH_PREFIX}{alias}" in context.internal_columns
     )
     exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
     exprs.extend((~pl.col(alias)).sum().alias(f"__coercion_fail__{col}") for col, alias in index.coercion.items())
@@ -215,9 +219,9 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     row = collect(aggregates, context.aggregate_engine)
 
     total = int(row["__total__"].item())
-    for key, alias in ((k, context.check_masks[k]) for k in context.check_exprs):
-        col_name, check_name = key
-        if int(row[f"__masklen__{alias}"].item()) != total:
+    for (col_name, check_name), alias in context.check_masks.items():
+        length_alias = f"{_MASK_LENGTH_PREFIX}{alias}"
+        if length_alias in context.internal_columns and int(row[length_alias].item()) != total:
             raise PipelineError(
                 f"Check '{check_name}' on column '{col_name}' answers once for the whole frame, not once "
                 f"per row. A check judges each value, so it cannot be reported per row or nulled per value.",

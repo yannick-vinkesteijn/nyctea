@@ -11,6 +11,8 @@ from nyctea.exceptions import PipelineError
 from nyctea.schema.model import Check
 from nyctea.validators.registry import Registry
 
+_MASK_LENGTH_PREFIX = "__masklen__"
+
 __all__ = ["ColumnCheckPhase"]
 
 
@@ -79,8 +81,11 @@ class ColumnCheckPhase(PipelinePhase):
                     col_name,
                 )
                 mask_exprs.append(check_expr.alias(alias))
+                # Length alongside the mask, while the column still looks the way the
+                # check expects. `with_columns` broadcasts the mask, losing whether it
+                # answered once or once per row; this keeps the answer.
+                mask_exprs.append(check_expr.len().alias(f"{_MASK_LENGTH_PREFIX}{alias}"))
                 check_masks[(col_name, check_spec.name)] = alias
-                context.check_exprs[(col_name, check_spec.name)] = check_expr
 
         if mask_exprs:
             context.data = lf.with_columns(mask_exprs)
