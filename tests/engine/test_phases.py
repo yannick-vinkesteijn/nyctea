@@ -2572,3 +2572,24 @@ def test_mask_length_aliases_are_guarded(registry, reserved):
 
     with pytest.raises(PipelineError, match="already contains a column named"):
         schema.validate(pl.DataFrame({"n": [1], reserved: [99]}), registry)
+
+
+def test_collapsing_check_needs_two_rows(registry):
+    """The guard compares lengths, so a single row cannot distinguish the two.
+
+    A collapsed expression answers with length 1, which is also a correct mask's length
+    over one row. Pinned so the limitation is deliberate rather than discovered.
+    """
+
+    @checker(name="frame_is_long", registry=registry)
+    def frame_is_long(column: pl.Expr) -> pl.Expr:
+        return column.count() >= 5
+
+    schema = SchemaModel.from_dict(
+        {"on_failure": "ignore", "columns": {"n": {"dtype": "Int64", "checks": [{"name": "frame_is_long"}]}}}
+    )
+
+    with pytest.raises(PipelineError, match="answers once for the whole frame"):
+        schema.validate(pl.DataFrame({"n": [1, 2]}), registry)
+
+    assert schema.validate(pl.DataFrame({"n": [1]}), registry).data.collect().height == 1

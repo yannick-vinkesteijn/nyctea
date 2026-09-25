@@ -12,7 +12,7 @@ MASK_LENGTH_PREFIX = "__masklen__"
 CHECK_TIME_LENGTH = "__checktime_len__"
 """The frame's length when the masks were built, the only length they compare against."""
 
-__all__ = ["MaskIndex", "index_masks", "resolving_to"]
+__all__ = ["CHECK_TIME_LENGTH", "MASK_LENGTH_PREFIX", "MaskIndex", "index_masks", "resolving_to"]
 
 
 _Aliases = TypeVar("_Aliases", str, list[str])

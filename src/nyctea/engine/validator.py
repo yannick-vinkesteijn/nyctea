@@ -225,7 +225,12 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
 
     # Compared against the length captured beside the masks, not `__total__`: the
     # aggregate runs after every phase, and one that drops rows would make a correct
-    # mask look collapsed. Null on an empty frame, where there is nothing to judge.
+    # mask look collapsed.
+    #
+    # A collapsed expression always answers with length 1, so this cannot tell one from a
+    # correct mask over a single row, and on an empty frame both lengths are null. The
+    # guard catches a mistake in the check itself, which shows up on any frame of two rows
+    # or more, rather than protecting a particular run.
     at_check_time = row[CHECK_TIME_LENGTH].item() if CHECK_TIME_LENGTH in row.columns else None
     for (col_name, check_name), alias in context.check_masks.items():
         length_alias = f"{MASK_LENGTH_PREFIX}{alias}"

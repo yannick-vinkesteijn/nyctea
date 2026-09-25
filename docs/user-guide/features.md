@@ -258,6 +258,7 @@ age    | min_value | 3         | -1
 
 A check answers one question per row, so its expression evaluates to one boolean per row.
 An expression that aggregates to a single answer for the whole frame is rejected, because it cannot be reported per row or nulled per value.
+That is detected by comparing lengths, so it needs at least two rows to tell apart: on a single row the two are the same length.
 Combining an aggregate with a per-row operand is fine, so `column - column.min() < 2` and `column.count().over(column) >= 3` both work.
 
 `row_index` is a position in `result.data`, not in the frame you passed in.
