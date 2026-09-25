@@ -13,8 +13,13 @@ import polars as pl
 
 from nyctea.engine.context import PipelineContext
 from nyctea.engine.factory import create_pipeline_from_schema
-from nyctea.engine.masks import MaskIndex, index_masks, resolving_to
-from nyctea.engine.phase_names import COERCION_PHASE, COLUMN_CHECKS_PHASE, COLUMN_PARSING_PHASE, NOT_NULL_PHASE
+from nyctea.engine.masks import CHECK_TIME_LENGTH, MASK_LENGTH_PREFIX, MaskIndex, index_masks, resolving_to
+from nyctea.engine.phase_names import (
+    COERCION_PHASE,
+    COLUMN_CHECKS_PHASE,
+    COLUMN_PARSING_PHASE,
+    NOT_NULL_PHASE,
+)
 from nyctea.engine.pipeline import ValidationPipeline
 from nyctea.engine.reporting import build_errors, build_report
 from nyctea.engine.results import ErrorReportConfig, ValidationResult
@@ -88,6 +93,19 @@ def build_aggregate_exprs(
     schema = context.schema
 
     exprs: list[pl.Expr] = [pl.len().alias("__total__")]
+    # A check answers once per row. One that aggregates without a window answers once
+    # for the frame, which `with_columns` then broadcasts, so every row reads as failing
+    # and `on_failure="null"` empties the column. The expression's own length still
+    # distinguishes the two, and costs nothing in the pass that was already running.
+    # Read through rather than recomputed: by now the column may have been coerced, and
+    # a check written against its earlier dtype would no longer evaluate.
+    exprs.extend(
+        pl.col(f"{MASK_LENGTH_PREFIX}{alias}").first().alias(f"{MASK_LENGTH_PREFIX}{alias}")
+        for alias in context.check_masks.values()
+        if f"{MASK_LENGTH_PREFIX}{alias}" in context.internal_columns
+    )
+    if CHECK_TIME_LENGTH in context.internal_columns:
+        exprs.append(pl.col(CHECK_TIME_LENGTH).first().alias(CHECK_TIME_LENGTH))
     exprs.extend((~pl.col(alias)).sum().alias(f"__parsing_fail__{col}") for col, alias in index.parsing.items())
     exprs.extend((~pl.col(alias)).sum().alias(f"__coercion_fail__{col}") for col, alias in index.coercion.items())
     for col, aliases in index.reported.items():
@@ -204,6 +222,26 @@ def run_aggregates_and_raise(context: PipelineContext, index: MaskIndex) -> tupl
     if original_null_exprs:
         aggregates = aggregates.join(original_data.select(original_null_exprs), how="cross")
     row = collect(aggregates, context.aggregate_engine)
+
+    # Compared against the length captured beside the masks, not `__total__`: the
+    # aggregate runs after every phase, and one that drops rows would make a correct
+    # mask look collapsed.
+    #
+    # A collapsed expression always answers with length 1, so this cannot tell one from a
+    # correct mask over a single row, and on an empty frame both lengths are null. The
+    # guard catches a mistake in the check itself, which shows up on any frame of two rows
+    # or more, rather than protecting a particular run.
+    at_check_time = row[CHECK_TIME_LENGTH].item() if CHECK_TIME_LENGTH in row.columns else None
+    for (col_name, check_name), alias in context.check_masks.items():
+        length_alias = f"{MASK_LENGTH_PREFIX}{alias}"
+        mask_length = row[length_alias].item() if length_alias in row.columns else None
+        if at_check_time is not None and mask_length is not None and mask_length != at_check_time:
+            raise PipelineError(
+                f"Check '{check_name}' on column '{col_name}' answers once for the whole frame, not once "
+                f"per row. A check judges each value, so it cannot be reported per row or nulled per value.",
+                phase=COLUMN_CHECKS_PHASE,
+                column=col_name,
+            )
 
     for rule in raise_plan:
         count = int(row[rule.alias].item())

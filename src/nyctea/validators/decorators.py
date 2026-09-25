@@ -77,13 +77,6 @@ def build_validator(declared: Declared) -> Any:
             "validate_args": lambda _self, **kwargs: bind_arguments(declared.name, signature, kwargs),
         },
     )
-    if declared.kind == "frame_parser":
-        # Only a frame parser transforms, so only it can be asked to preserve shape.
-        return cls(
-            metadata,
-            preserve_columns=declared.preserve_columns,
-            preserve_rows=declared.preserve_rows,
-        )
     return cls(metadata)
 
 
@@ -112,8 +105,6 @@ def _dispatch(
     tags: Sequence[str] | None,
     author: str,
     registry: Registry | None,
-    preserve_columns: bool = True,
-    preserve_rows: bool = False,
 ) -> Any:
     """Shared runtime behind every declaration decorator.
 
@@ -131,8 +122,6 @@ def _dispatch(
         author: Validator author.
         registry: Register immediately into this registry. Without it the validator
             is declared into `CATALOGUE` and registered by `register_builtins`.
-        preserve_columns: Frame parsers only. Output must keep the input's columns.
-        preserve_rows: Frame parsers only. Output must keep the input's row count.
 
     Returns:
         The function unchanged (bare form), or a decorator that returns it unchanged
@@ -150,8 +139,6 @@ def _dispatch(
             version=version,
             tags=tuple(tags or ()),
             author=author,
-            preserve_columns=preserve_columns,
-            preserve_rows=preserve_rows,
         )
         if registry is None:
             CATALOGUE.append(declared)
@@ -345,8 +332,6 @@ def frame_parser(
     tags: Sequence[str] | None = None,
     author: str = "",
     registry: Registry | None = None,
-    preserve_columns: bool = True,
-    preserve_rows: bool = False,
 ) -> Callable[[_FrameFn], _FrameFn]: ...
 def frame_parser(
     func: _FrameFn | None = None,
@@ -357,8 +342,6 @@ def frame_parser(
     tags: Sequence[str] | None = None,
     author: str = "",
     registry: Registry | None = None,
-    preserve_columns: bool = True,
-    preserve_rows: bool = False,
 ) -> Any:
     """Declare a function as a frame parser.
 
@@ -377,8 +360,6 @@ def frame_parser(
         author: Validator author.
         registry: Register immediately into this registry. Without it the parser is
             declared into `CATALOGUE` and registered by `register_builtins`.
-        preserve_columns: Output must keep the input's columns.
-        preserve_rows: Output must keep the input's row count.
 
     Returns:
         The function unchanged (bare form), or a decorator that returns it unchanged
@@ -393,6 +374,4 @@ def frame_parser(
         tags=tags,
         author=author,
         registry=registry,
-        preserve_columns=preserve_columns,
-        preserve_rows=preserve_rows,
     )

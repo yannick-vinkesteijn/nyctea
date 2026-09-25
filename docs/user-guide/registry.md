@@ -119,7 +119,8 @@ columns:
 
 ## Frame Parsers
 
-Frame parsers transform entire DataFrames. They must preserve the row count and column set.
+Frame parsers transform entire DataFrames.
+They may add or remove columns and change the row count, but validation fails if the output is missing a column the schema requires.
 
 ### Basic Frame Parser
 
@@ -161,7 +162,8 @@ frame_parsers:
 
 ## Frame Checks
 
-Frame checks validate entire DataFrames. They must preserve the row count and column set, but can raise exceptions
+Frame checks validate entire DataFrames.
+Whatever a check returns is discarded, so it cannot change the data. It can raise exceptions
 on validation failure.
 
 ### Basic Frame Check

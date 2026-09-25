@@ -159,3 +159,28 @@ def test_no_row_data_in_python_lists():
     ]
 
     assert len(found) <= 3, "new Arrow-to-Python round trip, keep it in Polars:\n" + "\n".join(found)
+
+
+def test_phase_names_are_never_written_out():
+    """Nothing writes a phase name as a literal, so a rename cannot leave a stale one.
+
+    `nyctea.engine.phase_names` is the one definition. The phase classes are covered by
+    `test_phase_names_come_from_one_module`, but a raise site naming a phase is not a
+    class, and one slipped in that way.
+    """
+    from nyctea.engine import phase_names
+
+    names = {getattr(phase_names, n) for n in phase_names.__all__}
+    # checks.py holds `NOT_NULL_CHECK`, a check name that happens to share a phase's
+    # string; pipeline.py holds the `PhaseType` enum; registry.py counts by category.
+    allowed = {"phase_names.py", "pipeline.py", "registry.py", "checks.py"}
+
+    offenders = [
+        f"{_rel(path)}:{i}"
+        for path, _ in _modules()
+        if path.name not in allowed
+        for i, line in enumerate(path.read_text().splitlines(), start=1)
+        if any(f'"{name}"' in line for name in names)
+    ]
+
+    assert offenders == [], "phase name written out, import it from nyctea.engine.phase_names:\n" + "\n".join(offenders)
